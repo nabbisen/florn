@@ -1,0 +1,13 @@
+[package]
+name = "florn"
+version = "0.0.0"
+edition = "2024"
+description = "Local-first platform for executable testbeds: isolated WebAssembly actors inside a deterministic simulated world"
+license = "Apache-2.0"
+authors = ["nabbisen"]
+readme = "README.md"
+repository = "https://github.com/nabbisen/florn"
+# No release exists yet. The name is reserved with the first real pre-release (roadmap, release 0.1).
+publish = false
+
+[dependencies]
