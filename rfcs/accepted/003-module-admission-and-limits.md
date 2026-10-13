@@ -1,9 +1,9 @@
 # RFC 003 — Module admission and resource limits
 
-**Status.** Proposed (2026-10-14)
+**Status.** Accepted (2026-10-14)
 **Tracks.** Requirements ACT-003, ACT-005, ACT-006, ACT-007, ACT-008, ACT-010, SEC-001, SEC-002, SEC-004, SEC-005, DES-006, DATA-003, DATA-005, NFR-011, NFR-013, NFR-014, AC-002, AC-005, AC-006. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The step every module passes before it can act; the transformation that makes a module meterable, limited, and exportable; the cost model and its place in the run identity; the budgets, limits, and quotas and the faults they produce; the export and restore of guest state.
-**Depends on.** [RFC 001 — Determinism contract](../accepted/001-determinism-contract.md) rules 24, 46, and 64 to 66. [RFC 002 — Guest contract](./002-guest-contract.md) for the artifact, the manifest, the admitted features, and the fault kinds. [RFC 004 — Core model](../accepted/004-core-model.md) for `[modules]`, `[limits]`, and the validation codes.
+**Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md) rules 24, 46, and 64 to 66. [RFC 002 — Guest contract](./002-guest-contract.md) for the artifact, the manifest, the admitted features, and the fault kinds. [RFC 004 — Core model](./004-core-model.md) for `[modules]`, `[limits]`, and the validation codes.
 **Informed by.** Stage 0 proofs of concept 2 (deterministic limits and containment), 3 (boundary crossing cost), and 4 (instance scaling). The metering-cost plan recorded in `ROADMAP.md` is restated in §7.
 
 ## Summary

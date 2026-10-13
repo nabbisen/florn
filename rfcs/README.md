@@ -37,18 +37,17 @@ RFC enters it.
 
 ### Proposed
 
-| ID | Title | Proposed |
-|----|-------|----------|
-| 002 | [Guest contract: artifact, ABI, activation, layering](./proposed/002-guest-contract.md) | 2026-10-14 |
-| 003 | [Module admission and resource limits](./proposed/003-module-admission-and-limits.md) | 2026-10-14 |
-| 005 | [Host architecture: one core, adapters, control interface, repository layout](./proposed/005-host-architecture.md) | 2026-10-14 |
+_None at present._
 
 ### Accepted
 
 | ID | Title | Accepted | Implemented by |
 |----|-------|----------|----------------|
 | 001 | [Determinism contract](./accepted/001-determinism-contract.md) | 2026-10-13 | Release 0.1 |
+| 002 | [Guest contract: artifact, ABI, activation, layering](./accepted/002-guest-contract.md) | 2026-10-14 | Release 0.1 |
+| 003 | [Module admission and resource limits](./accepted/003-module-admission-and-limits.md) | 2026-10-14 | Release 0.1 |
 | 004 | [Core model: graph, scenario manifest, package](./accepted/004-core-model.md) | 2026-10-13 | Release 0.1 |
+| 005 | [Host architecture: one core, adapters, control interface, repository layout](./accepted/005-host-architecture.md) | 2026-10-14 | Release 0.1 |
 
 ### Implemented
 

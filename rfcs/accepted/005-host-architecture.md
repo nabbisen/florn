@@ -1,9 +1,9 @@
 # RFC 005 — Host architecture: one core, adapters, control interface, repository layout
 
-**Status.** Proposed (2026-10-14)
+**Status.** Accepted (2026-10-14)
 **Tracks.** Requirements ARCH-007, ARCH-008, ARCH-009, ACT-007, DES-004, DES-007, DES-011, DES-012, OBS-001, OBS-002, OBS-003, OBS-008, WEB-001, WEB-002, WEB-003, WEB-006, WEB-009, WEB-010, WEB-012, MIG-001 to MIG-005, CTL-001 to CTL-004, SEC-008, DATA-006, DATA-012, UI-007, UI-011, UI-013, AUTO-001, AUTO-002, AUTO-006, PKG-001, PKG-007, NFR-003, NFR-005, NFR-009, NFR-013. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The structure of the Host and its two adapters; the engine adapter's rules; the trace encoding and the digest; the control interface and the run record; the browser Host's hosting rules; the three-layer user interface; the repository layout.
-**Depends on.** [RFC 001](../accepted/001-determinism-contract.md) rules 33 to 55; [RFC 002](./002-guest-contract.md) for the ABI and effects; [RFC 003](./003-module-admission-and-limits.md) for admission, capacity, and state export; [RFC 004](../accepted/004-core-model.md) for the manifest, the package, the canonical encoding, and the coded errors.
+**Depends on.** [RFC 001](./001-determinism-contract.md) rules 33 to 55; [RFC 002](./002-guest-contract.md) for the ABI and effects; [RFC 003](./003-module-admission-and-limits.md) for admission, capacity, and state export; [RFC 004](./004-core-model.md) for the manifest, the package, the canonical encoding, and the coded errors.
 **Informed by.** Stage 0 proofs of concept 1, 3, 4, and 7; the proof of concept on telemetry transport (5) and on snapshot and restore (6) refine §4 and §6 before Phase 1 ends.
 
 ## Summary
