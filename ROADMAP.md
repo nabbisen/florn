@@ -33,12 +33,12 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | S0-01 | Owner decisions | — | Done 2026-09-30 |
 | S0-02 | RFC 001 — Determinism contract | S0-01 | Accepted 2026-10-13 |
 | S0-03 | POC-1 — One artifact, two engines | S0-01 | Reported 2026-10-13: Go for AD-01. WebKit and AArch64 wait for S0-19. |
-| S0-04 | POC-2 — Deterministic limits and containment | S0-01 | Handoff ready |
-| S0-05 | POC-3 — Cost of a boundary crossing | S0-03 | Handoff ready |
-| S0-06 | POC-4 — Instance scaling in the browser | S0-01 | Handoff ready |
+| S0-04 | POC-2 — Deterministic limits and containment | S0-01 | Reported 2026-10-13: Go for AD-03. Measured metering cost 2–4× accepted by the owner for now; the optimisation is planned in Phase 3 (see "Metering cost" below). |
+| S0-05 | POC-3 — Cost of a boundary crossing | S0-03 | Reported 2026-10-13: 0.6–1.9 µs per activation at 64 bytes across Wasmtime, Chromium, Firefox; one call per item is affordable. The trace encoding must hash payloads once (decided in RFC 005). |
+| S0-06 | POC-4 — Instance scaling in the browser | S0-01 | Reported 2026-10-13: 100 instances in 2 ms; the ceiling is 124 instances per page in Chromium and 999 in Firefox, independent of guest settings. The browser scale is restated as at least 100 resident actors; more by swapping actor state (Phase 3). |
 | S0-07 | POC-7 — UI shell | S0-01 | Handoff ready |
 | S0-08 | RFC 002 — Guest contract | S0-02, S0-03, S0-05 | Not started |
-| S0-09 | RFC 003 — Module admission and resource limits | S0-02, S0-04 | Not started |
+| S0-09 | RFC 003 — Module admission and resource limits | S0-02, S0-04 | Not started. Must specify the versioned cost model and cite the metering-cost plan. |
 | S0-10 | RFC 004 — Core model: graph, scenario manifest, package | S0-02 | Accepted 2026-10-13 |
 | S0-11 | RFC 005 — Host architecture and control interface | S0-02, S0-07 | Not started |
 | S0-12 | RFC 006 — Security baseline for the browser Host | S0-09 | Not started |
@@ -80,8 +80,8 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 
 | | |
 |---|---|
-| **Scope** | Checkpoints, backward navigation, branching. Import of user modules through the UI. BGP guest. Usability test with people who did not build florn. |
-| **Exit criteria** | A run restored from a checkpoint continues with the same digest as an uninterrupted run. A user imports a module and runs it in a topology. |
+| **Scope** | Checkpoints, backward navigation, branching. Import of user modules through the UI. BGP guest. Usability test with people who did not build florn. **Metering optimisation:** florn's own metering pass, released as cost-model version 2 (see "Metering cost" below). **Actor swapping in the browser:** actors beyond the browser's instance ceiling are held as exported state and re-instantiated on activation. |
+| **Exit criteria** | A run restored from a checkpoint continues with the same digest as an uninterrupted run. A user imports a module and runs it in a topology. The cost benchmark shows at most 1.5× on the protocol-style guest and 2× on the compute-style guest under cost-model version 2, or the owner has decided again on the measured figures. Runs recorded under version 1 still replay. |
 
 ## Phase 4 — Circuit and control (0.4.0)
 
@@ -104,6 +104,17 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 |---|---|
 | **Scope** | Native GUI on the native Host. Workloads beyond the browser's limits. |
 | **Exit criteria** | The scenarios of every earlier phase run unchanged in the native application. |
+
+## Metering cost — plan recorded 2026-10-13
+
+POC-2 measured the cost of deterministic metering at 2–4× on guest execution, against the 30% that was hoped for. No library and no engine-native mechanism does materially better. The owner accepted the measured cost for the first releases on condition that the optimisation is planned and cannot be missed. The plan:
+
+| Step | When | What |
+|---|---|---|
+| 1 | RFC 003, Stage 0 | The admission step and a versioned cost model are specified. The cost-model version and its table are part of the run identity. |
+| 2 | Phase 1, 0.1.0 | The conformance kit carries a cost benchmark (protocol-style and compute-style guests, metered against unmetered, on every supported engine). Its figures appear in the notes of every minor release. |
+| 3 | Phase 3, 0.3.0 | florn's own metering pass, charging per function entry and loop back-edge, replaces the library pass as cost-model version 2. Target: at most 1.5× protocol-style, 2× compute-style. Earlier runs replay under their recorded version. |
+| 4 | Phase 3 review | If the target is missed, the owner decides again with the measured figures. |
 
 ## 1.0.0 — Stable contracts
 
