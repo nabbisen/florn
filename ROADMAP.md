@@ -36,7 +36,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | S0-04 | POC-2 — Deterministic limits and containment | S0-01 | Reported 2026-10-13: Go for AD-03. Measured metering cost 2–4× accepted by the owner for now; the optimisation is planned in Phase 3 (see "Metering cost" below). |
 | S0-05 | POC-3 — Cost of a boundary crossing | S0-03 | Reported 2026-10-13: 0.6–1.9 µs per activation at 64 bytes across Wasmtime, Chromium, Firefox; one call per item is affordable. The trace encoding must hash payloads once (decided in RFC 005). |
 | S0-06 | POC-4 — Instance scaling in the browser | S0-01 | Reported 2026-10-13: 100 instances in 2 ms; the ceiling is 124 instances per page in Chromium and 999 in Firefox, independent of guest settings. The browser scale is restated as at least 100 resident actors; more by swapping actor state (Phase 3). |
-| S0-07 | POC-7 — UI shell | S0-01 | Handoff ready |
+| S0-07 | POC-7 — UI shell | S0-01 | Reported 2026-10-13: Go. Leptos confirmed for the browser shell; view model and scene are framework-free with native tests; 500 nodes drawn in 1–3 ms per frame; language switch, keyboard operation, and offline start pass. |
 | S0-08 | RFC 002 — Guest contract | S0-02, S0-03, S0-05 | Not started |
 | S0-09 | RFC 003 — Module admission and resource limits | S0-02, S0-04 | Not started. Must specify the versioned cost model and cite the metering-cost plan. |
 | S0-10 | RFC 004 — Core model: graph, scenario manifest, package | S0-02 | Accepted 2026-10-13 |
