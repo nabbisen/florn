@@ -31,13 +31,15 @@ RFC enters it.
   that moves the file.
 - Release tags have no `v` prefix, so an implemented RFC reads `Implemented (0.1.0)`.
 - This index is updated in the same commit that adds or moves an RFC.
-- Numbers 002, 003, 005, 006, and 007 are reserved by `ROADMAP.md` for the foundational RFCs named there, so that documents can refer to them before they are written.
+- Numbers 003, 005, 006, and 007 are reserved by `ROADMAP.md` for the foundational RFCs named there, so that documents can refer to them before they are written.
 
 ## Index
 
 ### Proposed
 
-_None at present._
+| ID | Title | Proposed |
+|----|-------|----------|
+| 002 | [Guest contract: artifact, ABI, activation, layering](./proposed/002-guest-contract.md) | 2026-10-14 |
 
 ### Accepted
 
