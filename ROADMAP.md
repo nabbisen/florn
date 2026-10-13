@@ -40,7 +40,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | S0-08 | RFC 002 — Guest contract | S0-02, S0-03, S0-05 | Proposed 2026-10-14 (`rfcs/proposed/`); awaiting acceptance |
 | S0-09 | RFC 003 — Module admission and resource limits | S0-02, S0-04 | Proposed 2026-10-14 (`rfcs/proposed/`); specifies the versioned cost model and restates the metering-cost plan; awaiting acceptance |
 | S0-10 | RFC 004 — Core model: graph, scenario manifest, package | S0-02 | Accepted 2026-10-13 |
-| S0-11 | RFC 005 — Host architecture and control interface | S0-02, S0-07 | Not started |
+| S0-11 | RFC 005 — Host architecture and control interface | S0-02, S0-07 | Proposed 2026-10-14 (`rfcs/proposed/`); awaiting acceptance |
 | S0-12 | RFC 006 — Security baseline for the browser Host | S0-09 | Not started |
 | S0-13 | RFC 007 — Error model and internationalisation | S0-11 | Not started |
 | S0-14 | POC-5 — Telemetry transport and isolation headers | S0-07 | Handoff ready |
