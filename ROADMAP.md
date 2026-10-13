@@ -44,7 +44,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | S0-12 | RFC 006 — Security baseline for the browser Host | S0-09 | Not started |
 | S0-13 | RFC 007 — Error model and internationalisation | S0-11 | Not started |
 | S0-14 | POC-5 — Telemetry transport and isolation headers | S0-07 | Reported 2026-10-14: Go. Shared memory under the isolation headers in both browsers; the message fallback delivers every record at 2,000 per frame with no measurable cost; offline start keeps isolation; no request leaves the origin. Hosting requirement: COOP same-origin, COEP require-corp, the policy, versioned paths. |
-| S0-15 | POC-6 — Snapshot and restore | S0-04 report | Handoff ready |
+| S0-15 | POC-6 — Snapshot and restore | S0-04 report | Reported 2026-10-14: Go. Memory, globals, and tables export and restore into a fresh instance with an identical trace under Wasmtime, Chromium, and Firefox, across a restart and backward in time; 0.04–0.3 ms per MB; the pass costs nothing measurable. Swapping measured at 50–60 µs per actor at 131 KB of state. |
 | S0-16 | Requirements, revised: priorities, one statement per obligation | S0-01 | Accepted 2026-10-13, `docs/src/requirements.md` |
 | S0-17 | External design, revised: personas, UI, control interface, glossary | S0-11, S0-16 | Not started |
 | S0-18 | Repository skeleton: `LICENSE`, `NOTICE`, `README.md`, `CHANGELOG.md`, workspace | S0-11 | Files in place 2026-10-13. The Cargo workspace is laid out with RFC 005, when the first crate exists. |

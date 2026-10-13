@@ -1,6 +1,6 @@
 # RFC 003 — Module admission and resource limits
 
-**Status.** Accepted (2026-10-14)
+**Status.** Accepted (2026-10-14). Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 5 (table mutation refused), rule 23 (measured cost), open question 2.
 **Tracks.** Requirements ACT-003, ACT-005, ACT-006, ACT-007, ACT-008, ACT-010, SEC-001, SEC-002, SEC-004, SEC-005, DES-006, DATA-003, DATA-005, NFR-011, NFR-013, NFR-014, AC-002, AC-005, AC-006. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The step every module passes before it can act; the transformation that makes a module meterable, limited, and exportable; the cost model and its place in the run identity; the budgets, limits, and quotas and the faults they produce; the export and restore of guest state.
 **Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md) rules 24, 46, and 64 to 66. [RFC 002 — Guest contract](./002-guest-contract.md) for the artifact, the manifest, the admitted features, and the fault kinds. [RFC 004 — Core model](./004-core-model.md) for `[modules]`, `[limits]`, and the validation codes.
@@ -72,6 +72,7 @@ The terms of RFC 001 and RFC 002 apply. In addition:
 | Well-formed WebAssembly binary, validated with the feature set below and nothing else | `module.invalid` (with the validator's reason) |
 | Size at most the Host maximum for a module | `module.too-large` |
 | Features used are within: mutable globals, sign extension, non-trapping float-to-int conversion, multi-value, bulk memory, reference types. Refused: threads, shared memory, SIMD, relaxed SIMD, exception handling, tail calls, 64-bit memory, multiple memories, garbage collection, custom page sizes, and every other proposal | `module.feature-refused` (with the feature) |
+| No table-mutating instruction (`table.set`, `table.grow`, `table.fill`, `table.copy`, `table.init`, `elem.drop`): tables are filled by element segments at instantiation and never change, so that restore (§6) verifies their sizes and needs no mapping of function references between instances. No compiler-produced guest uses them. | `module.table-mutation` (with the instruction) |
 | Exactly one memory, defined in the module (not imported), not shared, 32-bit, exported as `memory` | `module.memory` |
 | No start section | `module.start-section` |
 | Every import is a function of an interface of the declared world, with the canonical ABI signature, or a global or function that a Host-supplied interface of this RFC defines; nothing else, in particular nothing under `wasi:` and nothing named like the Host's own imports of §3 | `module.import-refused` (with the import's module and name) |
@@ -164,7 +165,7 @@ A start function runs at instantiation, outside any activation, before the budge
 
 **Rule 22.** Restore creates a fresh instance from the same admitted module (same admitted hash), grows its memory to the saved size, writes the bytes, sets the globals, fills the tables, and restores the kernel state. Execution then continues with the same trace as if it had never been interrupted (RFC 001 rule 52, ACT-008). Before restoring, the Host checks the source hash, the admission version, and the cost-model version against the saved values (DATA-005) and refuses a mismatch with `checkpoint.mismatch`.
 
-**Rule 23.** Export is a capability of every admitted module from release 0.1. Checkpoints that use it are a release 0.3 feature; the capability exists first so that no earlier decision precludes it. The proof of concept on snapshot and restore measures the cost before Phase 1 implements the pass; its criteria are export and restore each under 5 ms for a guest with 1 MiB of memory, no measurable cost on an actor that is never exported, and one fixed pass order with identical output under both Hosts.
+**Rule 23.** Export is a capability of every admitted module from release 0.1. Checkpoints that use it are a release 0.3 feature; the capability exists first so that no earlier decision precludes it. Measured in Stage 0 with two guests (one keeping state in memory, globals, and a function table; one a Rust protocol-style guest) under Wasmtime, Chromium, and Firefox: a restored run's trace is identical to an uninterrupted one, across a process or worker restart and after moving backward; export costs 0.04–0.31 ms and restore 0.12–0.32 ms per megabyte of memory at the median; the pass adds no measurable cost to activations; the admitted bytes are identical under both Hosts for the fixed pass order. A restore instantiates from the cached compiled module and never compiles (RFC 005 rules 9 and 10); without the cache a native restore cost 17 ms. Swapping an actor's state through a resident instance — restore, one activation, export — costs 50–60 µs at 131 KB of state, about 0.4 µs per KB, in every engine.
 
 ## 7. Known cost and planned optimisation
 
@@ -260,7 +261,7 @@ Each property has a test in the conformance kit, run under both Hosts (AUTO-005,
 | # | Question | Decided by |
 |---|---|---|
 | 1 | The defaults and Host maxima of rule 19. | Measurement in Phase 1, before release 0.1.0. |
-| 2 | The cost of the export pass and of export and restore (rule 23). | The proof of concept on snapshot and restore, before Phase 1 implements the pass. |
+| 2 | ~~The cost of the export pass and of export and restore (rule 23).~~ Resolved 2026-10-14 by the proof of concept on snapshot and restore; see rule 23. | — |
 | 3 | Whether the browser Host reaches the budget global through a shared global or through a WebAssembly-to-WebAssembly call (rule 11), and the measured saving. | RFC 005, with the crossing benchmark. |
 | 4 | The sign of the default NaN on AArch64 and its consequence for a continuous domain's tolerance (§9). | An AArch64 run in CI. |
 | 5 | Whether `host.capacity-exceeded` is a refusal or an offer to swap (rule 20) once swapping exists. | Phase 3, with the owner. |
