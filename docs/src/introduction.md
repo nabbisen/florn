@@ -8,7 +8,7 @@ This book is organised by reader.
 
 | Reader | Start with |
 |---|---|
-| Maintainers and contributors | [Requirements specification](./requirements.md), then the RFCs in `rfcs/` |
+| Maintainers and contributors | [Requirements specification](./requirements.md), the [external design](./external-design.md), then the RFCs in `rfcs/` |
 
 Chapters for new users and for module authors are added with the releases that serve them.
 
