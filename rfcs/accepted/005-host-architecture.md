@@ -1,6 +1,6 @@
 # RFC 005 — Host architecture: one core, adapters, control interface, repository layout
 
-**Status.** Accepted (2026-10-14)
+**Status.** Accepted (2026-10-14). Amended 2026-10-14 with the results of the proof of concept on telemetry transport: rule 14 (record size, ring, queue), rule 32 (worker readiness), rule 33 (hosting requirement), open question 3.
 **Tracks.** Requirements ARCH-007, ARCH-008, ARCH-009, ACT-007, DES-004, DES-007, DES-011, DES-012, OBS-001, OBS-002, OBS-003, OBS-008, WEB-001, WEB-002, WEB-003, WEB-006, WEB-009, WEB-010, WEB-012, MIG-001 to MIG-005, CTL-001 to CTL-004, SEC-008, DATA-006, DATA-012, UI-007, UI-011, UI-013, AUTO-001, AUTO-002, AUTO-006, PKG-001, PKG-007, NFR-003, NFR-005, NFR-009, NFR-013. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The structure of the Host and its two adapters; the engine adapter's rules; the trace encoding and the digest; the control interface and the run record; the browser Host's hosting rules; the three-layer user interface; the repository layout.
 **Depends on.** [RFC 001](./001-determinism-contract.md) rules 33 to 55; [RFC 002](./002-guest-contract.md) for the ABI and effects; [RFC 003](./003-module-admission-and-limits.md) for admission, capacity, and state export; [RFC 004](./004-core-model.md) for the manifest, the package, the canonical encoding, and the coded errors.
@@ -106,7 +106,7 @@ The terms of RFC 001 to RFC 004 apply. In addition:
 
 **Rule 13.** The platform adapter is the only place where a wall clock or a source of entropy exists. Both reach the kernel only as recorded inputs: pacing decisions never enter the logical world, and a seed is an input the moment it is chosen (RFC 001 rules 9 and 27).
 
-**Rule 14.** Telemetry transport. The Host writes high-rate telemetry as fixed-size binary records (OBS-008) into one interface with two implementations: a shared ring when shared memory is available and a per-frame message otherwise. The reader on the display side does not know which it reads from. The Host reduces before it writes (OBS-003): the display path may drop or thin; the trace never changes. The proof of concept on telemetry transport measures both paths at 200, 2,000, and 20,000 records per frame and decides the record size and the fallback's notice to the user.
+**Rule 14.** Telemetry transport. The Host writes high-rate telemetry as fixed-size binary records of 16 bytes (OBS-008) into one interface with two implementations: a single-producer single-consumer ring in shared memory (1 MiB, 65,536 records, with a drop counter) when the page is cross-origin isolated, and one transferred message per Host tick, queued on the display side with a bound of 64 buffers, otherwise. Both implementations deliver every record; which records are shown is a reduction decided above the transport, the same for both. The reader on the display side does not know which it reads from. The Host reduces before it writes (OBS-003): the display path may drop or thin; the trace never changes. Measured in Stage 0 in Chromium and Firefox: reading costs at most 0.1 ms per frame at the 95th percentile at 20,000 records per frame on either path, with no record dropped; at 2,000 records per frame both paths hold the display's cadence; drawing 20,000 objects per frame halves it in both browsers, so a view reduces to the order of 2,000 moving objects before drawing. Without shared memory the user sees one line stating that messages are in use.
 
 ## 4. The kernel's execution model and the instance pool
 
@@ -180,9 +180,9 @@ A run record contains no scenario text and no module bytes; it references them b
 
 ## 7. The browser Host
 
-**Rule 32.** The Host core and the engine adapter run in a dedicated worker. The main thread holds the shell and reads telemetry once per animation frame (UI-007, NFR-003).
+**Rule 32.** The Host core and the engine adapter run in a dedicated worker. The main thread holds the shell and reads telemetry once per animation frame (UI-007, NFR-003). The worker posts a readiness message once its handlers exist, and the page posts nothing to it before: a message delivered after the worker's initial script and before its WebAssembly has initialised is dropped silently, which a start from a cached page exposed in Stage 0. The conformance kit starts the Host from a cache-served page as one of its cases.
 
-**Rule 33.** The application is served with the isolation headers and the Content Security Policy below, on every path including those a service worker answers from its cache. Shared memory is used only when the page reports cross-origin isolation; otherwise the message transport applies without a change in the core (OBS-002).
+**Rule 33.** The application is served with the isolation headers and the Content Security Policy below, on every path including those a service worker answers from its cache. This is the hosting requirement. Shared memory is used only when the page reports cross-origin isolation; otherwise the message transport applies without a change in the core (OBS-002), and a host that cannot set headers can still serve the application at the measured cost of nothing at 2,000 records per frame. `Cross-Origin-Embedder-Policy: credentialless` is not used: the application loads nothing cross-origin. A service worker that injects the headers on a host that cannot set them is a documented fallback, florn's own code and never a third-party script; it costs a second load on the first visit and is not recommended.
 
 | Header | Value |
 |---|---|
@@ -334,7 +334,7 @@ florn/
 |---|---|---|
 | 1 | BLAKE3's measured advantage over SHA-256 for the chain in the browser Host (rule 22), before the trace format is frozen. | Phase 1 benchmark. |
 | 2 | The chain interval (rule 23). | Phase 1 measurement. |
-| 3 | The telemetry record size and the fallback's cost and notice (rule 14). | The proof of concept on telemetry transport. |
+| 3 | ~~The telemetry record size and the fallback's cost and notice (rule 14).~~ Resolved 2026-10-14 by the proof of concept on telemetry transport; see rule 14. | — |
 | 4 | A text form of the control interface on standard streams for automation beyond the four commands of rule 31. | Phase 2, with the first script that needs it. |
 | 5 | The swapping policy and whether a scenario beyond capacity is refused or swapped (rule 17). | Phase 3, with the proof of concept on snapshot and restore and the owner. |
 | 6 | The native shell (rule 38). | Phase 6. |
