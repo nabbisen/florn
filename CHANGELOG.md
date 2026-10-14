@@ -18,6 +18,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - External design, revision 2, under `docs/`. Accepted 2026-10-14.
 - Roadmap. Authorised 2026-10-13; Stage 0 results recorded through 2026-10-14.
 - Repository skeleton: licence, notice, readme, this changelog.
+- Continuous integration on GitHub Actions: x86-64 Linux, AArch64 Linux, and Apple Silicon macOS; the licence and advisory gate of RFC 006; the book build; the RFC index and catalogue checks.
 
 ### Stage 0
 

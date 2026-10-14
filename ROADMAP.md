@@ -48,7 +48,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | S0-16 | Requirements, revised: priorities, one statement per obligation | S0-01 | Accepted 2026-10-13, `docs/src/requirements.md` |
 | S0-17 | External design, revised: personas, UI, control interface, glossary | S0-11, S0-16 | Accepted 2026-10-14, `docs/src/external-design.md` (revision 2) |
 | S0-18 | Repository skeleton: `LICENSE`, `NOTICE`, `README.md`, `CHANGELOG.md`, workspace | S0-11 | Files in place 2026-10-13. The Cargo workspace is laid out with RFC 005, when the first crate exists. |
-| S0-19 | Hosted repository and continuous integration, with a macOS runner for Safari and an AArch64 runner | Owner | Due before Phase 1 starts. Until then Safari is checked with WebKit on Linux only, and AArch64 with emulation. |
+| S0-19 | Hosted repository and continuous integration, with a macOS runner for Safari and an AArch64 runner | Owner | Done 2026-10-14: `github.com/nabbisen/florn`, GitHub Actions. First run green on x86-64 Linux, AArch64 Linux, and Apple Silicon macOS (`.github/workflows/ci.yml`): check and test on the three architectures, the licence and advisory gate of RFC 006, the book build, the RFC index check. Safari's WebKit joins the matrix with the conformance kit in Phase 1; the Stage 0 PoCs are private and are not re-run in CI, the kit covers their cases. |
 
 ### Exit criteria
 
@@ -58,7 +58,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 4. The repository has `LICENSE`, `NOTICE`, `README.md`, `CHANGELOG.md`, `docs/`, a Cargo workspace, and CI.
 5. No critical finding of the startup review is open.
 
-**Exit review, 2026-10-14.** Criteria 1, 2, 3, and 5 are met; 1 and 2 are exceeded (seven PoCs, seven RFCs). Criterion 4 is open on two items: continuous integration (S0-19, the owner's, due before Phase 1) and the Cargo workspace (the first commit of Phase 1, laid out per RFC 005). Phase 1 starts when CI exists; its handoff package is written before that.
+**Exit review, 2026-10-14.** Criteria 1, 2, 3, and 5 are met; 1 and 2 are exceeded (seven PoCs, seven RFCs). Criterion 4 was open on two items; CI exists since 2026-10-14 (S0-19), and the Cargo workspace is the first commit of Phase 1, laid out per RFC 005. Phase 1 may start; its handoff package comes first.
 
 ## Phase 1 — Core on two engines (0.1.0)
 
