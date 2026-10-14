@@ -58,6 +58,8 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 4. The repository has `LICENSE`, `NOTICE`, `README.md`, `CHANGELOG.md`, `docs/`, a Cargo workspace, and CI.
 5. No critical finding of the startup review is open.
 
+**Exit review, 2026-10-14.** Criteria 1, 2, 3, and 5 are met; 1 and 2 are exceeded (seven PoCs, seven RFCs). Criterion 4 is open on two items: continuous integration (S0-19, the owner's, due before Phase 1) and the Cargo workspace (the first commit of Phase 1, laid out per RFC 005). Phase 1 starts when CI exists; its handoff package is written before that.
+
 ## Phase 1 — Core on two engines (0.1.0)
 
 | | |
