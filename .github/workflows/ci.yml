@@ -1,0 +1,83 @@
+# florn continuous integration (ROADMAP S0-19).
+#
+# Runners: ubuntu-latest (x86-64), ubuntu-24.04-arm (AArch64), macos-latest (Apple Silicon, AArch64;
+# the only runner with Safari's WebKit). Three CPU/OS combinations cover Tier 2 of RFC 001 for the
+# native Host. The browser matrix (Chromium, Firefox, WebKit through Playwright) joins this file with
+# the conformance kit in Phase 1.
+#
+# Only GitHub's own actions are used; tools are installed from crates.io with a lock file. RFC 006
+# rule 5 steps 4 and 5 (licences, advisories, fuzzing) run here; fuzzing joins in Phase 1.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          rustup show active-toolchain
+          rustup target add wasm32-unknown-unknown
+          uname -m
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+      - name: Check, native
+        run: cargo check --workspace --all-targets --locked || cargo check --workspace --all-targets
+      - name: Test, native
+        run: cargo test --workspace --locked || cargo test --workspace
+      - name: Check, wasm32
+        run: cargo check --workspace --target wasm32-unknown-unknown --locked || cargo check --workspace --target wasm32-unknown-unknown
+
+  licences:
+    name: licences and advisories (RFC 006 rule 6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-0.20.2
+      - name: Install cargo-deny
+        run: command -v cargo-deny || cargo install cargo-deny --version 0.20.2 --locked
+      - name: cargo deny
+        run: cargo deny check licenses advisories bans sources
+
+  docs:
+    name: docs (mdbook)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/mdbook
+          key: mdbook-0.5.4
+      - name: Install mdbook
+        run: command -v mdbook || cargo install mdbook --version 0.5.4 --locked
+      - name: Build the book
+        run: mdbook build docs
+      - name: RFC index is consistent
+        run: ci/check-rfc-index.sh
+      - name: Forbidden words in catalogues (RFC 006 §6)
+        run: ci/forbidden-words.sh

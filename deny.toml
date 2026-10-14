@@ -1,0 +1,34 @@
+# cargo-deny configuration. RFC 006 rule 6: permissive licences only; every copyleft licence,
+# including MPL-2.0, is refused. An exception is an amendment of that rule, never an entry here.
+
+[graph]
+all-features = true
+
+[licenses]
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "0BSD",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "CC0-1.0",
+]
+confidence-threshold = 0.9
+
+[advisories]
+# RFC 006 rule 5, step 4: advisories are checked on every build.
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
