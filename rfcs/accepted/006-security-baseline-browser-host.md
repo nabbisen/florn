@@ -1,9 +1,9 @@
 # RFC 006 — Security baseline for the browser Host
 
-**Status.** Proposed (2026-10-14)
+**Status.** Accepted (2026-10-14). Open question 1 decided at acceptance: MPL-2.0 and every other copyleft licence are refused outright (rule 6).
 **Tracks.** Requirements SEC-001 to SEC-012, WEB-002, WEB-005, WEB-006, WEB-009, WEB-010, WEB-012, ACT-003, ACT-005, ACT-006, ACT-010, DATA-003, DATA-007, MIG-006, MIG-008, AUTO-005. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The threat model of the browser Host, scoped to what is built; the controls that answer it, each pointing at the RFC that specifies the mechanism; what florn deliberately does not claim; the security review that every release performs; the supply-chain policy.
-**Depends on.** [RFC 002](../accepted/002-guest-contract.md) (what a guest can reach), [RFC 003](../accepted/003-module-admission-and-limits.md) (admission and limits), [RFC 004](../accepted/004-core-model.md) (manifest and package identity), [RFC 005](../accepted/005-host-architecture.md) (the Host, the control interface, hosting), and the external design (`docs/src/external-design.md`, §1, §3.9, §6).
+**Depends on.** [RFC 002](./002-guest-contract.md) (what a guest can reach), [RFC 003](./003-module-admission-and-limits.md) (admission and limits), [RFC 004](./004-core-model.md) (manifest and package identity), [RFC 005](./005-host-architecture.md) (the Host, the control interface, hosting), and the external design (`docs/src/external-design.md`, §1, §3.9, §6).
 
 ## Summary
 
@@ -152,7 +152,7 @@ The exact values are set with the defaults of RFC 003 rule 19 in Phase 1 and rec
 | 6 | Does any document or label make a claim of §6? | A search for the forbidden words |
 | 7 | Are the served files' hashes in the release notes? | The release notes |
 
-**Rule 6.** Licence allow-list for anything linked into florn: Apache-2.0, Apache-2.0 WITH LLVM-exception, MIT, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, 0BSD, Unicode-3.0, Unicode-DFS-2016, CC0-1.0. Anything else fails the build; MPL-2.0 and other weak copyleft licences are an owner decision per crate (open question 1). Test-only tools (Playwright and its browsers) are not linked and are outside the list.
+**Rule 6.** Licence allow-list for anything linked into florn: Apache-2.0, Apache-2.0 WITH LLVM-exception, MIT, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, 0BSD, Unicode-3.0, Unicode-DFS-2016, CC0-1.0. Anything else fails the build, including MPL-2.0 and every other copyleft licence, weak or strong; a crate offering a choice of licences passes if one of its choices is on the list. An exception is an owner decision recorded as an amendment of this rule, never a per-crate override in the build configuration. Measured at acceptance: the Stage 0 dependency trees (324 crates in the browser interface stack, 168 in the core and engine stack, 331 in the telemetry stack) contain no copyleft crate, so the rule costs nothing today; the crates it is known to exclude (`colored`, `option-ext` through `dirs`, `resvg` and `usvg`) all have permissive alternatives. Test-only tools (Playwright and its browsers) are not linked and are outside the list.
 
 **Rule 7.** Fuzz targets, run with `cargo-fuzz` by the verifier: the module validator; the admission transformation on valid modules (the output must validate); the canonical ABI lifting of every type of the subset; the manifest parser; the package reader; the run-record and checkpoint readers; the control-interface decoder. Mutation testing (`cargo-mutants`) measures whether the hostile-guest tests would notice a removed check.
 
@@ -182,7 +182,7 @@ The exact values are set with the defaults of RFC 003 rule 19 in Phase 1 and rec
 | Encryption of origin storage | The browser's storage is already the user's; a secret on the same machine protects nothing against the attacker of rule 2. Files are the durable form and the user's to protect. |
 | A permission dialog for guest capabilities | There are no capabilities to grant in the browser Host. When native capability profiles exist, their RFC designs the grant. |
 | Subresource integrity attributes on the application's own files | Useful against a compromised origin only if the page itself is intact; the page is served from the same origin. The hashes in the release notes and the immutable path are the control; SRI may be added without an RFC. |
-| Allowing MPL-2.0 by default | Weak copyleft; the owner's policy is permissive only. Per-crate decision instead. |
+| Allowing MPL-2.0, by default or per crate | Weak copyleft; the owner's policy is permissive only, and no crate florn links needs it. Refused outright; an exception would amend rule 6. |
 
 ## Prior art
 
@@ -208,6 +208,6 @@ The exact values are set with the defaults of RFC 003 rule 19 in Phase 1 and rec
 
 | # | Question | Decided by |
 |---|---|---|
-| 1 | Is MPL-2.0 (weak copyleft, file-level) acceptable per crate when a pure-Rust solver needs it, or refused outright? | The owner, when the first such crate appears |
+| 1 | ~~Is MPL-2.0 acceptable per crate, or refused outright?~~ Decided by the owner at acceptance: refused outright; see rule 6. | — |
 | 2 | Whether the served files' hashes are also embedded as subresource integrity attributes | Phase 2, with the hosting |
 | 3 | The fixed fuzzing time per release | The verifier, in Phase 1 |

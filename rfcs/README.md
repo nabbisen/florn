@@ -50,6 +50,7 @@ RFC enters it.
 | 003 | [Module admission and resource limits](./accepted/003-module-admission-and-limits.md) | 2026-10-14 | Release 0.1 |
 | 004 | [Core model: graph, scenario manifest, package](./accepted/004-core-model.md) | 2026-10-13 | Release 0.1 |
 | 005 | [Host architecture: one core, adapters, control interface, repository layout](./accepted/005-host-architecture.md) | 2026-10-14 | Release 0.1 |
+| 006 | [Security baseline for the browser Host](./accepted/006-security-baseline-browser-host.md) | 2026-10-14 | Release 0.1 |
 
 ### Implemented
 
