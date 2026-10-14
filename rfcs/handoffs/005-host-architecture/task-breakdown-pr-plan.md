@@ -26,7 +26,7 @@ Independent of the order above: PR-04 may precede PR-03; PR-08 may follow PR-03 
 | PR | State | Merged | Verifier record |
 |---|---|---|---|
 | PR-01 | **merged** | `64cd19c`, 2026-10-14; CI run 38571954065 green on x86-64, AArch64, Apple Silicon | C1: pending |
-| PR-02 | not started | | |
+| PR-02 | **merged** | `d9f1422` + `fbe172a`, 2026-10-14; CI green on three architectures | C2: pending |
 | PR-03 | not started | | |
 | PR-04 | not started | | |
 | PR-05 | not started | | |
