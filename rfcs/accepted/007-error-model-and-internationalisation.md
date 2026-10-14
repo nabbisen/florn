@@ -1,6 +1,6 @@
 # RFC 007 — Error model and internationalisation
 
-**Status.** Accepted (2026-10-14). Open question 3 decided at acceptance: unit symbols stay as symbols in every language (rule 19).
+**Status.** Accepted (2026-10-14). Open question 3 decided at acceptance: unit symbols stay as symbols in every language (rule 19). Amended 2026-10-14 by PR-02: four codes added to section 4.1 (`manifest.too-large`, `manifest.invalid`, `manifest.type`, `quantity.out-of-range`) and two enumerations, as the model crate needed them.
 **Tracks.** Requirements CTL-003, CTL-004, UI-009, UI-011, UI-012, SEC-008, NFR-009, ACT-005, ACT-011, DATA-007. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The three families of error; the form of every message the Host produces for a person: a code, typed parameters, a severity, a scope; the catalogue of codes named by RFC 001 to 006 and the external design; the diagnostic log; the translation catalogues of every front end and the rules by which text is produced from codes; the handling of languages, numbers, units, and text input.
 **Depends on.** [RFC 001](./001-determinism-contract.md) rules 24 and 65; [RFC 002](./002-guest-contract.md) rules 41 and 42; [RFC 003](./003-module-admission-and-limits.md) §2 and §5; [RFC 004](./004-core-model.md) §7; [RFC 005](./005-host-architecture.md) §6; [RFC 006](./006-security-baseline-browser-host.md) §5 to §7; the external design (`docs/src/external-design.md`) §3.8, §3.12, §5, §8.
@@ -97,7 +97,10 @@ The codes of RFC 001 to 006 and the external design, with their parameters, seve
 
 | Code | Parameters | Severity | Scope | Ends |
 |---|---|---|---|---|
+| `manifest.too-large` | `what: enum(manifest-count)`, `found: count`, `maximum: count` | error | file | command |
+| `manifest.invalid` | `reason: text` | error | file | command |
 | `manifest.schema-version` | `found: count`, `supported: count` | error | file | command |
+| `manifest.type` | `field: text`, `expected: enum(field-type)` | error | field | command |
 | `manifest.unknown-key` | `key: text` | error | field | command |
 | `manifest.missing-field` | `field: text` | error | field | command |
 | `identity.duplicate` | `identity: identity`, `first: name`, `second: name` | error | field | command |
@@ -113,6 +116,7 @@ The codes of RFC 001 to 006 and the external design, with their parameters, seve
 | `quantity.not-whole-ticks` | `field: text`, `value: quantity`, `tick: quantity`, `smallest: quantity` | error | field | command |
 | `quantity.not-whole-unit` | `field: text`, `value: quantity`, `unit: text` | error | field | command |
 | `quantity.unknown-unit` | `field: text`, `unit: text` | error | field | command |
+| `quantity.out-of-range` | `field: text`, `value: quantity` | error | field | command |
 | `limit.above-maximum` | `limit: name`, `value: count`, `maximum: count` | error | field | command |
 | `time.end-before-change` | `change: text`, `at: instant`, `end: instant` | error | field | command |
 | `config.missing-parameter` | `actor: identity`, `parameter: name` | error | field | command |
@@ -179,7 +183,7 @@ The codes of RFC 001 to 006 and the external design, with their parameters, seve
 
 ### 4.5 Enumerations
 
-Each `enum(set)` above is a closed set with catalogue texts `enum.<set>.<value>`: `element` (actor, connection, port, module, domain), `dimension` (time, bytes, and the domains' registered dimensions), `parameter-type` (the types of RFC 002 rule 13), `module-count` (functions, globals, tables, segments, imports, exports, custom-sections, bytes), `memory-rule` (count, imported, shared, 64-bit, not-exported), `manifest-section` (contract-identity, florn-manifest), `trust-state` (validated, rejected), `capacity-kind` (instances, memory), `machine-condition` (memory-refused, engine-stack), `limiting-factor` (actors, solver, telemetry, display, memory), `faulted-policy` (drop, stop-run, and the domains' policies), `end-reason` (end-reached, user, host-fault), `display-path` (ring, messages), `transport` (shared, messages), `invalid-reason` (unknown-command, missing-field, wrong-type, out-of-range, unknown-field), `run-state` (no-scenario, invalid, ready, running, paused, ended), `file-kind` (manifest, package, module, run-record, checkpoint, diagnostic-log), `checkpoint-field` (module-hash, admission-version, cost-model, scenario-hash), `yes-no`.
+Each `enum(set)` above is a closed set with catalogue texts `enum.<set>.<value>`: `element` (actor, connection, port, module, domain), `dimension` (time, bytes, and the domains' registered dimensions), `parameter-type` (the types of RFC 002 rule 13), `module-count` (functions, globals, tables, segments, imports, exports, custom-sections, bytes), `memory-rule` (count, imported, shared, 64-bit, not-exported), `manifest-section` (contract-identity, florn-manifest), `trust-state` (validated, rejected), `capacity-kind` (instances, memory), `machine-condition` (memory-refused, engine-stack), `limiting-factor` (actors, solver, telemetry, display, memory), `faulted-policy` (drop, stop-run, and the domains' policies), `end-reason` (end-reached, user, host-fault), `display-path` (ring, messages), `transport` (shared, messages), `invalid-reason` (unknown-command, missing-field, wrong-type, out-of-range, unknown-field), `run-state` (no-scenario, invalid, ready, running, paused, ended), `file-kind` (manifest, package, module, run-record, checkpoint, diagnostic-log), `checkpoint-field` (module-hash, admission-version, cost-model, scenario-hash), `yes-no`, `manifest-count` (bytes, text-bytes, domains, modules, actors, ports, connections, changes, limit-classes, package-bytes, package-entries), `field-type` (table, text, unsigned-integer, identity, quantity, list, tick-length, tie-policy, actor-kind, domain/name, sha256-hex).
 
 ## 5. The diagnostic log
 

@@ -33,8 +33,11 @@ florn-guest = { path = "crates/florn-guest" }
 florn-conformance = { path = "crates/florn-conformance" }
 florn-ui-model = { path = "crates/florn-ui-model" }
 florn-ui-scene = { path = "crates/florn-ui-scene" }
-# External, pinned (implementation handoff §2); added to a crate only by the PR that needs it
+# External, pinned (implementation handoff section 2); added to a crate only by the PR that needs it
 wit-parser = "=0.261.0"
+toml = "=1.1.8"
+sha2 = "=0.11.1"
+zip = { version = "=8.6.0", default-features = false }
 
 [profile.release]
 opt-level = 3
