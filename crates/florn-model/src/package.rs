@@ -108,7 +108,7 @@ impl Package {
             Some(t) => match parse_meta(&t) {
                 Ok(m) => m,
                 Err(e) => {
-                    errors.push(e);
+                    errors.push(*e);
                     PackageMeta::default()
                 }
             },
@@ -162,24 +162,26 @@ impl Package {
             .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
             .collect();
         for name in names {
-            if let Some(h) = name
+            let Some(h) = name
                 .strip_prefix("modules/")
                 .and_then(|n| n.strip_suffix(".wasm"))
-            {
-                if !checked.iter().any(|c| c == h) {
-                    if let Some(b) = read_entry(&mut archive, &name, MAX_MODULE_BYTES) {
-                        let actual = hex(&Sha256::digest(&b));
-                        if actual != h {
-                            errors.push(Error::at(
-                                Kind::PackageEntryMismatch {
-                                    entry: name.clone(),
-                                    declared: h.into(),
-                                    actual,
-                                },
-                                &name,
-                            ));
-                        }
-                    }
+            else {
+                continue;
+            };
+            if checked.iter().any(|c| c == h) {
+                continue;
+            }
+            if let Some(b) = read_entry(&mut archive, &name, MAX_MODULE_BYTES) {
+                let actual = hex(&Sha256::digest(&b));
+                if actual != h {
+                    errors.push(Error::at(
+                        Kind::PackageEntryMismatch {
+                            entry: name.clone(),
+                            declared: h.into(),
+                            actual,
+                        },
+                        &name,
+                    ));
                 }
             }
         }
@@ -285,34 +287,34 @@ fn toml_string(s: &str) -> String {
     format!("{:?}", s) // Rust's debug escaping is valid TOML basic-string escaping for the characters that matter
 }
 
-fn parse_meta(text: &str) -> Result<PackageMeta, Error> {
+fn parse_meta(text: &str) -> Result<PackageMeta, Box<Error>> {
     let t: toml::Table = text.parse().map_err(|e: toml::de::Error| {
-        Error::at(
+        Box::new(Error::at(
             Kind::ManifestInvalid {
                 reason: e.message().to_string(),
             },
             "package.toml",
-        )
+        ))
     })?;
     let version = match t.get("florn-package") {
         Some(toml::Value::Integer(v)) => *v as u64,
         _ => {
-            return Err(Error::at(
+            return Err(Box::new(Error::at(
                 Kind::ManifestMissingField {
                     field: "package.toml:florn-package".into(),
                 },
                 "package.toml",
-            ));
+            )));
         }
     };
     if version != PACKAGE_VERSION {
-        return Err(Error::at(
+        return Err(Box::new(Error::at(
             Kind::ManifestSchemaVersion {
                 found: version,
                 supported: PACKAGE_VERSION,
             },
             "package.toml",
-        ));
+        )));
     }
     let partial = matches!(t.get("partial"), Some(toml::Value::Boolean(true)));
     let text_of = |k: &str| match t.get(k) {

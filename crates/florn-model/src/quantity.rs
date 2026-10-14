@@ -85,7 +85,7 @@ impl Decimal {
             self.exponent = 0;
             return self;
         }
-        while self.mantissa % 10 == 0 {
+        while self.mantissa.is_multiple_of(10) {
             self.mantissa /= 10;
             self.exponent += 1;
         }

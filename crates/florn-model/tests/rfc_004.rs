@@ -215,15 +215,7 @@ fn hyperedge_and_multi_membership() {
 
 #[test]
 fn units() {
-    let e = parse(
-        &EXAMPLE
-            .replace(
-                "delay = \"5ms\"\nloss = 0\ncost = 10\n\n[[connections]]\nid = 101",
-                "delay = \"5ms\"\nloss = 0\ncost = 10\n\n[[connections]]\nid = 101",
-            )
-            .replace("end = \"60s\"", "end = 60"),
-    )
-    .unwrap_err();
+    let e = parse(&EXAMPLE.replace("end = \"60s\"", "end = 60")).unwrap_err();
     assert_eq!(e.codes(), vec!["quantity.missing-unit"]);
     let e = parse(&EXAMPLE.replace("end = \"60s\"", "end = \"1.5ns\"")).unwrap_err();
     assert_eq!(e.codes(), vec!["quantity.not-whole-ticks"]);
