@@ -248,7 +248,7 @@ Every front end — the browser interface, the native interface, the headless ru
 
 Rules that every client can rely on: a command is validated before it acts, and an invalid command changes nothing and produces a coded notification (CTL-002); only `intervene` (and, from 0.3, `restore` and `branch`) changes the logical world, and each such command is recorded as an input (DES-011); every notification is a code with typed parameters, and the client owns the text (CTL-003); a client and a Host of different interface versions refuse each other with a code.
 
-The headless runner (`florn` on the command line) is the automation user's front end: `florn run <scenario> [--seed N]` prints the digest and writes a run record; `florn replay <run>` prints the comparison; `florn admit <module>` prints the manifest and the admission result; `florn probe` prints the capacity (AUTO-001). A text form of the whole interface on standard streams is added when the first script needs it.
+The headless runner (`florn` on the command line) is the automation user's front end: `florn run <scenario> [--seed N]` prints the digest and writes a run record; `florn replay <run>` prints the comparison; `florn admit <module>` prints the manifest and the admission result; `florn probe` prints the capacity (AUTO-001). The whole control interface also has a **text form on standard streams**, designed now on one assumption and implemented with the native shell in Phase 6, or earlier if a script needs it first. The assumption: `florn serve --stdio` reads one command or query per line and writes one notification or answer per line, each a JSON object with the same names, fields, and codes as the canonical interface (RFC 005 §6), with binary payloads as base64 and the interface version in the first line each way. Nothing in the interface is text-specific, so this form can be added without changing a client's model; the native shell's in-process transport and this text transport are designed together because they are the two transports the browser does not use.
 
 ## 5. Failure and recovery semantics
 
@@ -323,13 +323,15 @@ Catalogue defaults for the run controls and the main nouns, English and Japanese
 
 ## 10. Open decisions
 
-| # | Decision | Proposed | Decided by |
-|---|---|---|---|
-| 1 | The accessibility target (§3.11) | WCAG 2.2 AA for page content plus the canvas rules | The owner, with this document |
-| 2 | Whether dropped telemetry records on the display path are shown in the status area or only logged (§3.13) | Shown as a count, since the trace is unaffected and the user should know the display is thinning | The owner |
-| 3 | The Japanese catalogue defaults (§8) | As listed | The owner |
-| 4 | The native shell (§3.14) | Release 0.6 | Phase 6 |
-| 5 | A text form of the control interface for scripts (§4) | When the first script needs it | Phase 2 |
+Decided by the owner on 2026-10-14.
+
+| # | Decision | Outcome |
+|---|---|---|
+| 1 | The accessibility target (§3.11) | **Accepted:** WCAG 2.2 level AA for page content plus the canvas rules. |
+| 2 | Dropped telemetry records on the display path (§3.13) | **Accepted:** shown as a count in the status area. |
+| 3 | The Japanese catalogue defaults (§8) | **Confirmed** as defaults, to be improved as appropriate; the catalogue is the source afterwards. |
+| 4 | The native shell (§3.14) | **Accepted** for release 0.6, with the decision scheduled: evaluation and spike at the start of Phase 6, before implementation. |
+| 5 | A text form of the control interface (§4) | **Designed now on a stated assumption**, implemented with the native shell in Phase 6, or earlier if a script needs it. |
 
 ## 11. Traceability
 
