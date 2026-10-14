@@ -238,6 +238,7 @@ florn/
     florn-core/wit/            florn:core (RFC 002 §4; a test checks equality with the RFC)
     florn-network/wit/         florn:network (Phase 2)
   crates/
+    florn/                     the facade that reserves the name; re-exports nothing before 0.1
     florn-kernel/              time, queue, order, activation, effects, trace, digest, replay
     florn-abi/                 canonical ABI lifting and lowering (RFC 002 §2), shared by both engine adapters
     florn-model/               manifest, package, canonical encoding, validation (RFC 004)
