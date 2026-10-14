@@ -60,3 +60,9 @@ _None at present._
 ### Archive
 
 _None yet._
+
+### Handoffs
+
+| Companion of | Package | Date |
+|---|---|---|
+| 005 | [Phase 1 handoff package — core on two engines, release 0.1.0](./handoffs/005-host-architecture/README.md): implementation handoff, task breakdown and PR plan, acceptance and QA checklist; implements RFC 001 to 007 | 2026-10-14 |

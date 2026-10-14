@@ -68,6 +68,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | **Not in scope** | Any domain. Any UI beyond a test page. Checkpoints. |
 | **Exit criteria** | One guest module, unchanged, produces the same trace digest under both Hosts. A hostile guest faults at the same point under both Hosts, and the Host and the other actors continue. A run replays from its inputs with the same digest. |
 | **RFCs** | 001 to 007 |
+| **Handoff package** | `rfcs/handoffs/005-host-architecture/` (2026-10-14): implementation handoff, fourteen pull requests in order, acceptance checklist for the verifier. PR-01 is the Cargo workspace. |
 
 ## Phase 2 — Network learning lab (0.2.0)
 
