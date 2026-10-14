@@ -3,11 +3,11 @@
 | | |
 |---|---|
 | **Document** | florn external design, revision 2 |
-| **Status** | Proposed 2026-10-14. Supersedes the draft of 2026-09-28. |
+| **Status** | Accepted 2026-10-14, with the five decisions of §10 taken. Supersedes the draft of 2026-09-28. |
 | **Owner** | nabbisen |
 | **Scope** | What a person or a program sees of florn: the system's boundaries, the personas and their journeys, the user interface, the control interface, the files, the failure semantics, the hosting, and the vocabulary. |
 | **Not here** | How the Host is built (RFC 005), what a guest is (RFC 002), how a module is admitted and limited (RFC 003), the scenario model and package (RFC 004), determinism (RFC 001), the threat model (RFC 006), the error catalogue (RFC 007). This document cites them and does not restate them. |
-| **Change history** | Revision 1, 2026-09-28: draft, with a role model, a workspace model, an authorization matrix, a data model, and a threat model. Revision 2, 2026-10-14: the role, workspace, and authorization models are retired (florn is a single-user local tool, SEC-010); the data model and the threat model moved to the RFCs; the user interface, the personas, the control interface, and the vocabulary are designed from the accepted requirements, RFC 001 to 005, and the Stage 0 proofs of concept. |
+| **Change history** | Revision 1, 2026-09-28: draft, with a role model, a workspace model, an authorization matrix, a data model, and a threat model. Revision 2, 2026-10-14: the role, workspace, and authorization models are retired (florn is a single-user local tool, SEC-010); the data model and the threat model moved to the RFCs; the user interface, the personas, the control interface, and the vocabulary are designed from the accepted requirements, RFC 001 to 005, and the Stage 0 proofs of concept. Accepted the same day; §10 records the decisions. |
 
 Requirement identifiers refer to the [requirements specification](./requirements.md). RFC numbers refer to `rfcs/` in the repository.
 
@@ -229,7 +229,7 @@ The interface says what limits a run (NFR-004): the status line shows "limited b
 
 ### 3.14 Structure
 
-The interface has three layers — view model, scene, shell — as RFC 005 §8 defines; the browser shell uses Leptos on a 2D canvas; the native shell is decided for release 0.6. Everything in §3 is a property of the view model and the scene except the framework-specific rendering, so it holds for both shells.
+The interface has three layers — view model, scene, shell — as RFC 005 §8 defines; the browser shell uses Leptos on a 2D canvas. The native shell is decided at the start of Phase 6, by an evaluation and a one-screen spike like the browser shell's, before any Phase 6 implementation; the roadmap carries that as a scheduled item so that it cannot drift. Everything in §3 is a property of the view model and the scene except the framework-specific rendering, so it holds for both shells.
 
 ## 4. The control interface
 
