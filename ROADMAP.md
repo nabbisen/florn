@@ -41,7 +41,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | S0-09 | RFC 003 — Module admission and resource limits | S0-02, S0-04 | Accepted 2026-10-14. Specifies the versioned cost model and restates the metering-cost plan. |
 | S0-10 | RFC 004 — Core model: graph, scenario manifest, package | S0-02 | Accepted 2026-10-13 |
 | S0-11 | RFC 005 — Host architecture and control interface | S0-02, S0-07 | Accepted 2026-10-14 |
-| S0-12 | RFC 006 — Security baseline for the browser Host | S0-09 | Not started |
+| S0-12 | RFC 006 — Security baseline for the browser Host | S0-09 | Proposed 2026-10-14 (`rfcs/proposed/`); awaiting acceptance |
 | S0-13 | RFC 007 — Error model and internationalisation | S0-11 | Not started |
 | S0-14 | POC-5 — Telemetry transport and isolation headers | S0-07 | Reported 2026-10-14: Go. Shared memory under the isolation headers in both browsers; the message fallback delivers every record at 2,000 per frame with no measurable cost; offline start keeps isolation; no request leaves the origin. Hosting requirement: COOP same-origin, COEP require-corp, the policy, versioned paths. |
 | S0-15 | POC-6 — Snapshot and restore | S0-04 report | Reported 2026-10-14: Go. Memory, globals, and tables export and restore into a fresh instance with an identical trace under Wasmtime, Chromium, and Firefox, across a restart and backward in time; 0.04–0.3 ms per MB; the pass costs nothing measurable. Swapping measured at 50–60 µs per actor at 131 KB of state. |

@@ -31,13 +31,15 @@ RFC enters it.
   that moves the file.
 - Release tags have no `v` prefix, so an implemented RFC reads `Implemented (0.1.0)`.
 - This index is updated in the same commit that adds or moves an RFC.
-- Numbers 006 and 007 are reserved by `ROADMAP.md` for the foundational RFCs named there, so that documents can refer to them before they are written.
+- Number 007 is reserved by `ROADMAP.md` for the foundational RFCs named there, so that documents can refer to them before they are written.
 
 ## Index
 
 ### Proposed
 
-_None at present._
+| ID | Title | Proposed |
+|----|-------|----------|
+| 006 | [Security baseline for the browser Host](./proposed/006-security-baseline-browser-host.md) | 2026-10-14 |
 
 ### Accepted
 
