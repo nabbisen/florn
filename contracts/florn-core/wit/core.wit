@@ -1,0 +1,71 @@
+package florn:core@0.1.0;
+
+/// Types shared by every contract.
+interface types {
+    /// Logical time in ticks (RFC 001 rule 1).
+    type tick = u64;
+    /// The identity of an actor, as written in the scenario (RFC 004 rule 7).
+    type actor-id = u32;
+    /// The identity of a port, unique within its actor (RFC 004 rule 9).
+    type port-id = u32;
+    /// A timer identity chosen by the guest. One timer per identity.
+    type timer-id = u32;
+    /// A telemetry channel declared in the module manifest. Channel 0 is text.
+    type channel-id = u32;
+
+    /// One port of this actor, as the scenario declared it.
+    record port {
+        id: port-id,
+        /// Index of the port kind in the module manifest.
+        kind: u32,
+        /// The port's name in the scenario, for telemetry and messages to people.
+        name: string,
+    }
+}
+
+/// Functions the Host provides. Each is recorded as an effect and committed
+/// only if the activation returns normally (RFC 001 rules 22 to 24).
+interface host {
+    use types.{tick, port-id, timer-id, channel-id};
+
+    /// Ask for delivery of `payload` through `port` of this actor.
+    /// The domain's world decides what delivery means.
+    send: func(port: port-id, payload: list<u8>);
+
+    /// Ask for `on-timer(timer)` to be called `delay` ticks from the current instant.
+    /// A pending timer with the same identity is replaced.
+    set-timer: func(timer: timer-id, delay: tick);
+
+    /// Cancel a pending timer. Cancelling a timer that is not pending has no effect.
+    cancel-timer: func(timer: timer-id);
+
+    /// Draw the next value of this actor's random stream (RFC 001 rules 28 to 31).
+    random: func() -> u64;
+
+    /// Report telemetry on a declared channel, in the channel's record layout.
+    report: func(channel: channel-id, payload: list<u8>);
+}
+
+/// Functions the guest provides. Each call is one activation (§6), except
+/// where a domain contract declares a compound activation.
+interface actor {
+    use types.{tick, actor-id, port-id, timer-id, port};
+
+    /// The first activation of the actor. `now` is tick 0 for an actor in the
+    /// scenario, or the current instant for an actor created by an intervention.
+    /// `config` holds the declared parameters in order (rule 14).
+    init: func(now: tick, actor: actor-id, ports: list<port>, config: list<u8>);
+
+    /// A message arrived through `port`.
+    on-message: func(now: tick, port: port-id, payload: list<u8>);
+
+    /// The timer `timer` expired.
+    on-timer: func(now: tick, timer: timer-id);
+}
+
+/// The world of a guest that uses the core contract only, such as the echo guest.
+/// Domain worlds include this one.
+world guest {
+    import host;
+    export actor;
+}

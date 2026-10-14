@@ -1,0 +1,15 @@
+[package]
+name = "florn-abi"
+description = "Canonical ABI lifting and lowering of the type subset of RFC 002 §2, shared by both engine adapters. The one place besides the adapters where `unsafe` may appear, with the invariant stated at each use"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+wit-parser = { workspace = true }

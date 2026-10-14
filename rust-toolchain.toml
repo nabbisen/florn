@@ -1,0 +1,5 @@
+# Pinned toolchain (RFC 005 rule 44). Changed only by a pull request that says why.
+[toolchain]
+channel = "1.99.0"
+targets = ["wasm32-unknown-unknown"]
+components = ["rustfmt", "clippy"]

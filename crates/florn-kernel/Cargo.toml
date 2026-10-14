@@ -1,0 +1,12 @@
+[package]
+name = "florn-kernel"
+description = "Time, queue, order, activation, effects, trace, digest, replay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]

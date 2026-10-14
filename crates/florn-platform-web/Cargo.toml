@@ -1,0 +1,12 @@
+[package]
+name = "florn-platform-web"
+description = "The browser platform adapter: worker transport, origin storage as a cache, pacing clock, watchdog, capacity probe, entropy for a new seed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]

@@ -1,0 +1,12 @@
+[package]
+name = "florn-platform-native"
+description = "The native platform adapter: files, standard streams, pacing clock, watchdog, capacity probe, entropy for a new seed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]

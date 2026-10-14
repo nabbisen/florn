@@ -1,13 +1,57 @@
-[package]
-name = "florn"
+# florn workspace (RFC 005 §9). One workspace; crates prefixed `florn-`; dependency direction per
+# RFC 005 rule 43, checked in CI by ci/check-deps.py. The root package reserves the name `florn`.
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.0.0"
 edition = "2024"
-description = "Local-first platform for executable testbeds: isolated WebAssembly actors inside a deterministic simulated world"
 license = "Apache-2.0"
 authors = ["nabbisen"]
-readme = "README.md"
 repository = "https://github.com/nabbisen/florn"
-# No release exists yet. The name is reserved with the first real pre-release (roadmap, release 0.1).
+rust-version = "1.99"
+# No release exists yet. Publication is decided with the first pre-release (roadmap, release 0.1).
 publish = false
 
-[dependencies]
+[workspace.dependencies]
+# Internal crates
+florn-kernel = { path = "crates/florn-kernel" }
+florn-abi = { path = "crates/florn-abi" }
+florn-model = { path = "crates/florn-model" }
+florn-admission = { path = "crates/florn-admission" }
+florn-control = { path = "crates/florn-control" }
+florn-host = { path = "crates/florn-host" }
+florn-engine = { path = "crates/florn-engine" }
+florn-engine-wasmtime = { path = "crates/florn-engine-wasmtime" }
+florn-engine-web = { path = "crates/florn-engine-web" }
+florn-platform = { path = "crates/florn-platform" }
+florn-platform-native = { path = "crates/florn-platform-native" }
+florn-platform-web = { path = "crates/florn-platform-web" }
+florn-guest = { path = "crates/florn-guest" }
+florn-conformance = { path = "crates/florn-conformance" }
+florn-ui-model = { path = "crates/florn-ui-model" }
+florn-ui-scene = { path = "crates/florn-ui-scene" }
+# External, pinned (implementation handoff §2); added to a crate only by the PR that needs it
+wit-parser = "=0.261.0"
+
+[package]
+name = "florn"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish.workspace = true
+description = "Local-first platform for executable testbeds: isolated WebAssembly actors inside a deterministic simulated world"
+readme = "README.md"
+
+[lib]
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
