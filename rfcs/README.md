@@ -31,7 +31,7 @@ RFC enters it.
   that moves the file.
 - Release tags have no `v` prefix, so an implemented RFC reads `Implemented (0.1.0)`.
 - This index is updated in the same commit that adds or moves an RFC.
-- Number 007 is reserved by `ROADMAP.md` for the foundational RFCs named there, so that documents can refer to them before they are written.
+- Numbers 001 to 007 are the foundational RFCs named in `ROADMAP.md`; later numbers are taken in order.
 
 ## Index
 
@@ -39,7 +39,7 @@ RFC enters it.
 
 | ID | Title | Proposed |
 |----|-------|----------|
-| 006 | [Security baseline for the browser Host](./proposed/006-security-baseline-browser-host.md) | 2026-10-14 |
+| 007 | [Error model and internationalisation](./proposed/007-error-model-and-internationalisation.md) | 2026-10-14 |
 
 ### Accepted
 
