@@ -20,6 +20,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - Repository skeleton: licence, notice, readme, this changelog.
 - Phase 1, PR-01: the Cargo workspace of RFC 005 with eighteen empty crates, the pinned toolchain, the contract of record `contracts/florn-core/wit/core.wit` with the test that keeps it equal to RFC 002, and the dependency-direction check in CI.
 - Phase 1, PR-02: `florn-model`, the core model of RFC 004: manifest parsing with every validation code reported in one pass with typed parameters, quantities converted exactly to ticks and bytes, the canonical encoding and the scenario hash, the package reader and writer. RFC 007 section 4.1 gains four codes.
+- Phase 1, PR-03: `florn-kernel`, the logical world of RFC 001: ticks and instants, the event key with both tie policies, the zero-delay limits, seeded streams over an in-crate ChaCha8 derived with BLAKE3, activations that commit in order or discard everything, timers with replace and cancel, interventions as recorded and replayed inputs, trace records with payload digests, the BLAKE3 chain, run comparison, and the advance units.
 - Continuous integration on GitHub Actions: x86-64 Linux, AArch64 Linux, and Apple Silicon macOS; the licence and advisory gate of RFC 006; the book build; the RFC index and catalogue checks.
 
 ### Stage 0
