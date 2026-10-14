@@ -37,9 +37,7 @@ RFC enters it.
 
 ### Proposed
 
-| ID | Title | Proposed |
-|----|-------|----------|
-| 007 | [Error model and internationalisation](./proposed/007-error-model-and-internationalisation.md) | 2026-10-14 |
+_None at present._
 
 ### Accepted
 
@@ -51,6 +49,7 @@ RFC enters it.
 | 004 | [Core model: graph, scenario manifest, package](./accepted/004-core-model.md) | 2026-10-13 | Release 0.1 |
 | 005 | [Host architecture: one core, adapters, control interface, repository layout](./accepted/005-host-architecture.md) | 2026-10-14 | Release 0.1 |
 | 006 | [Security baseline for the browser Host](./accepted/006-security-baseline-browser-host.md) | 2026-10-14 | Release 0.1 |
+| 007 | [Error model and internationalisation](./accepted/007-error-model-and-internationalisation.md) | 2026-10-14 | Release 0.1 |
 
 ### Implemented
 

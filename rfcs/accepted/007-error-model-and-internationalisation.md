@@ -1,9 +1,9 @@
 # RFC 007 — Error model and internationalisation
 
-**Status.** Proposed (2026-10-14)
+**Status.** Accepted (2026-10-14). Open question 3 decided at acceptance: unit symbols stay as symbols in every language (rule 19).
 **Tracks.** Requirements CTL-003, CTL-004, UI-009, UI-011, UI-012, SEC-008, NFR-009, ACT-005, ACT-011, DATA-007. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The three families of error; the form of every message the Host produces for a person: a code, typed parameters, a severity, a scope; the catalogue of codes named by RFC 001 to 006 and the external design; the diagnostic log; the translation catalogues of every front end and the rules by which text is produced from codes; the handling of languages, numbers, units, and text input.
-**Depends on.** [RFC 001](../accepted/001-determinism-contract.md) rules 24 and 65; [RFC 002](../accepted/002-guest-contract.md) rules 41 and 42; [RFC 003](../accepted/003-module-admission-and-limits.md) §2 and §5; [RFC 004](../accepted/004-core-model.md) §7; [RFC 005](../accepted/005-host-architecture.md) §6; [RFC 006](../accepted/006-security-baseline-browser-host.md) §5 to §7; the external design (`docs/src/external-design.md`) §3.8, §3.12, §5, §8.
+**Depends on.** [RFC 001](./001-determinism-contract.md) rules 24 and 65; [RFC 002](./002-guest-contract.md) rules 41 and 42; [RFC 003](./003-module-admission-and-limits.md) §2 and §5; [RFC 004](./004-core-model.md) §7; [RFC 005](./005-host-architecture.md) §6; [RFC 006](./006-security-baseline-browser-host.md) §5 to §7; the external design (`docs/src/external-design.md`) §3.8, §3.12, §5, §8.
 
 ## Summary
 
@@ -201,7 +201,7 @@ Each `enum(set)` above is a closed set with catalogue texts `enum.<set>.<value>`
 
 ## 7. Numbers, units, time, and text
 
-**Rule 19.** The logical world knows no language (RFC 001 rule 63): nothing in the Host, the trace, the manifest, or the run record is localised. Formatting happens in the front end, from typed values, with the platform's formatter for the chosen language for numbers and grouping. Unit symbols are the scenario's and are not translated. A logical time is shown with a unit chosen from the tick length and the magnitude, and as a tick count on request. Wall-clock times exist only as metadata and are shown in the user's locale.
+**Rule 19.** The logical world knows no language (RFC 001 rule 63): nothing in the Host, the trace, the manifest, or the run record is localised. Formatting happens in the front end, from typed values, with the platform's formatter for the chosen language for numbers and grouping. Unit symbols are the scenario's and are not translated in any language: the user writes `5ms` in the scenario and reads `5ms` everywhere, in English and in Japanese alike (decided by the owner at acceptance). A logical time is shown with a unit chosen from the tick length and the magnitude, and as a tick count on request. Wall-clock times exist only as metadata and are shown in the user's locale.
 
 **Rule 20.** Text input follows RFC 005 rule 39: a front end never writes into a field while the user composes; a field is set only when the selection changes; input methods are part of the conformance kit's tests. Text the user types — names, notes — is stored as UTF-8 and shown as typed, including on the canvas, with the system's fonts.
 
@@ -256,4 +256,4 @@ Each `enum(set)` above is a closed set with catalogue texts `enum.<set>.<value>`
 |---|---|---|
 | 1 | Whether the catalogue format needs a richer plural and gender syntax than the first two languages require | The first language that needs it |
 | 2 | How the native shell loads its catalogues and shares them with the browser shell's | Phase 6, with the native shell |
-| 3 | Whether unit symbols get a per-language display form (for example "秒" for seconds in Japanese) or stay as symbols everywhere | The owner, with the Japanese catalogue |
+| 3 | ~~Whether unit symbols get a per-language display form or stay as symbols everywhere~~ Decided by the owner at acceptance: symbols everywhere; see rule 19. | — |
