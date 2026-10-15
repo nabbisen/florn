@@ -1,6 +1,6 @@
 [package]
 name = "florn-engine-wasmtime"
-description = "The Wasmtime engine adapter"
+description = "The Wasmtime engine adapter (RFC 005 rule 9)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +10,10 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+florn-engine = { workspace = true }
+florn-abi = { workspace = true }
+wasmtime = { workspace = true }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+florn-engine = { workspace = true, features = ["conformance"] }

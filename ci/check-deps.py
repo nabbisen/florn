@@ -27,6 +27,7 @@ def direct(name):
 
 PLATFORM = {"web-sys", "js-sys", "wasm-bindgen", "wasmtime", "tokio", "leptos"}
 CORE = ["florn-kernel", "florn-abi", "florn-model", "florn-admission", "florn-control", "florn-host", "florn-ui-model", "florn-ui-scene", "florn-engine", "florn-platform"]
+# Normal dependencies only: a dev-dependency (a test tool) may be anything the licence gate allows.
 # Allowed direct florn-* dependencies per crate (RFC 005 rule 43). Absent = no florn-* dependency allowed.
 ALLOWED = {
     "florn-model": set(),

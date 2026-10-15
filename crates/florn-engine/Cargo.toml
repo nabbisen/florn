@@ -1,6 +1,6 @@
 [package]
 name = "florn-engine"
-description = "The engine adapter trait"
+description = "The engine adapter trait (RFC 005 rule 5), and the conformance cases every adapter passes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +10,9 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+florn-abi = { workspace = true }
+wat = { workspace = true, optional = true }
+
+[features]
+# The adapter conformance cases of `conformance`, run by each adapter's tests.
+conformance = ["dep:wat"]

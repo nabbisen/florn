@@ -28,6 +28,8 @@ yanked = "deny"
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Workspace crates are path dependencies without a version: unpublished (RFC 005 section 9).
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
