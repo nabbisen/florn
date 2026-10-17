@@ -17,7 +17,7 @@ mod val;
 pub use lift::{lift_flat_params, lift_results, load};
 pub use lower::{lower_flat_params, lower_result, store};
 pub use ty::{Flat, FlatType, MAX_FLAT_PARAMS, MAX_FLAT_RESULTS, Ty};
-pub use val::Val;
+pub use val::{Val, canonical_f32, canonical_f64};
 
 use std::fmt;
 

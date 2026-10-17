@@ -1,6 +1,6 @@
 # RFC 007 — Error model and internationalisation
 
-**Status.** Accepted (2026-10-14). Open question 3 decided at acceptance: unit symbols stay as symbols in every language (rule 19). Amended 2026-10-14 by PR-02: four codes added to section 4.1 (`manifest.too-large`, `manifest.invalid`, `manifest.type`, `quantity.out-of-range`) and two enumerations, as the model crate needed them.
+**Status.** Accepted (2026-10-14). Open question 3 decided at acceptance: unit symbols stay as symbols in every language (rule 19). Amended 2026-10-14 by PR-02: four codes added to section 4.1 (`manifest.too-large`, `manifest.invalid`, `manifest.type`, `quantity.out-of-range`) and two enumerations, as the model crate needed them. Amended 2026-10-17 by PR-06: two codes added to section 4.2 (`module.export-reserved`, `module.contract-mismatch`), as the admission crate needed them.
 **Tracks.** Requirements CTL-003, CTL-004, UI-009, UI-011, UI-012, SEC-008, NFR-009, ACT-005, ACT-011, DATA-007. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The three families of error; the form of every message the Host produces for a person: a code, typed parameters, a severity, a scope; the catalogue of codes named by RFC 001 to 006 and the external design; the diagnostic log; the translation catalogues of every front end and the rules by which text is produced from codes; the handling of languages, numbers, units, and text input.
 **Depends on.** [RFC 001](./001-determinism-contract.md) rules 24 and 65; [RFC 002](./002-guest-contract.md) rules 41 and 42; [RFC 003](./003-module-admission-and-limits.md) §2 and §5; [RFC 004](./004-core-model.md) §7; [RFC 005](./005-host-architecture.md) §6; [RFC 006](./006-security-baseline-browser-host.md) §5 to §7; the external design (`docs/src/external-design.md`) §3.8, §3.12, §5, §8.
@@ -135,10 +135,12 @@ The codes of RFC 001 to 006 and the external design, with their parameters, seve
 | `module.table-mutation` | `instruction: name` | error | file | command |
 | `module.import-refused` | `module: name`, `name: name` | error | file | command |
 | `module.export-missing` | `name: name` | error | file | command |
+| `module.export-reserved` | `name: name` | error | file | command |
 | `module.initial-memory-above-limit` | `pages: count`, `limit: count` | error | file | command |
 | `module.manifest-missing` | `section: enum(manifest-section)` | error | file | command |
 | `module.manifest-schema` | `reason: text` | error | file | command |
 | `module.contract-unsupported` | `declared: text`, `supported: text` | error | file | command |
+| `module.contract-mismatch` | `declared: text`, `found: text` | error | file | command |
 | `module.port-type-unknown` | `actor: identity`, `port: name`, `type: text` | error | field | command |
 | `module.port-count` | `actor: identity`, `kind: name`, `found: count`, `min: count`, `max: count` | error | field | command |
 | `limit.below-need` | `actor: identity`, `limit: name`, `need: count`, `value: count` | error | field | command |

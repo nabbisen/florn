@@ -159,7 +159,12 @@ impl Package {
         }
         // Every module file must be named by its own hash (rule 34), even ones the manifest does not reference.
         let names: Vec<String> = (0..archive.len())
-            .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+            .filter_map(|i| {
+                archive
+                    .by_index(i)
+                    .ok()
+                    .and_then(|f| f.name().ok().map(|n| n.into_owned()))
+            })
             .collect();
         for name in names {
             let Some(h) = name

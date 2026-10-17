@@ -1,6 +1,6 @@
 # RFC 003 — Module admission and resource limits
 
-**Status.** Accepted (2026-10-14). Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 5 (table mutation refused), rule 23 (measured cost), open question 2.
+**Status.** Accepted (2026-10-14). Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 5 (table mutation refused), rule 23 (measured cost), open question 2. Amended 2026-10-17 by PR-06: rule 9 records the two library behaviours the wrapper corrects.
 **Tracks.** Requirements ACT-003, ACT-005, ACT-006, ACT-007, ACT-008, ACT-010, SEC-001, SEC-002, SEC-004, SEC-005, DES-006, DATA-003, DATA-005, NFR-011, NFR-013, NFR-014, AC-002, AC-005, AC-006. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The step every module passes before it can act; the transformation that makes a module meterable, limited, and exportable; the cost model and its place in the run identity; the budgets, limits, and quotas and the faults they produce; the export and restore of guest state.
 **Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md) rules 24, 46, and 64 to 66. [RFC 002 — Guest contract](./002-guest-contract.md) for the artifact, the manifest, the admitted features, and the fault kinds. [RFC 004 — Core model](./004-core-model.md) for `[modules]`, `[limits]`, and the validation codes.
@@ -100,7 +100,7 @@ A start function runs at instantiation, outside any activation, before the budge
 
 **Rule 8.** The Host supplies the global of pass 3 and reads the global of pass 2. A source module that imports or exports a name under `florn.` or the metering import of §4 is refused at stage 1 (rule 5).
 
-**Rule 9.** The transformation library for admission version 1 is `fvm-wasm-instrument` 0.4, wrapped by florn: florn fixes the pass order, names the globals, preserves custom sections, and tests the output against recorded hashes. The wrapper is the only code that calls the library. When the library is replaced (§7, step 3), the admission version changes.
+**Rule 9.** The transformation library for admission version 1 is `fvm-wasm-instrument` 0.4, wrapped by florn: florn fixes the pass order, names the globals, preserves custom sections, and tests the output against recorded hashes. The wrapper is the only code that calls the library. When the library is replaced (§7, step 3), the admission version changes. Two behaviours of the library are corrected by the wrapper and are part of admission version 1: the library keeps only one custom section of a module, so the wrapper sets every custom section aside before the passes and appends them after, in their original order; and the library leaves the indices of exported globals unshifted after it inserts the budget global at index 0, so the wrapper shifts them.
 
 ### 3.1 Admission version
 
