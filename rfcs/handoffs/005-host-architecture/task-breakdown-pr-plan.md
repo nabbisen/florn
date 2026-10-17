@@ -30,7 +30,7 @@ Independent of the order above: PR-04 may precede PR-03; PR-08 may follow PR-03 
 | PR-03 | **merged** | `1dbf805`, 2026-10-14; CI green on three architectures | C3: pending |
 | PR-04 | **merged** | `3b37564`, 2026-10-14; CI green on three architectures | C4: pending |
 | PR-05 | **merged** | `0d95214`, 2026-10-15; CI green on three architectures | C5 (native half): pending |
-| PR-06 | not started | | |
+| PR-06 | **merged** | `b4469fe`, 2026-10-17; CI green on three architectures | C6 (native half): pending; AC-005 with PR-09 |
 | PR-07 | not started | | |
 | PR-08 | not started | | |
 | PR-09 | not started | | |
