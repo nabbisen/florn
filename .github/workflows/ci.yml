@@ -49,6 +49,8 @@ jobs:
         run: cargo test --workspace --locked
       - name: Check, wasm32 (the crates that compile for the browser)
         run: cargo check --locked --target wasm32-unknown-unknown -p florn-kernel -p florn-abi -p florn-model -p florn-admission -p florn-control -p florn-host -p florn-engine -p florn-engine-web -p florn-platform -p florn-platform-web -p florn-guest -p florn-ui-model -p florn-ui-scene -p florn-ui-web
+      - name: Guests (the SDK's example modules for the wasm32 target)
+        run: cargo build --locked --release --target wasm32-unknown-unknown -p florn-guest --examples
       - name: Dependency direction (RFC 005 rules 1 and 43)
         run: python3 -I ci/check-deps.py
 

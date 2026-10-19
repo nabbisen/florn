@@ -45,6 +45,9 @@ wasmparser = "=0.261.0"
 wasm-encoder = { version = "=0.261.0", features = ["wasmparser"] }
 wit-component = { version = "=0.261.0", default-features = false }
 fvm-wasm-instrument = "=0.4.0"
+wit-bindgen = { version = "=0.62.0", default-features = false, features = ["macros", "realloc"] }
+libm = { version = "=0.2.16", default-features = false }
+dlmalloc = { version = "=0.2.14", features = ["global"] }
 # test-only: the reference ChaCha8 the kernel's own implementation is checked against
 rand_chacha = "=0.10.0"
 

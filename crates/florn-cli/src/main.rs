@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use florn_control::{
-    Answer, Command, Envelope, ExportKind, Message, Notification, Query, SeedChoice, Severity, Unit,
+    Answer, Command, Envelope, ExportKind, Message, Notification, Query, SeedChoice, Unit,
 };
 use florn_engine_wasmtime::{Limits, WasmtimeEngine};
 use florn_host::{Controller, Options};
@@ -108,22 +108,19 @@ fn read(path: &Path) -> Result<Vec<u8>, String> {
     std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))
 }
 
-/// Print the notifications of a reply on standard error; the answer, if any, is returned.
+/// Print the notifications of a reply on standard error; the answer, if any, is returned. A
+/// command that was applied answers; one that was refused only notifies. An error notification
+/// with an answer (an actor's fault during an advance) is not a refusal.
 fn report(replies: Vec<Message>) -> (Option<Answer>, bool) {
     let mut answer = None;
-    let mut error = false;
     for m in replies {
         match m {
-            Message::Notification(n) => {
-                if n.severity == Severity::Error {
-                    error = true;
-                }
-                eprintln!("{}", english::line(&n));
-            }
+            Message::Notification(n) => eprintln!("{}", english::line(&n)),
             Message::Answer(a) => answer = Some(a),
             _ => {}
         }
     }
+    let error = answer.is_none();
     (answer, error)
 }
 

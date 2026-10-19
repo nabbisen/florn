@@ -136,7 +136,7 @@ Done when: the kit runs in CI on the three architectures natively and on Chromiu
 | The core reads no wall clock and uses no thread for execution; iteration over unordered collections never reaches the trace | RFC 001 rules 9, 19, §13.1 | Dependency check; the kit's Tier 1 test run twice |
 | The Host never calls a guest for inspection | RFC 001 rule 39b | No such call exists; review |
 | Every refusal and fault is a code with typed parameters and nothing else | RFC 007 rules 3 to 7 | The `Code` enumeration is the only way to produce one |
-| No `unsafe` outside the adapters and the ABI crate, and each use has a comment stating the invariant | Project hygiene | `#![forbid(unsafe_code)]` in the other crates |
+| No `unsafe` outside the adapters, the ABI crate, and the guest SDK (whose generated bindings, manifest link section, and actor cell need it), and each use has a comment stating the invariant | Project hygiene | `#![forbid(unsafe_code)]` in the other crates |
 | No panic reaches an adapter boundary from the Host; errors are values | RFC 005 rule 39 (the same lesson for the Host) | The browser adapter test with a hostile guest |
 | Every rule implemented has a test that fails without it | This package | Review of each PR against its RFC rules |
 | Measured budgets are kit tests, not comments | NFR-013 | The benchmarks publish figures per release |
