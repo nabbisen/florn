@@ -231,12 +231,14 @@ macro_rules! declare {
             $( stringify!($rk), " = ", stringify!($rv), "\n", )*
         );
 
-        /// The `florn.manifest` custom section (RFC 002 rule 11).
+        /// The `florn.manifest` custom section (RFC 002 rule 11). The section exists in the
+        /// WebAssembly module only; on another target the static is plain data (a Mach-O
+        /// section needs a segment name, and nothing reads it there).
         ///
         /// SAFETY of the attribute: a custom section named for florn, carrying UTF-8 text; it
         /// names no section the linker or the runtime interprets.
         #[used]
-        #[unsafe(link_section = "florn.manifest")]
+        #[cfg_attr(target_arch = "wasm32", unsafe(link_section = "florn.manifest"))]
         pub static FLORN_MANIFEST: [u8; MANIFEST.len()] = $crate::manifest::section(MANIFEST);
 
         /// The declared parameters, as `init` receives them (RFC 002 rules 13 and 14).
