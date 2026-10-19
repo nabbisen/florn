@@ -34,6 +34,17 @@ use crate::log::DiagnosticLog;
 use crate::snapshot::{ActorState, Checkpoint, CheckpointIdentity};
 use crate::world::{CLASS_TIMER, CoreWorld, Intervention};
 
+/// The SHA-256 of module bytes as hexadecimal: the module identity (RFC 004 rule 16).
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    florn_model::canonical::hex(&florn_admission::sha256(bytes))
+}
+
+/// An admission step with the default maxima, for front ends that hold no `florn-admission`
+/// dependency of their own (RFC 005 rule 43).
+pub fn default_admission() -> Admission {
+    Admission::default()
+}
+
 /// The seed of a new run (RFC 005 rule 26): given, or chosen by the platform and then an input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Seed {

@@ -203,15 +203,16 @@ impl<E: Engine> Controller<E> {
         }
     }
 
-    /// After a run advanced: the state, then what the subscriptions deliver.
-    fn after_advance(&mut self, out: &mut Vec<Message>) {
+    /// After a run advanced: the state, the notifications the advance produced (a command's
+    /// reply always carries them; a `pump` carries them under the `events` subscription), then
+    /// what the other subscriptions deliver.
+    fn after_advance(&mut self, out: &mut Vec<Message>, events: bool) {
         if let Some(run) = &self.run
             && run.ended().is_some()
         {
             self.state = RunState::Ended;
             self.target = None;
         }
-        let events = self.subs.events;
         if events {
             self.drain_log(out);
         } else if let Some(run) = &self.run {
@@ -242,7 +243,8 @@ impl<E: Engine> Controller<E> {
                 self.target = None;
             }
         }
-        self.after_advance(&mut out);
+        let events = self.subs.events;
+        self.after_advance(&mut out, events);
         out
     }
 
@@ -321,7 +323,7 @@ impl<E: Engine> Controller<E> {
                     run.end_run();
                 }
                 self.target = None;
-                self.after_advance(out);
+                self.after_advance(out, true);
                 out.push(Message::Answer(Answer::Done));
             }
             Command::Advance { unit } => {
@@ -353,7 +355,7 @@ impl<E: Engine> Controller<E> {
                         self.state = RunState::Running;
                     }
                 }
-                self.after_advance(out);
+                self.after_advance(out, true);
                 out.push(Message::Answer(Answer::Done));
             }
             Command::Pause => {

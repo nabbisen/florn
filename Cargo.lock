@@ -444,6 +444,14 @@ dependencies = [
 [[package]]
 name = "florn-cli"
 version = "0.0.0"
+dependencies = [
+ "florn-control",
+ "florn-engine-wasmtime",
+ "florn-host",
+ "florn-model",
+ "florn-platform-native",
+ "wat",
+]
 
 [[package]]
 name = "florn-conformance"
@@ -492,6 +500,7 @@ dependencies = [
  "florn-control",
  "florn-engine",
  "florn-engine-wasmtime",
+ "florn-host",
  "florn-kernel",
  "florn-model",
  "florn-platform",
@@ -527,6 +536,9 @@ version = "0.0.0"
 [[package]]
 name = "florn-platform-native"
 version = "0.0.0"
+dependencies = [
+ "florn-platform",
+]
 
 [[package]]
 name = "florn-platform-web"

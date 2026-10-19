@@ -20,10 +20,16 @@ florn-platform = { workspace = true }
 blake3 = { workspace = true }
 toml = { workspace = true }
 zip = { workspace = true }
+wat = { workspace = true, optional = true }
+wit-component = { workspace = true, optional = true }
+wit-parser = { workspace = true, optional = true }
+wasm-encoder = { workspace = true, optional = true }
+
+[features]
+# Hand-written guests of the core world and a scenario builder, for tests of the Host, the runner
+# and the kit.
+test-guests = ["dep:wat", "dep:wit-component", "dep:wit-parser", "dep:wasm-encoder"]
 
 [dev-dependencies]
 florn-engine-wasmtime = { workspace = true }
-wat = { workspace = true }
-wit-component = { workspace = true }
-wit-parser = { workspace = true }
-wasm-encoder = { workspace = true }
+florn-host = { workspace = true, features = ["test-guests"] }
