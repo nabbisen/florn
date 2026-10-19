@@ -107,7 +107,12 @@ impl Admission {
     }
 
     /// Stages 1, 2, and 4 for one source module under one class's limits, cached (rule 3).
-    pub fn admit(&mut self, source: &[u8], limits: &ClassLimits) -> Result<Arc<Admitted>, Errors> {
+    pub fn admit(
+        &mut self,
+        name: &str,
+        source: &[u8],
+        limits: &ClassLimits,
+    ) -> Result<Arc<Admitted>, Errors> {
         let source_sha256 = sha256(source);
         let key = CacheKey {
             source: source_sha256,
@@ -122,7 +127,10 @@ impl Admission {
         // sections stage 2 reads; so the sections are read first, but stage 1's refusals come first.
         let custom = validate::custom_sections(source)?;
         let sections = manifest::read_sections(source, &custom);
-        let parsed = sections.as_ref().ok().map(manifest::read_manifest);
+        let parsed = sections
+            .as_ref()
+            .ok()
+            .map(|s| manifest::read_manifest(name, s));
         let world = parsed
             .as_ref()
             .and_then(|p| p.as_ref().ok())

@@ -452,6 +452,9 @@ version = "0.0.0"
 [[package]]
 name = "florn-control"
 version = "0.0.0"
+dependencies = [
+ "florn-model",
+]
 
 [[package]]
 name = "florn-engine"
@@ -482,6 +485,23 @@ version = "0.0.0"
 [[package]]
 name = "florn-host"
 version = "0.0.0"
+dependencies = [
+ "blake3",
+ "florn-abi",
+ "florn-admission",
+ "florn-control",
+ "florn-engine",
+ "florn-engine-wasmtime",
+ "florn-kernel",
+ "florn-model",
+ "florn-platform",
+ "toml",
+ "wasm-encoder 0.261.0",
+ "wat",
+ "wit-component",
+ "wit-parser",
+ "zip",
+]
 
 [[package]]
 name = "florn-kernel"

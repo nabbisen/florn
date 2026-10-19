@@ -200,6 +200,118 @@ pub fn encode(r: &Record) -> Vec<u8> {
     w
 }
 
+/// The inverse of [`encode`]: `None` for anything that is not exactly one record.
+pub fn decode(bytes: &[u8]) -> Option<Record> {
+    struct R<'a>(&'a [u8], usize);
+    impl R<'_> {
+        fn take(&mut self, n: usize) -> Option<&[u8]> {
+            let s = self.0.get(self.1..self.1.checked_add(n)?)?;
+            self.1 += n;
+            Some(s)
+        }
+        fn u8(&mut self) -> Option<u8> {
+            Some(self.take(1)?[0])
+        }
+        fn u32(&mut self) -> Option<u32> {
+            Some(u32::from_le_bytes(self.take(4)?.try_into().ok()?))
+        }
+        fn u64(&mut self) -> Option<u64> {
+            Some(u64::from_le_bytes(self.take(8)?.try_into().ok()?))
+        }
+        fn digest(&mut self) -> Option<Digest> {
+            self.take(32)?.try_into().ok()
+        }
+        fn key(&mut self) -> Option<EventKey> {
+            Some(EventKey {
+                tick: self.u64()?,
+                microstep: self.u32()?,
+                class: self.u8()?,
+                tie: self.u64()?,
+                origin: self.u32()?,
+                seq: self.u64()?,
+            })
+        }
+    }
+    let mut r = R(bytes, 0);
+    let record = match r.u8()? {
+        1 => {
+            let key = r.key()?;
+            let target = r.u32()?;
+            let metered = r.u64()?;
+            let draws = r.u32()?;
+            let n = r.u32()? as usize;
+            if n > bytes.len() {
+                return None;
+            }
+            let mut effects = Vec::with_capacity(n);
+            for _ in 0..n {
+                effects.push(match r.u8()? {
+                    1 => CommittedEffect::Send {
+                        seq: r.u64()?,
+                        port: r.u32()?,
+                        len: r.u32()?,
+                        digest: r.digest()?,
+                    },
+                    2 => CommittedEffect::SetTimer {
+                        seq: r.u64()?,
+                        timer: r.u32()?,
+                        delay: r.u64()?,
+                    },
+                    3 => CommittedEffect::CancelTimer {
+                        seq: r.u64()?,
+                        timer: r.u32()?,
+                    },
+                    4 => CommittedEffect::Report {
+                        seq: r.u64()?,
+                        channel: r.u32()?,
+                        len: r.u32()?,
+                        digest: r.digest()?,
+                    },
+                    _ => return None,
+                });
+            }
+            Record::Handled {
+                key,
+                target,
+                metered,
+                draws,
+                effects,
+            }
+        }
+        2 => {
+            let key = r.key()?;
+            let actor = r.u32()?;
+            let kind = match r.u8()? {
+                1 => FaultKind::Trap,
+                2 => FaultKind::Budget,
+                3 => FaultKind::Stack,
+                4 => FaultKind::Memory,
+                5 => FaultKind::Quota,
+                6 => FaultKind::Contract,
+                _ => return None,
+            };
+            Record::Fault {
+                key,
+                actor,
+                kind,
+                parameter: r.u32()?,
+                metered: r.u64()?,
+            }
+        }
+        3 => {
+            let key = r.key()?;
+            let content_len = r.u32()?;
+            Record::Intervention {
+                key,
+                content_digest: r.digest()?,
+                content_len,
+            }
+        }
+        _ => return None,
+    };
+    (r.1 == bytes.len()).then_some(record)
+}
+
 /// The actor a record concerns, for per-actor chains (RFC 005 rule 24).
 pub fn actor_of(r: &Record) -> Option<Identity> {
     match r {
@@ -207,6 +319,14 @@ pub fn actor_of(r: &Record) -> Option<Identity> {
         Record::Fault { actor, .. } => Some(*actor),
         Record::Intervention { .. } => None,
     }
+}
+
+/// The chain's state at a boundary: enough to continue the trace (RFC 001 rule 52).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TraceSnapshot {
+    pub chain: Digest,
+    pub records: u64,
+    pub stored: Vec<(u64, Digest)>,
 }
 
 /// The trace of a run: the chain, the stored chain values, and optionally the records themselves.
@@ -247,6 +367,26 @@ impl Trace {
         }
         if let Some(v) = &mut self.recording {
             v.push(r);
+        }
+    }
+
+    /// The chain's state at a boundary, for a checkpoint (RFC 001 rule 51).
+    pub fn snapshot(&self) -> TraceSnapshot {
+        TraceSnapshot {
+            chain: self.chain,
+            records: self.records,
+            stored: self.stored.clone(),
+        }
+    }
+
+    /// A trace continuing from a snapshot (RFC 001 rule 52). Kept records start empty.
+    pub fn restore(interval: u64, record: bool, s: TraceSnapshot) -> Self {
+        Self {
+            chain: s.chain,
+            records: s.records,
+            interval: interval.max(1),
+            stored: s.stored,
+            recording: if record { Some(Vec::new()) } else { None },
         }
     }
 

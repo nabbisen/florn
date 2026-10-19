@@ -125,6 +125,15 @@ pub enum GlobalValue {
     F64(u64),
 }
 
+/// What an engine is, for the run identity (RFC 001 rule 41).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EngineInfo {
+    /// `wasmtime`, `browser`
+    pub name: String,
+    /// The engine's version as pinned, or the browser's user agent family and version.
+    pub version: String,
+}
+
 /// The engine adapter (RFC 005 rule 5). Every operation that takes an address or a length checks it
 /// against the memory's size and returns an error, never panics.
 pub trait Engine {
@@ -133,6 +142,9 @@ pub trait Engine {
     type Instance;
     /// A typed, cached reference to an export, resolved once at instantiation (RFC 005 rule 7).
     type Func: Clone;
+
+    /// The engine's name and version, for the run identity.
+    fn info(&self) -> EngineInfo;
 
     /// Compile admitted bytes, or return the cached compilation of the same bytes.
     fn compile(&mut self, bytes: &[u8]) -> Result<Self::Module, EngineError>;

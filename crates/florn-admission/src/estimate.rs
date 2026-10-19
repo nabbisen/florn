@@ -154,6 +154,7 @@ pub fn estimate(
         if facts.manifest.world != m.contract {
             errors.push(Error::at(
                 Kind::ContractMismatch {
+                    module: name.clone(),
                     declared: m.contract.clone(),
                     found: facts.manifest.world.clone(),
                 },

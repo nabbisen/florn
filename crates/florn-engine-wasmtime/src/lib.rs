@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use florn_abi::{AbiError, Flat, FlatType, Memory};
+use florn_engine::EngineInfo;
 use florn_engine::{
     Engine, EngineError, GlobalValue, ImportHandler, ImportSpec, InstanceId, Trap, TrapKind,
 };
@@ -17,6 +18,9 @@ use wasmtime::{
     Caller, Config, Extern, Func, FuncType, Global, GlobalType, Instance, Linker, Module,
     Mutability, Store, StoreLimits, StoreLimitsBuilder, Val, ValType,
 };
+
+/// The pinned Wasmtime version (RFC 005 rule 44); a test keeps it equal to `Cargo.lock`.
+pub const WASMTIME_VERSION: &str = "48.0.6";
 
 /// What the Host allows one store to hold (RFC 003 rule 20; RFC 005 rule 9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -306,6 +310,13 @@ impl Engine for WasmtimeEngine {
         self.modules.insert(key, m.clone());
         self.compiled += 1;
         Ok(m)
+    }
+
+    fn info(&self) -> EngineInfo {
+        EngineInfo {
+            name: "wasmtime".into(),
+            version: WASMTIME_VERSION.into(),
+        }
     }
 
     fn compiled_count(&self) -> usize {

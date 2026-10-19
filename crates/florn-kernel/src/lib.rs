@@ -20,7 +20,7 @@ pub use kernel::*;
 pub use key::{EventKey, Identity, TiePolicy};
 pub use stream::{Stream, StreamKey};
 pub use time::{Instant, MAX_TICK, Tick};
-pub use trace::{Comparison, Digest, Record, Trace};
+pub use trace::{Comparison, Digest, FaultKind, Record, Trace, TraceSnapshot};
 
 /// The names recorded in the run identity (RFC 001 rule 40 item 7; RFC 005 rule 22).
 pub const GENERATOR_NAME: &str = "chacha8";

@@ -237,7 +237,10 @@ pub fn read_sections(
 
 /// Parse the manifest text (rule 12) and check its world against the contract identity (rule 11)
 /// and against the supported worlds (RFC 003 rule 2, stage 2). Returns the manifest and the spec.
-pub fn read_manifest(sections: &Sections) -> Result<(ModuleManifest, WorldSpec), Errors> {
+pub fn read_manifest(
+    module: &str,
+    sections: &Sections,
+) -> Result<(ModuleManifest, WorldSpec), Errors> {
     let manifest = parse_manifest(&sections.manifest_text)?;
     let supported = supported_worlds();
     let Some(world) = supported.iter().find(|w| w.name == manifest.world) else {
@@ -257,6 +260,7 @@ pub fn read_manifest(sections: &Sections) -> Result<(ModuleManifest, WorldSpec),
     if world.interfaces != sections.contract {
         return Err(Error::at(
             Kind::ContractMismatch {
+                module: module.to_string(),
                 declared: manifest.world.clone(),
                 found: sections.contract.to_string(),
             },

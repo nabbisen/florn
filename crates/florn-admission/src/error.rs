@@ -38,7 +38,11 @@ pub enum Kind {
     /// `module.contract-unsupported`: the world is not one this Host supports.
     ContractUnsupported { declared: String, supported: String },
     /// `module.contract-mismatch`: the manifest, the contract identity, or the scenario name different worlds.
-    ContractMismatch { declared: String, found: String },
+    ContractMismatch {
+        module: String,
+        declared: String,
+        found: String,
+    },
     /// `module.port-type-unknown`.
     PortTypeUnknown {
         actor: u32,
@@ -167,7 +171,12 @@ impl Error {
                 ("declared", Text(declared.clone())),
                 ("supported", Text(supported.clone())),
             ],
-            ContractMismatch { declared, found } => vec![
+            ContractMismatch {
+                module,
+                declared,
+                found,
+            } => vec![
+                ("module", Name(module.clone())),
                 ("declared", Text(declared.clone())),
                 ("found", Text(found.clone())),
             ],

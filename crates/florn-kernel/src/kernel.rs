@@ -13,11 +13,11 @@ use crate::effect::{Effect, Sink, SinkRefusal};
 use crate::key::{EventKey, Identity, TieHasher, TiePolicy};
 use crate::stream::Stream;
 use crate::time::{Instant, Tick};
-use crate::trace::{CommittedEffect, Digest, FaultKind, Record, Trace};
+use crate::trace::{CommittedEffect, Digest, FaultKind, Record, Trace, TraceSnapshot};
 use crate::{CLASS_CONTROL, ORIGIN_INTERVENTIONS, ORIGIN_SCHEDULED_CHANGES};
 
 /// What an event is (RFC 002 §5; RFC 001 §7).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum EventKind {
     Timer {
         timer: u32,
@@ -173,6 +173,23 @@ pub struct Activation {
 pub struct AppliedIntervention {
     pub instant: Instant,
     pub content: Vec<u8>,
+}
+
+/// The kernel's state at a boundary, for a checkpoint (RFC 001 rule 51).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KernelSnapshot {
+    /// Sorted by key, target, and kind; the queue is rebuilt from it.
+    pub queue: Vec<Event>,
+    pub actors: BTreeMap<Identity, ActorKernelState>,
+    pub now: Instant,
+    pub instant_events: u64,
+    pub instant_origins: Vec<Identity>,
+    pub last_tick_microsteps: u32,
+    pub applied_interventions: Vec<AppliedIntervention>,
+    pub intervention_seq: u64,
+    pub change_seq: u64,
+    pub handled: u64,
+    pub trace: TraceSnapshot,
 }
 
 pub struct Kernel {
@@ -378,6 +395,13 @@ impl Kernel {
     /// A stale timer event (replaced or cancelled) is skipped. An event for a dead actor is
     /// returned too: the Host applies the domain's policy (RFC 001 rule 26).
     pub fn next_event(&mut self) -> Option<Event> {
+        self.next_event_if(|_| true)
+    }
+
+    /// Like [`next_event`](Self::next_event), but the event is handed out only if `within` accepts
+    /// its instant; otherwise it stays queued and `None` is returned. The Host's unit of advance
+    /// (RFC 001 §2.1) is this predicate. Interventions due at the boundary are applied either way.
+    pub fn next_event_if(&mut self, within: impl Fn(Instant) -> bool) -> Option<Event> {
         assert!(!self.in_activation, "next_event during an activation");
         if self.fault.is_some() {
             return None;
@@ -412,6 +436,10 @@ impl Kernel {
                 }
             }
             let instant = ev.key.instant();
+            if !within(instant) {
+                self.queue.push(Reverse(ev));
+                return None;
+            }
             if instant != self.now {
                 if instant.tick != self.now.tick {
                     self.last_tick_microsteps = 0;
@@ -673,6 +701,50 @@ impl Kernel {
         });
         self.in_activation = false;
         Err(why)
+    }
+
+    /// The kernel's state at a boundary (RFC 001 rule 51): between activations, with no pending
+    /// intervention and no run fault. Replay lists are not part of it.
+    pub fn snapshot(&self) -> KernelSnapshot {
+        assert!(!self.in_activation, "snapshot during an activation");
+        let mut queue: Vec<Event> = self.queue.iter().map(|Reverse(e)| e.clone()).collect();
+        // One order for one queue: by key, then target, then kind.
+        queue.sort_by(|a, b| {
+            a.key
+                .cmp(&b.key)
+                .then_with(|| a.target.cmp(&b.target))
+                .then_with(|| a.kind.cmp(&b.kind))
+        });
+        KernelSnapshot {
+            queue,
+            actors: self.actors.clone(),
+            now: self.now,
+            instant_events: self.instant_events,
+            instant_origins: self.instant_origins.clone(),
+            last_tick_microsteps: self.last_tick_microsteps,
+            applied_interventions: self.applied_interventions.clone(),
+            intervention_seq: self.intervention_seq,
+            change_seq: self.change_seq,
+            handled: self.handled,
+            trace: self.trace.snapshot(),
+        }
+    }
+
+    /// A kernel continuing from a snapshot under the same configuration (RFC 001 rule 52).
+    pub fn restore(config: Config, s: KernelSnapshot) -> Self {
+        let mut k = Self::new(config);
+        k.queue = s.queue.into_iter().map(Reverse).collect();
+        k.actors = s.actors;
+        k.now = s.now;
+        k.instant_events = s.instant_events;
+        k.instant_origins = s.instant_origins;
+        k.last_tick_microsteps = s.last_tick_microsteps;
+        k.applied_interventions = s.applied_interventions;
+        k.intervention_seq = s.intervention_seq;
+        k.change_seq = s.change_seq;
+        k.handled = s.handled;
+        k.trace = Trace::restore(k.config.chain_interval, k.config.keep_records, s.trace);
+        k
     }
 
     /// Whether the queue holds any event before `end`.

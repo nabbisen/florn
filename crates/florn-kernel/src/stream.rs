@@ -27,7 +27,7 @@ impl StreamKey {
 
 /// A stream: ChaCha8 keystream, consumed as 64-bit words in order. Cheap to copy, so that the
 /// position at the start of an activation can be kept and restored.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub struct Stream {
     key: [u32; 8],
     /// The block counter of the next block to generate.
@@ -38,6 +38,15 @@ pub struct Stream {
     /// Words drawn so far: the stream's position, for the trace and for diagnostics.
     drawn: u64,
 }
+
+/// Two streams are equal when they have the same key and the same position; the block cache is
+/// derived from those.
+impl PartialEq for Stream {
+    fn eq(&self, o: &Self) -> bool {
+        self.key == o.key && self.drawn == o.drawn
+    }
+}
+impl Eq for Stream {}
 
 impl Stream {
     pub fn new(key: StreamKey) -> Self {
@@ -69,6 +78,30 @@ impl Stream {
     /// Words of 64 bits drawn since creation.
     pub fn drawn(&self) -> u64 {
         self.drawn
+    }
+
+    /// The key this stream was made from.
+    pub fn key(&self) -> StreamKey {
+        let mut k = [0u8; 32];
+        for (i, w) in self.key.iter().enumerate() {
+            k[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        StreamKey(k)
+    }
+
+    /// A stream at a position: `key` with `drawn` words already handed out (for restore,
+    /// RFC 003 rule 22). Generates the blocks up to the position; linear in `drawn`.
+    pub fn at(key: StreamKey, drawn: u64) -> Self {
+        let mut s = Self::new(key);
+        // Two words of 32 bits per draw: skip whole blocks of 16 words, then the remainder.
+        let words = drawn * 2;
+        s.counter = words / 16;
+        s.index = 16;
+        for _ in 0..(words % 16) {
+            s.next_u32();
+        }
+        s.drawn = drawn;
+        s
     }
 
     fn next_u32(&mut self) -> u32 {
@@ -135,6 +168,22 @@ fn quarter(s: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stream_at_a_position_continues_like_the_original() {
+        let key = StreamKey::derive(5, 9, "actor");
+        for n in [0u64, 1, 7, 8, 15, 16, 17, 100] {
+            let mut original = Stream::new(key);
+            for _ in 0..n {
+                original.next_u64();
+            }
+            let mut at = Stream::at(key, n);
+            assert_eq!(at, original);
+            for _ in 0..40 {
+                assert_eq!(at.next_u64(), original.next_u64(), "after {n} draws");
+            }
+        }
+    }
 
     /// RFC 7539 §2.3.2: the ChaCha20 block with the test key, counter 1, nonce 0 — restricted here
     /// to a zero nonce by using the keystream of §2.4.2's structure: we check the block function

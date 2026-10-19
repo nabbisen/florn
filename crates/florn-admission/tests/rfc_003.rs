@@ -191,7 +191,7 @@ fn the_good_guest_is_admitted_and_the_hash_is_recorded() {
     let source = good();
     let mut adm = Admission::default();
     let a = adm
-        .admit(&source, &ClassLimits::defaults())
+        .admit("echo", &source, &ClassLimits::defaults())
         .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(a.source_sha256, sha256(&source));
     assert_eq!(a.admission_version, 1);
@@ -234,13 +234,14 @@ fn the_good_guest_is_admitted_and_the_hash_is_recorded() {
         "the transformation changed without a new admission version"
     );
     // The cache: the same source under the same limits transforms once; other limits, again.
-    adm.admit(&source, &ClassLimits::defaults()).unwrap();
+    adm.admit("echo", &source, &ClassLimits::defaults())
+        .unwrap();
     assert_eq!(adm.transformed(), 1);
     let other = ClassLimits {
         stack: 2_048,
         ..ClassLimits::defaults()
     };
-    let b = adm.admit(&source, &other).unwrap();
+    let b = adm.admit("echo", &source, &other).unwrap();
     assert_eq!(adm.transformed(), 2);
     assert_ne!(
         b.admitted_sha256, a.admitted_sha256,
@@ -252,7 +253,7 @@ fn the_good_guest_is_admitted_and_the_hash_is_recorded() {
 fn custom_sections_are_preserved_byte_for_byte() {
     let source = good();
     let a = Admission::default()
-        .admit(&source, &ClassLimits::defaults())
+        .admit("echo", &source, &ClassLimits::defaults())
         .unwrap();
     let before = custom_sections(&source);
     let after = custom_sections(&a.bytes);
@@ -270,7 +271,9 @@ fn the_memory_maximum_is_capped_and_a_lower_declared_maximum_is_kept() {
         memory_bytes: 8 * 65_536,
         ..ClassLimits::defaults()
     };
-    let a = Admission::default().admit(&good(), &limits).unwrap();
+    let a = Admission::default()
+        .admit("echo", &good(), &limits)
+        .unwrap();
     let max = wasmparser::Parser::new(0)
         .parse_all(&a.bytes)
         .find_map(|p| match p {
@@ -282,7 +285,7 @@ fn the_memory_maximum_is_capped_and_a_lower_declared_maximum_is_kept() {
         .unwrap();
     assert_eq!(max, Some(8));
     let a = Admission::default()
-        .admit(&good(), &ClassLimits::defaults())
+        .admit("echo", &good(), &ClassLimits::defaults())
         .unwrap();
     let max = wasmparser::Parser::new(0)
         .parse_all(&a.bytes)
@@ -304,7 +307,7 @@ fn refused(wat: &str) -> Vec<&'static str> {
     let bytes = with_sections(wat, Some(MANIFEST), true);
     codes(
         &Admission::default()
-            .admit(&bytes, &ClassLimits::defaults())
+            .admit("echo", &bytes, &ClassLimits::defaults())
             .expect_err("refused"),
     )
 }
@@ -415,7 +418,7 @@ fn every_refusal_of_section_2_has_its_code() {
     );
     // Not a module at all.
     let e = Admission::default()
-        .admit(b"\0asm\x01\0\0\0\x05", &ClassLimits::defaults())
+        .admit("echo", b"\0asm\x01\0\0\0\x05", &ClassLimits::defaults())
         .expect_err("refused");
     assert_eq!(e.codes(), ["module.invalid"]);
     // Too large.
@@ -424,7 +427,7 @@ fn every_refusal_of_section_2_has_its_code() {
         ..ModuleMaxima::default()
     });
     assert_eq!(
-        adm.admit(&good(), &ClassLimits::defaults())
+        adm.admit("echo", &good(), &ClassLimits::defaults())
             .expect_err("refused")
             .codes(),
         ["module.too-large"]
@@ -434,7 +437,7 @@ fn every_refusal_of_section_2_has_its_code() {
         ..ModuleMaxima::default()
     });
     assert_eq!(
-        adm.admit(&good(), &ClassLimits::defaults())
+        adm.admit("echo", &good(), &ClassLimits::defaults())
             .expect_err("refused")
             .codes(),
         ["module.too-large"]
@@ -445,7 +448,7 @@ fn every_refusal_of_section_2_has_its_code() {
 fn the_manifest_sections_are_required_and_checked() {
     let no_manifest = with_sections(GOOD, None, true);
     let e = Admission::default()
-        .admit(&no_manifest, &ClassLimits::defaults())
+        .admit("echo", &no_manifest, &ClassLimits::defaults())
         .expect_err("refused");
     assert_eq!(e.codes(), ["module.manifest-missing"]);
     assert_eq!(
@@ -454,7 +457,7 @@ fn the_manifest_sections_are_required_and_checked() {
     );
     let no_contract = with_sections(GOOD, Some(MANIFEST), false);
     let e = Admission::default()
-        .admit(&no_contract, &ClassLimits::defaults())
+        .admit("echo", &no_contract, &ClassLimits::defaults())
         .expect_err("refused");
     assert_eq!(e.codes(), ["module.manifest-missing"]);
     assert_eq!(
@@ -464,7 +467,7 @@ fn the_manifest_sections_are_required_and_checked() {
     let neither = with_sections(GOOD, None, false);
     assert_eq!(
         Admission::default()
-            .admit(&neither, &ClassLimits::defaults())
+            .admit("echo", &neither, &ClassLimits::defaults())
             .expect_err("refused")
             .codes(),
         ["module.manifest-missing", "module.manifest-missing"]
@@ -473,6 +476,7 @@ fn the_manifest_sections_are_required_and_checked() {
     let other = MANIFEST.replace("florn:core/guest@0.1.0", "florn:network/router@0.1.0");
     let e = Admission::default()
         .admit(
+            "echo",
             &with_sections(GOOD, Some(&other), true),
             &ClassLimits::defaults(),
         )
@@ -492,17 +496,18 @@ fn the_manifest_sections_are_required_and_checked() {
     }
     .append_to(&mut bytes);
     let e = Admission::default()
-        .admit(&bytes, &ClassLimits::defaults())
+        .admit("echo", &bytes, &ClassLimits::defaults())
         .expect_err("refused");
     assert_eq!(e.codes(), ["module.contract-mismatch"]);
     assert_eq!(
-        e.0[0].params()[1].1,
+        e.0[0].params()[2].1,
         florn_model::Param::Text("imports florn:core/host@0.1.0; exports ".into())
     );
     // Unknown keys and a wrong schema version are schema errors, all reported.
     let bad = MANIFEST.replace("florn-module = 1", "florn-module = 2\nauthor = \"x\"");
     let e = Admission::default()
         .admit(
+            "echo",
             &with_sections(GOOD, Some(&bad), true),
             &ClassLimits::defaults(),
         )
@@ -612,7 +617,7 @@ fn scenario(text: &str, source: &[u8]) -> Manifest {
 
 fn facts(source: &[u8]) -> BTreeMap<String, ModuleFacts> {
     let a = Admission::default()
-        .admit(source, &ClassLimits::defaults())
+        .admit("echo", source, &ClassLimits::defaults())
         .unwrap();
     BTreeMap::from([(
         "echo".to_string(),

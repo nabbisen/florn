@@ -61,3 +61,18 @@ fn store_limits_bound_instances_and_memory() {
         "growth beyond the memory limit is refused"
     );
 }
+
+#[test]
+fn the_declared_wasmtime_version_is_the_locked_one() {
+    let lock =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.lock")).unwrap();
+    let needle = format!(
+        "name = \"wasmtime\"\nversion = \"{}\"",
+        florn_engine_wasmtime::WASMTIME_VERSION
+    );
+    assert!(
+        lock.contains(&needle),
+        "Cargo.lock pins another wasmtime than {}",
+        florn_engine_wasmtime::WASMTIME_VERSION
+    );
+}
