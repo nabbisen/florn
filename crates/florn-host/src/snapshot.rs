@@ -9,7 +9,7 @@ use florn_kernel::{
     ActorKernelState, AppliedIntervention, Event, EventKey, EventKind, Identity, Instant,
     KernelSnapshot, Stream, StreamKey, TraceSnapshot,
 };
-use florn_model::canonical::Encoder;
+use florn_model::canonical::{Decoder, Encoder};
 
 /// An actor's state (RFC 003 rule 21): the memory up to its size, every mutable global, every
 /// table's size, and the kernel's own state for the actor.
@@ -194,7 +194,7 @@ impl Checkpoint {
         let admission_version = d.u32()?;
         let cost_model_version = d.u32()?;
         let root_seed = d.u64()?;
-        let queue = d.list(Decoder::event)?;
+        let queue = d.list(|d| d.event())?;
         let n = d.u32()?;
         let mut actors = BTreeMap::new();
         for _ in 0..n {
@@ -256,59 +256,14 @@ impl Checkpoint {
     }
 }
 
-/// A reader of the canonical encoding; every method returns `None` at the first malformed byte.
-pub struct Decoder<'a> {
-    bytes: &'a [u8],
-    pos: usize,
+/// The snapshot-specific readers over the model's decoder.
+pub trait SnapshotDecoder {
+    fn event(&mut self) -> Option<Event>;
+    fn kernel_actor(&mut self) -> Option<ActorKernelState>;
+    fn actor_state(&mut self) -> Option<ActorState>;
 }
 
-impl<'a> Decoder<'a> {
-    pub fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, pos: 0 }
-    }
-    pub fn done(&self) -> bool {
-        self.pos == self.bytes.len()
-    }
-    fn take(&mut self, n: usize) -> Option<&'a [u8]> {
-        let end = self.pos.checked_add(n)?;
-        let s = self.bytes.get(self.pos..end)?;
-        self.pos = end;
-        Some(s)
-    }
-    pub fn u8(&mut self) -> Option<u8> {
-        Some(self.take(1)?[0])
-    }
-    pub fn u32(&mut self) -> Option<u32> {
-        Some(u32::from_le_bytes(self.take(4)?.try_into().ok()?))
-    }
-    pub fn u64(&mut self) -> Option<u64> {
-        Some(u64::from_le_bytes(self.take(8)?.try_into().ok()?))
-    }
-    pub fn i64(&mut self) -> Option<i64> {
-        Some(i64::from_le_bytes(self.take(8)?.try_into().ok()?))
-    }
-    pub fn bytes(&mut self) -> Option<Vec<u8>> {
-        let n = self.u32()? as usize;
-        Some(self.take(n)?.to_vec())
-    }
-    pub fn text(&mut self) -> Option<String> {
-        String::from_utf8(self.bytes()?).ok()
-    }
-    pub fn digest(&mut self) -> Option<[u8; 32]> {
-        self.bytes()?.try_into().ok()
-    }
-    pub fn list<T>(&mut self, mut f: impl FnMut(&mut Self) -> Option<T>) -> Option<Vec<T>> {
-        let n = self.u32()? as usize;
-        // Bounded by the input: no element is shorter than one byte.
-        if n > self.bytes.len() - self.pos {
-            return None;
-        }
-        let mut v = Vec::with_capacity(n);
-        for _ in 0..n {
-            v.push(f(self)?);
-        }
-        Some(v)
-    }
+impl SnapshotDecoder for Decoder<'_> {
     fn event(&mut self) -> Option<Event> {
         let key = EventKey {
             tick: self.u64()?,

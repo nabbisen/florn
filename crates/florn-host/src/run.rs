@@ -255,7 +255,7 @@ fn fault_parameter(r: &SinkRefusal) -> u32 {
     }
 }
 
-fn fault_code(kind: FaultKind) -> &'static str {
+pub(crate) fn fault_code(kind: FaultKind) -> &'static str {
     match kind {
         FaultKind::Trap => "fault.trap",
         FaultKind::Budget => "fault.budget",

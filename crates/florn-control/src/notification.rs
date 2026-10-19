@@ -5,7 +5,7 @@
 use std::fmt::Write as _;
 
 use florn_model::Param;
-use florn_model::canonical::Encoder;
+use florn_model::canonical::{Decoder, Encoder};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
@@ -211,6 +211,80 @@ impl Notification {
     /// a map sorted by name, each value tagged by its type).
     pub fn encode(&self) -> Vec<u8> {
         let mut e = Encoder::default();
+        self.write(&mut e);
+        e.finish()
+    }
+
+    /// The inverse of [`write`](Self::write): `None` for anything malformed.
+    pub fn read(d: &mut Decoder) -> Option<Self> {
+        let code = d.text()?;
+        let severity = match d.text()?.as_str() {
+            "info" => Severity::Info,
+            "warning" => Severity::Warning,
+            "error" => Severity::Error,
+            _ => return None,
+        };
+        let scope = Scope {
+            run: match d.u8()? {
+                0 => false,
+                1 => true,
+                _ => return None,
+            },
+            actor: d.option(Decoder::u32)?,
+            connection: d.option(Decoder::u32)?,
+            port: d.option(Decoder::u32)?,
+            field: d.option(Decoder::text)?,
+            file: d.option(Decoder::text)?,
+            command: d.option(Decoder::text)?,
+        };
+        let params = d.list(|d| {
+            let name = d.text()?;
+            let value = match d.text()?.as_str() {
+                "identity" => Value::Identity(d.u32()?),
+                "name" => Value::Name(d.text()?),
+                "count" => Value::Count(d.u64()?),
+                "bytes" => Value::Bytes(d.u64()?),
+                "quantity" => {
+                    let (n, u) = d.quantity()?;
+                    Value::Quantity(n, u)
+                }
+                "tick" => Value::Tick(d.u64()?),
+                "instant" => Value::Instant(At {
+                    tick: d.u64()?,
+                    microstep: d.u32()?,
+                }),
+                "code" => Value::Code(d.text()?),
+                "text" => Value::Text(d.text()?),
+                "enum" => Value::Enum(d.text()?),
+                _ => return None,
+            };
+            Some((name, value))
+        })?;
+        let ends = match d.text()?.as_str() {
+            "nothing" => Ends::Nothing,
+            "command" => Ends::Command,
+            "activation" => Ends::Activation,
+            "run" => Ends::Run,
+            _ => return None,
+        };
+        let at = d.option(|d| {
+            Some(At {
+                tick: d.u64()?,
+                microstep: d.u32()?,
+            })
+        })?;
+        Some(Self {
+            code,
+            severity,
+            scope,
+            params,
+            ends,
+            at,
+        })
+    }
+
+    /// Write the canonical encoding into an encoder (the parameters sorted by name).
+    pub fn write(&self, e: &mut Encoder) {
         e.text(&self.code);
         e.text(self.severity.as_str());
         e.u8(self.scope.run as u8);
@@ -242,7 +316,6 @@ impl Notification {
             e.u64(at.tick);
             e.u32(at.microstep);
         });
-        e.finish()
     }
 
     /// One JSON object, for the exported diagnostic log (RFC 007 rule 12).

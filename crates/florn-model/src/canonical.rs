@@ -58,6 +58,102 @@ impl Encoder {
     }
 }
 
+/// A reader of the canonical encoding (the inverse of [`Encoder`]); every method returns `None`
+/// at the first malformed byte, and a list's length is bounded by the input.
+pub struct Decoder<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Decoder<'a> {
+    pub fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, pos: 0 }
+    }
+    pub fn done(&self) -> bool {
+        self.pos == self.bytes.len()
+    }
+    pub fn remaining(&self) -> usize {
+        self.bytes.len() - self.pos
+    }
+    fn take(&mut self, n: usize) -> Option<&'a [u8]> {
+        let end = self.pos.checked_add(n)?;
+        let s = self.bytes.get(self.pos..end)?;
+        self.pos = end;
+        Some(s)
+    }
+    pub fn u8(&mut self) -> Option<u8> {
+        Some(self.take(1)?[0])
+    }
+    pub fn u32(&mut self) -> Option<u32> {
+        Some(u32::from_le_bytes(self.take(4)?.try_into().ok()?))
+    }
+    pub fn u64(&mut self) -> Option<u64> {
+        Some(u64::from_le_bytes(self.take(8)?.try_into().ok()?))
+    }
+    pub fn i64(&mut self) -> Option<i64> {
+        Some(i64::from_le_bytes(self.take(8)?.try_into().ok()?))
+    }
+    pub fn bytes(&mut self) -> Option<Vec<u8>> {
+        let n = self.u32()? as usize;
+        Some(self.take(n)?.to_vec())
+    }
+    pub fn text(&mut self) -> Option<String> {
+        String::from_utf8(self.bytes()?).ok()
+    }
+    pub fn quantity(&mut self) -> Option<(String, String)> {
+        Some((self.text()?, self.text()?))
+    }
+    pub fn digest(&mut self) -> Option<[u8; 32]> {
+        self.bytes()?.try_into().ok()
+    }
+    pub fn option<T>(&mut self, f: impl FnOnce(&mut Self) -> Option<T>) -> Option<Option<T>> {
+        match self.u8()? {
+            0 => Some(None),
+            1 => Some(Some(f(self)?)),
+            _ => None,
+        }
+    }
+    pub fn list<T>(&mut self, mut f: impl FnMut(&mut Self) -> Option<T>) -> Option<Vec<T>> {
+        let n = self.u32()? as usize;
+        if n > self.remaining() {
+            return None;
+        }
+        let mut v = Vec::with_capacity(n);
+        for _ in 0..n {
+            v.push(f(self)?);
+        }
+        Some(v)
+    }
+    pub fn domain_value(&mut self) -> Option<DomainValue> {
+        Some(match self.u8()? {
+            TAG_INTEGER => DomainValue::Integer(self.i64()?),
+            TAG_DECIMAL => DomainValue::Decimal(self.text()?),
+            TAG_TEXT => DomainValue::Text(self.text()?),
+            TAG_BOOLEAN => DomainValue::Boolean(match self.u8()? {
+                0 => false,
+                1 => true,
+                _ => return None,
+            }),
+            TAG_LIST => DomainValue::List(self.list(Self::domain_value)?),
+            TAG_MAP => DomainValue::Map(self.domain_map()?),
+            _ => return None,
+        })
+    }
+    pub fn domain_map(&mut self) -> Option<DomainMap> {
+        let n = self.u32()? as usize;
+        if n > self.remaining() {
+            return None;
+        }
+        let mut m = DomainMap::new();
+        for _ in 0..n {
+            let k = self.text()?;
+            let v = self.domain_value()?;
+            m.insert(k, v);
+        }
+        Some(m)
+    }
+}
+
 /// Tags of a domain value (rule 32), so that one value has one encoding.
 const TAG_INTEGER: u8 = 0;
 const TAG_DECIMAL: u8 = 1;

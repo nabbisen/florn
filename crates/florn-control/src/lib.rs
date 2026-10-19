@@ -1,11 +1,19 @@
 //! The control interface: commands, queries, subscriptions, notifications, and the code catalogue
 //! with typed parameters (RFC 005 §6; RFC 007).
 //!
-//! PR-07 provides the notification of RFC 007 rule 3, which the Host's diagnostic log needs; the
-//! commands, queries, subscriptions, their encoding, and the version arrive with PR-08 of
+//! One definition, as Rust types, with the canonical binary encoding over every transport and
+//! a version (RFC 005 rule 25); the catalogue of codes with typed parameters (RFC 007 §4). No
+//! text: the front end's catalogue renders. Implemented by PR-07 (the notification) and PR-08 of
 //! `rfcs/handoffs/005-host-architecture/task-breakdown-pr-plan.md`.
 #![forbid(unsafe_code)]
 
+pub mod catalogue;
+pub mod message;
 pub mod notification;
 
+pub use catalogue::{CATALOGUE, Code, Entry, FaultCode, ParamType, ScopeKind};
+pub use message::{
+    Answer, CONTROL_VERSION, Command, DecodeError, Envelope, ExportKind, FileKind, Message, Pacing,
+    Progress, Query, RunState, SeedChoice, Subscription, SubscriptionKind, Unit, decode, encode,
+};
 pub use notification::{At, Ends, Notification, Scope, Severity, Value};

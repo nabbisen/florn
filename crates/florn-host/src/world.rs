@@ -117,7 +117,7 @@ impl Intervention {
     }
 
     pub fn decode(bytes: &[u8]) -> Option<Self> {
-        let mut d = crate::snapshot::Decoder::new(bytes);
+        let mut d = florn_model::canonical::Decoder::new(bytes);
         let n = d.u32()?;
         let mut actor = None;
         let mut port = None;

@@ -6,6 +6,7 @@
 //! Implemented by PR-07 of `rfcs/handoffs/005-host-architecture/task-breakdown-pr-plan.md`.
 #![forbid(unsafe_code)]
 
+pub mod controller;
 pub mod identity;
 pub mod log;
 pub mod record;
@@ -13,6 +14,7 @@ pub mod run;
 pub mod snapshot;
 pub mod world;
 
+pub use controller::Controller;
 pub use florn_kernel::Advance;
 pub use identity::{EndReason, Environment, ModuleInput, RunInputs, RunToml};
 pub use log::DiagnosticLog;
