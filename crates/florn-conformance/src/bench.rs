@@ -42,9 +42,12 @@ pub fn crossing(scale: u64) -> Vec<Crossing> {
     let (metered, config) = admitted("crossing", &raw);
     bench::crossing(
         &mut engine,
-        &raw,
-        &metered,
-        &config,
+        bench::Subject {
+            name: "crossing",
+            raw: &raw,
+            metered: &metered,
+            config: &config,
+        },
         &core_import_spec(),
         scale,
         &clock,
@@ -69,10 +72,12 @@ pub fn cost(activations: u64) -> Vec<Cost> {
         out.push(
             bench::cost(
                 &mut engine,
-                guest,
-                &raw,
-                &metered,
-                &config,
+                bench::Subject {
+                    name: guest,
+                    raw: &raw,
+                    metered: &metered,
+                    config: &config,
+                },
                 &core_import_spec(),
                 activations,
                 &payload,

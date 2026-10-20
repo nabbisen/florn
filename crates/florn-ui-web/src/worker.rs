@@ -345,9 +345,12 @@ fn bench_crossing(raw: &[u8], scale: u64) -> Result<String, String> {
     let clock = florn_platform_web::now_seconds;
     let figures = bench::crossing(
         &mut WebEngine::new,
-        raw,
-        &metered,
-        &config,
+        bench::Subject {
+            name: "crossing",
+            raw,
+            metered: &metered,
+            config: &config,
+        },
         &spec,
         scale,
         &clock,
@@ -405,10 +408,12 @@ fn bench_cost(name: &str, raw: &[u8], activations: u64) -> Result<String, String
     };
     let c = bench::cost(
         &mut WebEngine::new,
-        name,
-        raw,
-        &metered,
-        &config,
+        bench::Subject {
+            name,
+            raw,
+            metered: &metered,
+            config: &config,
+        },
         &spec,
         activations,
         &payload,

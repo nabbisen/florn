@@ -193,22 +193,35 @@ pub struct Crossing {
 /// kernel path with, and 64 KiB.
 pub const CROSSING_SIZES: [usize; 4] = [0, 64, 1_500, 65_536];
 
-/// The crossing benchmark over the kit's crossing guest: `raw` and its admitted form `metered`,
-/// each driven through `make`'s adapter; `scale` divides the iteration counts (1 publishes).
+/// A guest under measurement: its bytes as built, its admitted form, and the config of its
+/// defaults for `init`.
+#[derive(Clone, Copy, Debug)]
+pub struct Subject<'a> {
+    pub name: &'a str,
+    pub raw: &'a [u8],
+    pub metered: &'a [u8],
+    pub config: &'a [u8],
+}
+
+impl Subject<'_> {
+    fn bytes(&self, metered: bool) -> &[u8] {
+        if metered { self.metered } else { self.raw }
+    }
+}
+
+/// The crossing benchmark over the kit's crossing guest, each form driven through `make`'s
+/// adapter; `scale` divides the iteration counts (1 publishes).
 pub fn crossing<E: Engine>(
     make: &mut dyn FnMut() -> E,
-    raw: &[u8],
-    metered: &[u8],
-    config: &[u8],
+    subject: Subject<'_>,
     spec: &ImportSpec,
     scale: u64,
     clock: &dyn Fn() -> f64,
 ) -> Result<Vec<Crossing>, String> {
     let mut out = Vec::new();
     for is_metered in [false, true] {
-        let bytes = if is_metered { metered } else { raw };
-        let mut d = Driver::new(make(), bytes, is_metered, spec)?;
-        d.init(1, config)?;
+        let mut d = Driver::new(make(), subject.bytes(is_metered), is_metered, spec)?;
+        d.init(1, subject.config)?;
         for size in CROSSING_SIZES {
             let n = match size {
                 0 | 64 => 20_000,
@@ -266,10 +279,7 @@ pub fn protocol_buffer(ordinal: u64) -> Vec<u8> {
 /// gives the message of each ordinal.
 pub fn cost<E: Engine>(
     make: &mut dyn FnMut() -> E,
-    guest: &str,
-    raw: &[u8],
-    metered: &[u8],
-    config: &[u8],
+    subject: Subject<'_>,
     spec: &ImportSpec,
     activations: u64,
     payload: &dyn Fn(u64) -> Vec<u8>,
@@ -277,9 +287,8 @@ pub fn cost<E: Engine>(
 ) -> Result<Cost, String> {
     let mut micros = [0.0; 2];
     for (i, is_metered) in [false, true].into_iter().enumerate() {
-        let bytes = if is_metered { metered } else { raw };
-        let mut d = Driver::new(make(), bytes, is_metered, spec)?;
-        d.init(1, config)?;
+        let mut d = Driver::new(make(), subject.bytes(is_metered), is_metered, spec)?;
+        d.init(1, subject.config)?;
         let mut ordinal = 0u64;
         micros[i] = best_of(1, activations, clock, || {
             let p = payload(ordinal);
@@ -288,7 +297,7 @@ pub fn cost<E: Engine>(
         })?;
     }
     Ok(Cost {
-        guest: guest.to_string(),
+        guest: subject.name.to_string(),
         activations,
         unmetered_micros: micros[0],
         metered_micros: micros[1],
