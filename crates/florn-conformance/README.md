@@ -10,7 +10,7 @@ cargo run --release -p florn-conformance -- figures    # the benchmarks' figures
 cargo run --release -p florn-conformance -- scenarios  # rewrite scenarios/ and its digests
 ```
 
-The tests build the SDK's example guests for `wasm32-unknown-unknown` with the Rust toolchain alone, into `target/guests`. Set `FLORN_GUESTS` to a directory of built modules to use those instead.
+The tests build the SDK's example guests for `wasm32-unknown-unknown` with the Rust toolchain alone, into `target/guests`, and run the behaviour tests over that build. Set `FLORN_GUESTS` to a directory of built modules to use those instead. The shipped scenarios run over the modules shipped in `scenarios/modules`, which `scenarios` rewrites from a fresh build; the same source built on an AArch64 host gives other bytes than on x86-64 (measured in CI), so the digests are recorded over shipped bytes and `figures` reports how the machine's own build compares.
 
 The browser Host runs the same scenarios through its test page (PR-12).
 
@@ -107,4 +107,4 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 
 ## The figures
 
-`figures` prints, for the engine and architecture it runs on: the crossing benchmark (the call floor, 64 bytes, 1,500 bytes, 64 KiB; metered and unmetered) beside the Stage 0 baseline of RFC 005 rule 11; the cost benchmark of RFC 003 section 7 (B1 and B2, 10,000 activations, metered against unmetered); the kernel path (one activation of the Host-path scenarios); and the NaN probe's bits. CI runs it on three architectures; the release notes copy the table.
+`figures` prints, for the engine and architecture it runs on: the crossing benchmark (the call floor, 64 bytes, 1,500 bytes, 64 KiB; metered and unmetered) beside the Stage 0 baseline of RFC 005 rule 11; the cost benchmark of RFC 003 section 7 (B1 and B2, 10,000 activations, metered against unmetered); the kernel path (one activation of the Host-path scenarios); the NaN probe's bits; and the machine's own build of the guests against the shipped modules, in bytes and in the digests of the shipped scenarios. CI runs it on three architectures; the release notes copy the table.

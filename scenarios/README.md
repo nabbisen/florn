@@ -1,19 +1,19 @@
 # Scenarios
 
-Example scenarios of the conformance kit with recorded digests (requirement AUTO-003; RFC 005 rule 42). Each file is a scenario manifest of RFC 004 over the SDK's example guests; `digests.toml` records, for every scenario, the seed it was run with, the trace chain, the record count and how the run ended, together with the hash of every guest and of its admitted form.
+Example scenarios of the conformance kit with recorded digests (requirement AUTO-003; RFC 005 rule 42). Each file is a scenario manifest of RFC 004 over the SDK's example guests, whose built modules are shipped in `modules/`; `digests.toml` records, for every scenario, the seed it was run with, the trace chain, the record count and how the run ended, together with the hash of every shipped module and of its admitted form.
 
-The files and the digests are written by the kit:
+The modules are shipped as bytes, not only as source, because the same source built with the same toolchain gives different bytes on an AArch64 host than on an x86-64 host (every module, measured in CI), and one digest across machines needs one set of bytes. The kit's `figures` command reports how the machine's own build compares with the shipped modules, in bytes and in the digests its runs produce.
+
+The modules, the files and the digests are written by the kit, which builds the guests first:
 
 ```sh
 cargo run --release -p florn-conformance -- scenarios
 ```
 
-Run one with the headless runner, after building the guests:
+Run one with the headless runner:
 
 ```sh
-cargo build --release --target wasm32-unknown-unknown -p florn-guest --examples
-cargo run --release -p florn-cli -- run scenarios/echo-pair.toml \
-    --modules target/wasm32-unknown-unknown/release/examples --seed 42
+cargo run --release -p florn-cli -- run scenarios/echo-pair.toml --modules scenarios/modules --seed 42
 ```
 
 The `chain` line printed must equal the scenario's `chain` in `digests.toml`. The whole set, as a loop (checklist C9):
@@ -23,7 +23,7 @@ for f in scenarios/*.toml; do
   n=$(basename "$f" .toml); [ "$n" = digests ] && continue
   seed=$(sed -n "/^\[runs.\"$n\"\]/,/^$/p" scenarios/digests.toml | sed -n 's/^seed = //p')
   want=$(sed -n "/^\[runs.\"$n\"\]/,/^$/p" scenarios/digests.toml | sed -n 's/^chain = "\(.*\)"/\1/p')
-  got=$(cargo run --release -q -p florn-cli -- run "$f" --modules target/wasm32-unknown-unknown/release/examples --seed "$seed" --out /tmp/"$n".florn-run 2>/dev/null | sed -n 's/^chain = //p')
+  got=$(cargo run --release -q -p florn-cli -- run "$f" --modules scenarios/modules --seed "$seed" --out /tmp/"$n".florn-run 2>/dev/null | sed -n 's/^chain = //p')
   [ "$got" = "$want" ] && echo "$n: matched" || echo "$n: DIFFERS ($got)"
 done
 ```

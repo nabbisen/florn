@@ -1,7 +1,14 @@
 //! The shipped scenarios (`scenarios/` at the workspace root; RFC 005 rule 42; AUTO-003): each a
-//! file the headless runner takes, with its digest recorded in `scenarios/digests.toml` by
-//! `florn-conformance scenarios`. The kit's test runs every one under the native Host and
-//! compares; the browser Host compares the same file (AC-001).
+//! file the headless runner takes, over the shipped modules of `scenarios/modules`, with its
+//! digest recorded in `scenarios/digests.toml` by `florn-conformance scenarios`. The kit's test
+//! runs every one under the native Host and compares; the browser Host compares the same file
+//! (AC-001).
+//!
+//! The modules are shipped as bytes because a build of the same guest source with the same
+//! toolchain differs between host architectures (measured in CI: every module built on an
+//! AArch64 host differs from the x86-64 build; two x86-64 hosts agree). One digest across
+//! machines needs one set of bytes; the fresh build is compared with the shipped one by
+//! [`fresh_report`], which the figures print.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -58,6 +65,15 @@ fn hostile(name: &str, guest: &'static str) -> Scenario {
 
 /// Every shipped scenario, in the order of the digests file.
 pub fn all() -> Vec<Shipped> {
+    let mut list = definitions();
+    for s in &mut list {
+        s.scenario.shipped = true;
+    }
+    list
+}
+
+/// The scenarios over a fresh build of the guests.
+fn definitions() -> Vec<Shipped> {
     let normal = |scenario: Scenario| Shipped {
         scenario,
         ends_normally: true,
@@ -118,6 +134,60 @@ pub fn all() -> Vec<Shipped> {
 /// The `scenarios/` directory.
 pub fn directory() -> PathBuf {
     guests::workspace().join("scenarios")
+}
+
+/// The shipped modules: `scenarios/modules`.
+pub fn modules_dir() -> PathBuf {
+    directory().join("modules")
+}
+
+/// The bytes of a shipped module.
+pub fn module_bytes(name: &str) -> Vec<u8> {
+    let path = modules_dir().join(format!("{name}.wasm"));
+    std::fs::read(&path).unwrap_or_else(|e| {
+        panic!(
+            "{}: {e} (write the shipped modules with `florn-conformance scenarios`)",
+            path.display()
+        )
+    })
+}
+
+/// The SHA-256 of every shipped module, by name.
+pub fn module_hashes() -> BTreeMap<String, String> {
+    guests::SDK
+        .iter()
+        .map(|n| (n.to_string(), florn_host::run::sha256_hex(&module_bytes(n))))
+        .collect()
+}
+
+/// How this host's fresh build of the guests compares with the shipped modules: per guest,
+/// whether the bytes are equal; per scenario, whether a run over the fresh build gives the
+/// recorded chain (RFC 001 Tier 2 across build hosts).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FreshReport {
+    pub guests: Vec<(String, bool)>,
+    pub scenarios: Vec<(String, bool)>,
+}
+
+pub fn fresh_report(recorded: &Digests) -> FreshReport {
+    let fresh = guests::hashes();
+    let shipped = module_hashes();
+    let guests = guests::SDK
+        .iter()
+        .map(|n| (n.to_string(), fresh.get(*n) == shipped.get(*n)))
+        .collect();
+    let scenarios = definitions()
+        .into_iter()
+        .map(|s| {
+            let run = crate::host::run(&s.scenario);
+            let equal = recorded
+                .runs
+                .get(&s.scenario.name)
+                .is_some_and(|r| r.chain == run.chain_hex());
+            (s.scenario.name, equal)
+        })
+        .collect();
+    FreshReport { guests, scenarios }
 }
 
 /// The header every shipped file carries.
@@ -221,13 +291,13 @@ impl Digests {
 pub fn record() -> Digests {
     let mut d = Digests {
         arch: std::env::consts::ARCH.to_string(),
-        modules: guests::hashes(),
+        modules: module_hashes(),
         ..Default::default()
     };
     for name in guests::SDK {
         if let Ok(a) = florn_admission::Admission::default().admit(
             name,
-            &guests::bytes(name),
+            &module_bytes(name),
             &crate::host::kit_limits(),
         ) {
             d.admitted.insert(name.to_string(), a.admitted_hex());
@@ -250,8 +320,13 @@ pub fn record() -> Digests {
 
 /// Write every scenario file and the digests into `dir`.
 pub fn write(dir: &Path) -> Result<Digests, String> {
-    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let hashes = guests::hashes();
+    let modules = dir.join("modules");
+    std::fs::create_dir_all(&modules).map_err(|e| format!("{}: {e}", modules.display()))?;
+    for n in guests::SDK {
+        let path = modules.join(format!("{n}.wasm"));
+        std::fs::write(&path, guests::bytes(n)).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    let hashes = module_hashes();
     for s in all() {
         let path = dir.join(format!("{}.toml", s.scenario.name));
         let text = header(&s.scenario.name) + &s.scenario.text(&hashes);

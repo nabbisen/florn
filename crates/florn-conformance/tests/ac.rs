@@ -30,12 +30,10 @@ fn shipped_named(name: &str) -> Scenario {
 fn ac_001_every_shipped_scenario_produces_its_recorded_digest() {
     let dir = shipped::directory();
     let recorded = shipped::Digests::read(&dir).expect("scenarios/digests.toml");
-    let hashes = guests::hashes();
+    let hashes = shipped::module_hashes();
     assert_eq!(
-        hashes,
-        recorded.modules,
-        "the SDK's guests build to the recorded bytes on {} (regenerate with `florn-conformance scenarios` after a change to the SDK or a guest)",
-        std::env::consts::ARCH
+        hashes, recorded.modules,
+        "the shipped modules are the recorded ones (regenerate with `florn-conformance scenarios` after a change to the SDK or a guest)"
     );
     for s in shipped::all() {
         let name = s.scenario.name.clone();
@@ -284,7 +282,7 @@ fn ac_005_admit_prints_the_refusal_or_the_manifest() {
     assert!(!replies.iter().any(|m| matches!(m, Message::Answer(_))));
     // The echo guest: the manifest and the admitted hash.
     let recorded = shipped::Digests::read(&shipped::directory()).unwrap();
-    let replies = admit(guests::bytes("echo"));
+    let replies = admit(shipped::module_bytes("echo"));
     let Some(Message::Answer(Answer::Admitted {
         module,
         admitted_sha256,
@@ -323,13 +321,13 @@ fn ac_005_admit_prints_the_refusal_or_the_manifest() {
     let direct = Admission::default()
         .admit(
             "echo",
-            &guests::bytes("echo"),
+            &shipped::module_bytes("echo"),
             &florn_admission::ClassLimits::defaults(),
         )
         .unwrap();
     assert_eq!(admitted_sha256, &direct.admitted_hex());
     let kit = Admission::default()
-        .admit("echo", &guests::bytes("echo"), &host::kit_limits())
+        .admit("echo", &shipped::module_bytes("echo"), &host::kit_limits())
         .unwrap();
     assert_eq!(kit.admitted_hex(), recorded.admitted["echo"]);
 }

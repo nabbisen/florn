@@ -49,6 +49,8 @@ pub struct Scenario {
     pub connections: Vec<Vec<(u32, u32)>>,
     /// Modules given as bytes rather than read from the built guests (the kit's text guests).
     pub extra: BTreeMap<&'static str, Vec<u8>>,
+    /// Whether the modules are the shipped ones of `scenarios/modules` rather than a fresh build.
+    pub shipped: bool,
 }
 
 impl Scenario {
@@ -63,7 +65,14 @@ impl Scenario {
             actors: Vec::new(),
             connections: Vec::new(),
             extra: BTreeMap::new(),
+            shipped: false,
         }
+    }
+
+    /// Over the shipped modules of `scenarios/modules`.
+    pub fn shipped(mut self) -> Self {
+        self.shipped = true;
+        self
     }
 
     /// A module by bytes, under a name the actors use.
@@ -169,7 +178,11 @@ impl Scenario {
 
     /// The hashes of the built guests and of the extra modules.
     pub fn hashes(&self) -> BTreeMap<String, String> {
-        let mut h = guests::hashes();
+        let mut h = if self.shipped {
+            crate::shipped::module_hashes()
+        } else {
+            guests::hashes()
+        };
         for (n, b) in &self.extra {
             h.insert(n.to_string(), florn_host::run::sha256_hex(b));
         }
@@ -193,11 +206,13 @@ impl Scenario {
         self.module_names()
             .into_iter()
             .map(|n| {
-                let bytes = self
-                    .extra
-                    .get(n)
-                    .cloned()
-                    .unwrap_or_else(|| guests::bytes(n));
+                let bytes = self.extra.get(n).cloned().unwrap_or_else(|| {
+                    if self.shipped {
+                        crate::shipped::module_bytes(n)
+                    } else {
+                        guests::bytes(n)
+                    }
+                });
                 (n.to_string(), bytes)
             })
             .collect()

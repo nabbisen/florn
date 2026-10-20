@@ -335,6 +335,8 @@ pub struct Figures {
     pub cost: Vec<Cost>,
     pub host_path: Vec<HostPath>,
     pub nan: Vec<(String, u64)>,
+    /// This host's fresh build of the guests against the shipped modules.
+    pub fresh: Option<crate::shipped::FreshReport>,
 }
 
 /// The Stage 0 baseline of RFC 005 rule 11 for the native engine, microseconds.
@@ -353,6 +355,13 @@ pub fn figures(quick: bool) -> Figures {
         cost: cost(if quick { 200 } else { 10_000 }),
         host_path: if quick { Vec::new() } else { host_path() },
         nan: nan_probe(),
+        fresh: if quick {
+            None
+        } else {
+            crate::shipped::Digests::read(&crate::shipped::directory())
+                .ok()
+                .map(|d| crate::shipped::fresh_report(&d))
+        },
     }
 }
 
@@ -407,6 +416,22 @@ impl Figures {
         t.push_str("\n### NaN probe (RFC 003 section 9)\n\n| Expression | Bits |\n|---|---|\n");
         for (name, bits) in &self.nan {
             t.push_str(&format!("| `{name}` | `{bits:#018x}` |\n"));
+        }
+        if let Some(f) = &self.fresh {
+            t.push_str("\n### This host's build of the guests against the shipped modules\n\n| Guest | Same bytes |\n|---|---|\n");
+            for (name, equal) in &f.guests {
+                t.push_str(&format!(
+                    "| {name} | {} |\n",
+                    if *equal { "yes" } else { "no" }
+                ));
+            }
+            t.push_str("\n| Scenario over the fresh build | Recorded chain |\n|---|---|\n");
+            for (name, equal) in &f.scenarios {
+                t.push_str(&format!(
+                    "| {name} | {} |\n",
+                    if *equal { "equal" } else { "differs" }
+                ));
+            }
         }
         t
     }

@@ -19,7 +19,7 @@ fn chatter(id: u32, label: &str) -> florn_conformance::scenario::Actor {
 fn one_artifact_admits_to_the_recorded_hash() {
     let recorded = shipped::Digests::read(&shipped::directory()).unwrap();
     let a = Admission::default()
-        .admit("echo", &guests::bytes("echo"), &host::kit_limits())
+        .admit("echo", &shipped::module_bytes("echo"), &host::kit_limits())
         .expect("admitted");
     assert_eq!(a.admitted_hex(), recorded.admitted["echo"]);
 }

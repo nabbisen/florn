@@ -18,7 +18,7 @@ fn every_kit_module_admits_to_its_recorded_hash() {
             continue;
         }
         let a = Admission::default()
-            .admit(name, &guests::bytes(name), &host::kit_limits())
+            .admit(name, &shipped::module_bytes(name), &host::kit_limits())
             .unwrap_or_else(|e| panic!("{name}: {:?}", e.codes()));
         assert_eq!(a.admission_version, florn_admission::ADMISSION_VERSION);
         assert_eq!(

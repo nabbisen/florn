@@ -23,7 +23,7 @@ sha256 = "f2d8efce8af64b283ae210f8d01a6c3c667d5a8bb7cdb596f0defbf7be2cc0f9"
 contract = "florn:core/guest@0.1.0"
 
 [modules.bench_protocol]
-sha256 = "d85599f1a090ffc43051855598dd93ac1d4bb5e2d55aebf04193ac95e044017f"
+sha256 = "b980a3935f9aaa84b338246af256eb791b0ce6c5026e7d54f8cec08796553b47"
 contract = "florn:core/guest@0.1.0"
 
 [[actors]]
