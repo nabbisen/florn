@@ -438,7 +438,7 @@ fn structural_validation_names_the_field() {
 fn the_catalogue_is_the_rfc() {
     let rfc = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../rfcs/accepted/007-error-model-and-internationalisation.md"
+        "/../../rfcs/done/007-error-model-and-internationalisation.md"
     ))
     .unwrap();
     let start = rfc.find("### 4.1").unwrap();

@@ -1,6 +1,6 @@
 # RFC 004 — Core model: graph, scenario manifest, package
 
-**Status.** Accepted (2026-10-13)
+**Status.** Implemented (0.1.0, 2026-10-20); accepted 2026-10-13.
 **Tracks.** Requirements ARCH-006, ARCH-010, BUS-001, BUS-004, BUS-005, BUS-009, DES-010, DES-013, DES-014, DATA-001, DATA-002, DATA-003, DATA-007, DATA-009, DATA-010, DATA-011, DATA-012, SEC-005, SEC-007, PKG-007. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The core graph types, the scenario manifest, the package format, the canonical encoding used for hashing, and the validation errors the Host reports for a scenario.
 **Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md), for identities, time, ordering, and run inputs.

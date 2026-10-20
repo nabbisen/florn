@@ -8,7 +8,7 @@
 | **Supersedes** | Requirements baseline of 2026-09-28 (private draft) |
 | **Owner** | Architect |
 | **Date** | 2026-10-13 |
-| **Governing RFCs** | [RFC 001 — Determinism contract](../../rfcs/accepted/001-determinism-contract.md), [RFC 004 — Core model](../../rfcs/accepted/004-core-model.md) |
+| **Governing RFCs** | [RFC 001 — Determinism contract](../../rfcs/done/001-determinism-contract.md), [RFC 004 — Core model](../../rfcs/done/004-core-model.md) |
 
 florn is a local-first platform for executable testbeds. Isolated WebAssembly actors run the logic under test; a deterministic Host simulates the world around them. This document states what florn must do. How it does it is the subject of the RFCs.
 

@@ -23,7 +23,9 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-florn-guest = { path = "../florn/crates/florn-guest" }
+florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.1.0" }
+# or, from a checkout beside your crate:
+# florn-guest = { path = "../florn/crates/florn-guest" }
 
 [profile.release]
 opt-level = "s"
@@ -76,13 +78,17 @@ impl Actor for MyGuest {
 florn_guest::actor!(MyGuest);
 ```
 
-Build and admit:
+Build and admit (the runner comes from `cargo install --path crates/florn` in a checkout of
+florn, or `cargo install --git https://github.com/nabbisen/florn --tag 0.1.0 florn`):
 
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo build --release --target wasm32-unknown-unknown
 florn admit target/wasm32-unknown-unknown/release/my_guest.wasm
 ```
+
+Running it needs a scenario that names the module by its hash; the book's chapter for module
+authors (`docs/src/module-authors.md`) carries a one-actor scenario and the `florn run` line.
 
 `florn admit` prints the contract, the kind, the port kinds, the parameters with their types,
 units and defaults, the channels, the needs, and the admitted hash.
@@ -112,10 +118,14 @@ restores the stream (RFC 002 rule 31).
 
 The default profile uses `std` (the standard library's allocator; a panic aborts, which traps).
 The `no_std` profile, `--no-default-features --features no-std`, brings the SDK's allocator and
-a panic handler that traps, for size.
+a panic handler that traps, for size. The `#![no_std]` attribute of your own crate is a separate
+choice: it keeps `std` out of your code and works under both profiles.
 
 ## Examples
 
-`cargo build --release --target wasm32-unknown-unknown --examples` builds the echo guest, the NaN
-probe, and the hostile guests of RFC 003 section 10 (loop, recurse, grow, flood, bad pointer,
-a WASI import) into `target/wasm32-unknown-unknown/release/examples/`.
+`cargo build --release --target wasm32-unknown-unknown --examples` builds the fifteen example
+guests into `target/wasm32-unknown-unknown/release/examples/`: the echo guest, the NaN probe,
+the six hostile guests of RFC 003 section 10 (loop, recurse, grow, flood, bad pointer, a WASI
+import), and the conformance kit's guests (pinger, timers, chatter, heap, clock, and the
+benchmark guests B1 and B2). The kit's readme (`crates/florn-conformance/README.md`) says what
+each is for.

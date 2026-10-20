@@ -1,6 +1,6 @@
 # RFC 001 — Determinism contract
 
-**Status.** Accepted (2026-10-13). Open questions 1 to 5 are deferred as stated in their table; none blocks implementation. Open questions 3 and 4 resolved 2026-10-20 by PR-13.
+**Status.** Implemented (0.1.0, 2026-10-20); accepted 2026-10-13. Open questions 1 to 5 are deferred as stated in their table; none blocks implementation. Open questions 3 and 4 resolved 2026-10-20 by PR-13.
 **Tracks.** Requirements DES-001 to DES-010, BUS-002, BUS-004, BUS-007, FIN-004, FIN-006, NUM-002, NUM-006, NFR-001, NFR-011, DATA-002, DATA-005, AUTO-003, AUTO-004, AUTO-006. Requirement IDs refer to the florn requirements specification, which will be published under `docs/`.
 **Touches.** The kernel, every guest contract, the scenario format, replay, and the conformance tests.
 

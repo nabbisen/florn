@@ -41,21 +41,21 @@ _None at present._
 
 ### Accepted
 
-| ID | Title | Accepted | Implemented by |
-|----|-------|----------|----------------|
-| 001 | [Determinism contract](./accepted/001-determinism-contract.md) | 2026-10-13 | Release 0.1 |
-| 002 | [Guest contract: artifact, ABI, activation, layering](./accepted/002-guest-contract.md) | 2026-10-14 | Release 0.1 |
-| 003 | [Module admission and resource limits](./accepted/003-module-admission-and-limits.md) | 2026-10-14 | Release 0.1 |
-| 004 | [Core model: graph, scenario manifest, package](./accepted/004-core-model.md) | 2026-10-13 | Release 0.1 |
-| 005 | [Host architecture: one core, adapters, control interface, repository layout](./accepted/005-host-architecture.md) | 2026-10-14 | Release 0.1 |
-| 006 | [Security baseline for the browser Host](./accepted/006-security-baseline-browser-host.md) | 2026-10-14 | Release 0.1 |
-| 007 | [Error model and internationalisation](./accepted/007-error-model-and-internationalisation.md) | 2026-10-14 | Release 0.1 |
+_None at present._
 
 ### Implemented
 
 | ID | Title | Shipped in |
 |----|-------|------------|
 | 000 | [RFC lifecycle policy](./done/000-rfc-lifecycle-policy.md) | Project start |
+| 001 | [Determinism contract](./done/001-determinism-contract.md) | 0.1.0 (accepted 2026-10-13) |
+| 002 | [Guest contract: artifact, ABI, activation, layering](./done/002-guest-contract.md) | 0.1.0 (accepted 2026-10-14) |
+| 003 | [Module admission and resource limits](./done/003-module-admission-and-limits.md) | 0.1.0 (accepted 2026-10-14) |
+| 004 | [Core model: graph, scenario manifest, package](./done/004-core-model.md) | 0.1.0 (accepted 2026-10-13) |
+| 005 | [Host architecture: one core, adapters, control interface, repository layout](./done/005-host-architecture.md) | 0.1.0 (accepted 2026-10-14) |
+| 006 | [Security baseline for the browser Host](./done/006-security-baseline-browser-host.md) | 0.1.0 (accepted 2026-10-14) |
+| 007 | [Error model and internationalisation](./done/007-error-model-and-internationalisation.md) | 0.1.0 (accepted 2026-10-14) |
+| 000 | [RFC lifecycle policy](./done/000-rfc-lifecycle-policy.md) | 0.1.0 (accepted Project start) |
 
 ### Archive
 

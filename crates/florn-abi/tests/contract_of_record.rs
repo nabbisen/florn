@@ -19,7 +19,7 @@ fn first_wit_block(markdown: &str) -> &str {
 
 #[test]
 fn core_wit_equals_rfc_002() {
-    let rfc = std::fs::read_to_string(root().join("rfcs/accepted/002-guest-contract.md")).unwrap();
+    let rfc = std::fs::read_to_string(root().join("rfcs/done/002-guest-contract.md")).unwrap();
     let file = std::fs::read_to_string(root().join("contracts/florn-core/wit/core.wit")).unwrap();
     assert_eq!(
         first_wit_block(&rfc),

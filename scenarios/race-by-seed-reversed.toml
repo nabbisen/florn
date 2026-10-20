@@ -19,11 +19,11 @@ root = 99
 memory = "2MiB"
 
 [modules.echo]
-sha256 = "ce8d09614ef71ed83ac9c3dad7e06407dbb805957bae7861b153173af50bf288"
+sha256 = "aff413a942daab154e1b99eb136156768513ca205f6658c402f62b655464c457"
 contract = "florn:core/guest@0.1.0"
 
 [modules.pinger]
-sha256 = "19f77b06a868f4fbc168b1f419eee3184b2e931575300b0bc259c6f32e0228fd"
+sha256 = "795b41b1ad7331e07f3bcbfc05ca635ad5cc92090921f457db9549f4af631ef9"
 contract = "florn:core/guest@0.1.0"
 
 [[actors]]

@@ -4,6 +4,12 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.1.0] - 2026-10-20
+
+The first release: the core on two Hosts (Phase 1 of the roadmap). The release notes with the figures, the security review and the file hashes are `docs/src/releases/0.1.0.md` and the GitHub release.
+
 ### Added
 
 - RFC 000, the RFC lifecycle policy (5-folder variant).
@@ -38,3 +44,4 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 - Seven proofs of concept reported and reviewed (one artifact on two engines; deterministic limits; boundary crossing cost; instance scaling; telemetry transport; snapshot and restore; UI shell). Their figures are recorded in the roadmap and the RFCs.
 - Stage 0 exit review of 2026-10-14: every criterion met except continuous integration and the Cargo workspace, both scheduled before Phase 1.
+- Phase 1, PR-14b: release 0.1.0. The book gains chapters for module authors and automation users, the compatibility and versions policy, an architecture map, a contributing page and the release notes; the root readme describes the release and its quick start; `CONTRIBUTING.md`. The release workflow builds the runner for three targets and the test page bundle on a tag and publishes them with their SHA-256. RFC 001 to 007 move to `rfcs/done/` as implemented in 0.1.0; the external design's runner usage names the inputs a replay needs; the SDK readme carries the dependency forms, the runner's installation and the full example list; the workspace version is 0.1.0.

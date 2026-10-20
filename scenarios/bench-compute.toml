@@ -20,11 +20,11 @@ memory = "2MiB"
 budget = 100000000
 
 [modules.pinger]
-sha256 = "19f77b06a868f4fbc168b1f419eee3184b2e931575300b0bc259c6f32e0228fd"
+sha256 = "795b41b1ad7331e07f3bcbfc05ca635ad5cc92090921f457db9549f4af631ef9"
 contract = "florn:core/guest@0.1.0"
 
 [modules.bench_compute]
-sha256 = "7d2fb12d0b4ff6a6bfacf47e3ad972b10a9febe5eb6174f56ec5e09a0dc5d565"
+sha256 = "6d65cdc146dd40c5631060b9792ee1fa3e53f5efad2660efbea020d7e5291bb4"
 contract = "florn:core/guest@0.1.0"
 
 [[actors]]

@@ -1,6 +1,6 @@
 # RFC 002 — Guest contract: artifact, ABI, activation, layering
 
-**Status.** Accepted (2026-10-14) Rule 36 and the randomness row of section 10 amended 2026-10-20 by PR-14a.
+**Status.** Implemented (0.1.0, 2026-10-20); accepted 2026-10-14. Rule 36 and the randomness row of section 10 amended 2026-10-20 by PR-14a.
 **Tracks.** Requirements ARCH-001, ARCH-003, ARCH-004, ARCH-006, ARCH-010, ACT-001, ACT-002, ACT-003, ACT-005, ACT-009, BUS-002, BUS-005, OBS-008, SEC-002, SEC-003, MIG-001, MIG-008, NUM-006, PKG-003, PKG-004, PKG-006, PKG-007, AUTO-007, AC-005, AC-007. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The form of a guest module, its self-description, the core contract every domain builds on, what happens during an activation, the guest SDK, and the guest half of the conformance kit.
 **Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md) for time, activation, effects, randomness, and faults. [RFC 004 — Core model](./004-core-model.md) for identities, the scenario's `config`, ports, and the canonical encoding.

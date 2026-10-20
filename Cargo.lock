@@ -427,7 +427,7 @@ checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
 name = "florn"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "florn-cli",
  "florn-host",
@@ -436,14 +436,14 @@ dependencies = [
 
 [[package]]
 name = "florn-abi"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "wit-parser 0.261.0",
 ]
 
 [[package]]
 name = "florn-admission"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "florn-abi",
  "florn-model",
@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "florn-cli"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "florn-control",
  "florn-engine-wasmtime",
@@ -470,7 +470,7 @@ dependencies = [
 
 [[package]]
 name = "florn-conformance"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "florn-abi",
@@ -491,14 +491,14 @@ dependencies = [
 
 [[package]]
 name = "florn-control"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "florn-model",
 ]
 
 [[package]]
 name = "florn-engine"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "florn-abi",
  "wat",
@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "florn-engine-wasmtime"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "florn-abi",
@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "florn-engine-web"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "florn-abi",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "florn-guest"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "dlmalloc",
  "libm",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "florn-host"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "florn-abi",
@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "florn-kernel"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "rand_chacha",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "florn-model"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "sha2 0.11.1",
  "toml",
@@ -574,18 +574,18 @@ dependencies = [
 
 [[package]]
 name = "florn-platform"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "florn-platform-native"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "florn-platform",
 ]
 
 [[package]]
 name = "florn-platform-web"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "florn-control",
  "florn-platform",
@@ -593,15 +593,15 @@ dependencies = [
 
 [[package]]
 name = "florn-ui-model"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "florn-ui-scene"
-version = "0.0.0"
+version = "0.1.0"
 
 [[package]]
 name = "florn-ui-web"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "blake3",
  "florn-control",
