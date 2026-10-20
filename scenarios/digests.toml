@@ -39,8 +39,8 @@ timers = "13660ec751d65b60bec5dd6611a21ece690639ce94f6e43479fceb096df24d2d"
 
 [runs."bench-compute"]
 seed = 1
-chain = "7adcef788658bc3b7a648fdfb2e9b46e4bb982f57f1c7874088aae87ab46fed6"
-records = 2002
+chain = "6c7f2432fb853df07c14eadc6efd32dee044d9737f64b0a5a8f962cce6c3c299"
+records = 5999
 ended = "end-reached"
 
 [runs."bench-protocol"]

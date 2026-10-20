@@ -12,7 +12,7 @@ cargo run --release -p florn-conformance -- scenarios  # rewrite scenarios/ and 
 
 The tests build the SDK's example guests for `wasm32-unknown-unknown` with the Rust toolchain alone, into `target/guests`, and run the behaviour tests over that build. Set `FLORN_GUESTS` to a directory of built modules to use those instead. The shipped scenarios run over the modules shipped in `scenarios/modules`, which `scenarios` rewrites from a fresh build; the same source built on an AArch64 host gives other bytes than on x86-64 (measured in CI), so the digests are recorded over shipped bytes and `figures` reports how the machine's own build compares.
 
-The browser Host runs the same scenarios through its test page (PR-12).
+The browser Host runs the same scenarios through its test page: `ci/browser/run.js` (see `crates/florn-ui-web/README.md`).
 
 ## The guests
 
@@ -41,7 +41,7 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 | Property | Test |
 |---|---|
 | Tier 1 | `rfc_001::tier_1_one_scenario_twice_under_one_host`; `ac::ac_001_…` |
-| Tier 2, discrete | `ac::ac_001_…`: the recorded digests of `scenarios/` compared in CI on x86-64 and AArch64; the browser half with PR-12 |
+| Tier 2, discrete | `ac::ac_001_…`: the recorded digests of `scenarios/` compared in CI on x86-64 and AArch64, and by `ci/browser/run.js` under the browser Host in Chromium, Firefox and WebKit |
 | Order | `ac::ac_004_…` |
 | Fairness of `by-seed` | `ac::ac_004_…` |
 | Zero delay | `rfc_001::zero_delay_ends_the_run_with_the_fault_of_rule_13` |
@@ -56,7 +56,7 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 
 | Property | Test |
 |---|---|
-| One artifact | `rfc_002::one_artifact_admits_to_the_recorded_hash`; both Hosts with PR-12 |
+| One artifact | `rfc_002::one_artifact_admits_to_the_recorded_hash`; the browser run compares every module's admitted hash with the same record |
 | Strict lifting | `rfc_002::a_list_outside_memory_faults_as_contract`; invalid UTF-8 and an enumeration out of range, which the core world never carries from a guest, in `florn-abi`'s `strict_lifting_produces_the_three_contract_faults` |
 | Manifest | `rfc_002::a_module_without_a_manifest_or_with_disagreeing_sections_is_refused` (no manifest; a world the Host does not have; a scenario naming another contract); two sections of one module that disagree in `florn-admission`'s `the_manifest_sections_are_required_and_checked`; the runner's listing in `ac::ac_005_…` |
 | Parameters | `rfc_002::parameters_are_checked_and_reach_the_guest_in_order_with_defaults` |
@@ -75,7 +75,7 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 
 | Property | Test |
 |---|---|
-| Same fault point everywhere (AC-002) | `ac::ac_002_…`; every engine with PR-12 |
+| Same fault point everywhere (AC-002) | `ac::ac_002_…`; the browser run checks each hostile scenario's fault kind and digest in every browser |
 | Transformed bytes | `rfc_003::every_kit_module_admits_to_its_recorded_hash`; `ac::ac_001_…`. The admitted bytes depend on the class limits (the memory maximum of RFC 003 section 3, pass 1); the recorded hashes are for the kit's scenarios' limits |
 | Budget before lowering | `rfc_003::a_looping_realloc_faults_as_budget_not_as_a_host_error` |
 | Classification | `ac::ac_002_…`; `florn-admission`'s `classification_reads_globals_only` |
@@ -96,7 +96,7 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 |---|---|
 | One core | `ci/check-deps.py` |
 | Tiers | `ac::ac_001_…`, `rfc_001::observation_changes_nothing` (through the control interface) |
-| Engine adapter rules | `rfc_005::the_crossing_benchmark_produces_its_figures`; the figures from `figures` |
+| Engine adapter rules | `rfc_005::the_crossing_benchmark_produces_its_figures`; the figures from `figures`; in the browser, the driver's crossing figures and its check that the worker made no view per lowering |
 | Payload digests | `ac::ac_003_…` (the record's payload digests); the kernel-path figure from `figures` |
 | Replay | `ac::ac_003_…` |
 | Interventions | `rfc_001::a_run_with_an_intervention_replays_to_the_same_digest` |

@@ -1,6 +1,6 @@
 [package]
 name = "florn-engine-web"
-description = "The browser engine adapter"
+description = "The browser engine adapter: the Host's WebAssembly drives guest instances through an exported function table, the budget global reached WebAssembly-to-WebAssembly, memory through views"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +10,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+florn-engine = { workspace = true }
+florn-abi = { workspace = true }
+blake3 = { workspace = true }
+wasmparser = { workspace = true }

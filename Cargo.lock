@@ -511,6 +511,12 @@ dependencies = [
 [[package]]
 name = "florn-engine-web"
 version = "0.0.0"
+dependencies = [
+ "blake3",
+ "florn-abi",
+ "florn-engine",
+ "wasmparser 0.261.0",
+]
 
 [[package]]
 name = "florn-guest"
@@ -574,6 +580,10 @@ dependencies = [
 [[package]]
 name = "florn-platform-web"
 version = "0.0.0"
+dependencies = [
+ "florn-control",
+ "florn-platform",
+]
 
 [[package]]
 name = "florn-ui-model"
@@ -586,6 +596,13 @@ version = "0.0.0"
 [[package]]
 name = "florn-ui-web"
 version = "0.0.0"
+dependencies = [
+ "florn-control",
+ "florn-engine",
+ "florn-engine-web",
+ "florn-host",
+ "florn-platform-web",
+]
 
 [[package]]
 name = "fnv"

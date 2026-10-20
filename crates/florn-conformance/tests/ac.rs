@@ -85,6 +85,12 @@ fn ac_001_every_shipped_scenario_produces_its_recorded_digest() {
             s.scenario.module_names().len(),
             "{name}: every module admitted"
         );
+        let faulted = run.log().codes().contains(&"actor.faulted");
+        assert_eq!(
+            faulted,
+            name.starts_with("hostile-"),
+            "{name}: only the hostile scenarios fault"
+        );
     }
     // Tier 1: the same scenario twice under one Host gives one digest.
     let a = host::run(&shipped_named("echo-pair"));

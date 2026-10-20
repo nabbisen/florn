@@ -1,0 +1,9 @@
+{
+  "name": "florn-browser-ci",
+  "private": true,
+  "description": "The conformance kit's browser run: Playwright drives the test page of florn-ui-web (test only, nothing linked into florn)",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.64.0"
+  }
+}

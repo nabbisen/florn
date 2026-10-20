@@ -1,0 +1,33 @@
+# florn-ui-web
+
+The browser front end. In release 0.1 it is the Host's worker module and a test page; the shell of RFC 005 section 8 follows in 0.2.
+
+## What is here
+
+| Path | What |
+|---|---|
+| `src/worker.rs` | The worker module's exports: `florn_start`, `florn_load_scenario`, `florn_load_module`, `florn_admit`, `florn_admit_kit`, `florn_new_run`, `florn_advance`, `florn_pump`, `florn_subscribe_events`, `florn_run_state`, `florn_support`, `florn_handle` (one encoded control message in), `florn_bench_crossing`, `florn_bench_cost`; replies as JSON through `florn_out_ptr` and `florn_out_len` |
+| `www/worker.js` | The worker's script: instantiates the Host module, holds the guest instances, provides the imports of `florn-engine-web` and `florn-platform-web` |
+| `www/main.js`, `www/index.html`, `www/page.css` | The test page: runs one shipped scenario or one benchmark as the query says and writes the result as JSON |
+| `www/sw.js` | The service worker: the page starts offline after one visit, with the headers of RFC 005 rule 33 on every cached response |
+| `build.rs` | Exports the module's function table and lets it grow (RFC 005 rule 7) |
+
+The module uses no `wasm-bindgen`: its surface is a few C functions, and the guests are reached without a JavaScript value in between (see `florn-engine-web`). The shell of 0.2 will use `wasm-bindgen` on the main thread.
+
+## Running the page
+
+```sh
+cargo build --release --target wasm32-unknown-unknown -p florn-ui-web
+cp target/wasm32-unknown-unknown/release/florn_ui_web.wasm crates/florn-ui-web/www/florn_host.wasm
+cd ci/browser && npm ci && node serve.js
+```
+
+Then open `http://127.0.0.1:8765/index.html?scenario=echo-pair&seed=42`, or `?bench=crossing`, `?bench=cost`. The server sets the isolation headers and the policy of RFC 005 rule 33; `scenarios/` is served under `/scenarios`.
+
+The conformance kit's browser run, as CI does it (`npx playwright install` first):
+
+```sh
+cd ci/browser && node run.js --browsers chromium,firefox,webkit
+```
+
+It runs every shipped scenario, compares the digests and the admitted hashes with `scenarios/digests.toml`, checks the hostile scenarios' faults, the isolation, the policy, the network log, the start from the cache offline, the transport's refusal, and prints the crossing and cost figures.

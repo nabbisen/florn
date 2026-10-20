@@ -6,6 +6,7 @@
 //! Implemented by PR-05 of `rfcs/handoffs/005-host-architecture/task-breakdown-pr-plan.md`.
 #![forbid(unsafe_code)]
 
+pub mod bench;
 #[cfg(feature = "conformance")]
 pub mod conformance;
 
@@ -93,6 +94,9 @@ pub enum EngineError {
     Compile(String),
     /// The engine refused an admitted module: `host.engine-refused` (RFC 003 rule 26).
     Instantiate(String),
+    /// The engine could not hold another instance: a `RangeError`, an out-of-memory condition,
+    /// a bare string from the browser; `host.instance-failed` (RFC 005 rule 10).
+    Resource(String),
     /// A required export is missing or has the wrong type.
     Export(String),
     Memory(String),
@@ -105,6 +109,7 @@ impl fmt::Display for EngineError {
         match self {
             EngineError::Compile(m) => write!(f, "compile: {m}"),
             EngineError::Instantiate(m) => write!(f, "instantiate: {m}"),
+            EngineError::Resource(m) => write!(f, "instance failed: {m}"),
             EngineError::Export(m) => write!(f, "export: {m}"),
             EngineError::Memory(m) => write!(f, "memory: {m}"),
             EngineError::Global(m) => write!(f, "global: {m}"),

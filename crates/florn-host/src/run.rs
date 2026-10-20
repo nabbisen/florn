@@ -45,6 +45,18 @@ pub fn default_admission() -> Admission {
     Admission::default()
 }
 
+/// The config record of an admitted module with every parameter at its default (RFC 002 rule
+/// 14), for the benchmarks' `init`; for front ends without an admission dependency.
+pub fn default_config(admitted: &Admitted) -> Result<Vec<u8>, Errors> {
+    encode_config(
+        1,
+        &admitted.manifest,
+        &BTreeMap::new(),
+        florn_model::TickLength::Ns,
+        &NoUnits,
+    )
+}
+
 /// The seed of a new run (RFC 005 rule 26): given, or chosen by the platform and then an input.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Seed {
@@ -97,6 +109,17 @@ impl Default for Options {
             host: HostMaxima::native(),
             host_build: "native".into(),
             telemetry_capacity: 65_536,
+        }
+    }
+}
+
+impl Options {
+    /// The browser Host's options: its maxima (RFC 003 rule 19) and build name.
+    pub fn browser() -> Self {
+        Self {
+            host: HostMaxima::browser(),
+            host_build: "browser".into(),
+            ..Self::default()
         }
     }
 }
@@ -668,14 +691,26 @@ impl<E: Engine> Run<E> {
         let inst = match self.engine.instantiate(&module, &slot.spec) {
             Ok(i) => i,
             Err(e) => {
-                let n = Notification::new(
-                    "host.engine-refused",
-                    Severity::Error,
-                    Scope::actor(id),
-                    Ends::Run,
-                )
-                .with("module", Value::Name(slot.module_name.clone()))
-                .with("text", Value::Text(e.to_string()));
+                // RFC 005 rule 10: a failure to hold the instance names the actor and the
+                // engine's text; a refusal of the module names the module (RFC 003 rule 26).
+                let n = match &e {
+                    EngineError::Resource(text) => Notification::new(
+                        "host.instance-failed",
+                        Severity::Error,
+                        Scope::actor(id),
+                        Ends::Run,
+                    )
+                    .with("actor", Value::Identity(id))
+                    .with("text", Value::Text(text.clone())),
+                    other => Notification::new(
+                        "host.engine-refused",
+                        Severity::Error,
+                        Scope::actor(id),
+                        Ends::Run,
+                    )
+                    .with("module", Value::Name(slot.module_name.clone()))
+                    .with("text", Value::Text(other.to_string())),
+                };
                 self.log.push(self.wall_ms, &self.run_id, n);
                 return Err(e.into());
             }

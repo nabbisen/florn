@@ -122,8 +122,10 @@ fn definitions() -> Vec<Shipped> {
                 .actor(actor(2, "bench_protocol", 1))
                 .connect(&[(1, 0), (2, 0)]),
         ),
+        // The matrix product needs more than the default budget of one activation.
         normal(
             Scenario::new("bench-compute", 2_000)
+                .limit("budget", "100000000")
                 .actor(actor(1, "pinger", 1).with("payload", "8"))
                 .actor(actor(2, "bench_compute", 1))
                 .connect(&[(1, 0), (2, 0)]),
@@ -326,6 +328,9 @@ pub fn write(dir: &Path) -> Result<Digests, String> {
         let path = modules.join(format!("{n}.wasm"));
         std::fs::write(&path, guests::bytes(n)).map_err(|e| format!("{}: {e}", path.display()))?;
     }
+    // The crossing benchmark's guest, for the browser Host's run of the benchmark.
+    let path = modules.join("kit-crossing.wasm");
+    std::fs::write(&path, guests::crossing()).map_err(|e| format!("{}: {e}", path.display()))?;
     let hashes = module_hashes();
     for s in all() {
         let path = dir.join(format!("{}.toml", s.scenario.name));

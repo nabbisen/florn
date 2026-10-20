@@ -27,11 +27,11 @@ Entry point: [`README.md`](./README.md). This file says what to build, crate by 
 | `wit-component`, `wit-parser` | 0.261.0 | Decoding the `component-type` section at admission; the contract-of-record test |
 | `zip` | 9.0.4, no default features | Package reading and writing (RFC 004); 8.6.0 was replaced for the advisories of the 8 line |
 | `wit-bindgen` | 0.62 | Guest bindings in the SDK; the `component-type` section it emits is the contract identity |
-| `wasm-bindgen`, `js-sys`, `web-sys` | 0.2.126, 0.3.103 | Browser adapter and test page only |
+| `wasm-bindgen`, `js-sys`, `web-sys` | 0.2.126, 0.3.103 | The shell of 0.2 only. The worker module and the browser adapter of PR-12 use neither: a C surface and the worker's script, so that guests are reached without a JavaScript value in between (RFC 005 rules 6 to 8) |
 | `blake3`, `chacha20`-family generator | Current permissive releases, pinned in `Cargo.lock` | RFC 005 rule 22: `blake3`, `blake3-derive-key`, `chacha8` |
 | `sha2` | 0.11 | Module and scenario identity (RFC 004) |
 | `toml` | Current, pinned | Manifest and package metadata |
-| Playwright | 1.64 (test only, not linked) | Browser matrix in CI from PR-12 |
+| Playwright | 1.64.0 (test only, not linked; `ci/browser/package-lock.json`) | Browser matrix in CI from PR-12: Chromium and Firefox on Linux, WebKit on macOS |
 | `cargo-deny` 0.20.2, `cargo-audit`, `cargo-fuzz`, `cargo-mutants` | Pinned in CI | RFC 006 rules 5 to 7 |
 
 A version is changed by a PR that says why, and the run identity records the versions a build used (RFC 005 rule 44).

@@ -1,6 +1,6 @@
 [package]
 name = "florn-ui-web"
-description = "The browser shell"
+description = "The browser front end: in 0.1 the Host's worker module and its test page; the shell of RFC 005 section 8 follows in 0.2"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,8 +8,17 @@ authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+florn-control = { workspace = true }
+florn-host = { workspace = true }
+florn-engine = { workspace = true }
+florn-engine-web = { workspace = true }
+florn-platform-web = { workspace = true }
 
 [[bin]]
 name = "florn-ui-web"

@@ -7,278 +7,79 @@
 //! The engine-level benchmarks drive the adapter as the Host does: the budget global set before
 //! each call, the parameters lowered through `florn-abi`, the imports lifted by a handler.
 
-use std::collections::BTreeMap;
 use std::time::Instant;
 
-use florn_abi::core_world;
-use florn_abi::{Flat, Memory, Ty, Val, lift_flat_params, lower_flat_params};
-use florn_admission::config::{NoUnits, encode_config};
-use florn_admission::{Admission, ClassLimits};
-use florn_engine::conformance::core_import_spec;
-use florn_engine::{Engine, GlobalValue, ImportHandler, ImportSpec, InstanceId, Refusal};
+use florn_admission::Admission;
+use florn_engine::bench::{self, core_import_spec};
+pub use florn_engine::bench::{Cost, Crossing, protocol_buffer};
 use florn_engine_wasmtime::{Limits, WasmtimeEngine};
-use florn_model::TickLength;
 
 use crate::guests;
 
-const BUDGET: i64 = 1_000_000_000;
-
-/// A handler that lifts every call and keeps nothing: the Host's lifting cost without the
-/// kernel's recording.
-struct Lifting {
-    sigs: Vec<(String, Vec<Ty>)>,
-    calls: u64,
+fn engine() -> WasmtimeEngine {
+    WasmtimeEngine::new(Limits::default()).expect("engine")
 }
 
-impl Lifting {
-    fn new() -> Self {
-        Self {
-            sigs: core_world::host_functions()
-                .into_iter()
-                .map(|s| (s.name.to_string(), s.param_types()))
-                .collect(),
-            calls: 0,
-        }
-    }
-}
-
-impl ImportHandler for Lifting {
-    fn call(
-        &mut self,
-        _: InstanceId,
-        function: &str,
-        args: &[Flat],
-        memory: &mut dyn Memory,
-    ) -> Result<Vec<Flat>, Refusal> {
-        let (_, tys) = self
-            .sigs
-            .iter()
-            .find(|(n, _)| n == function)
-            .ok_or(Refusal)?;
-        let _vals = lift_flat_params(memory, tys, args).map_err(|_| Refusal)?;
-        self.calls += 1;
-        Ok(if function == "random" {
-            vec![Flat::I64(0)]
-        } else {
-            Vec::new()
-        })
-    }
-}
-
-/// One instance of a guest under the adapter, metered or not.
-struct Driver {
-    engine: WasmtimeEngine,
-    inst: <WasmtimeEngine as Engine>::Instance,
-    funcs: Vec<<WasmtimeEngine as Engine>::Func>,
-    tys: Vec<Vec<Ty>>,
-    metered: bool,
-    handler: Lifting,
-}
-
-impl Driver {
-    fn new(bytes: &[u8], metered: bool, spec: &ImportSpec) -> Self {
-        let mut engine = WasmtimeEngine::new(Limits::default()).expect("engine");
-        let module = engine.compile(bytes).expect("compile");
-        let inst = engine.instantiate(&module, spec).expect("instantiate");
-        let funcs = [
-            core_world::EXPORT_INIT,
-            core_world::EXPORT_ON_MESSAGE,
-            core_world::EXPORT_ON_TIMER,
-        ]
-        .iter()
-        .map(|name| {
-            engine
-                .func(&inst, name)
-                .unwrap_or_else(|| panic!("export {name}"))
-        })
-        .collect();
-        let tys = core_world::actor_functions()
-            .iter()
-            .map(|f| f.param_types())
-            .collect();
-        Self {
-            engine,
-            inst,
-            funcs,
-            tys,
-            metered,
-            handler: Lifting::new(),
-        }
-    }
-
-    fn call(&mut self, which: usize, vals: &[Val]) {
-        if self.metered {
-            self.engine
-                .global_set(
-                    &mut self.inst,
-                    Some(florn_admission::BUDGET_IMPORT_MODULE),
-                    florn_admission::BUDGET_IMPORT_NAME,
-                    GlobalValue::I64(BUDGET),
-                )
-                .expect("budget");
-        }
-        let tys = &self.tys[which];
-        let mut flats = Ok(Vec::new());
-        self.engine
-            .with_memory(&mut self.inst, &mut |m| {
-                flats = lower_flat_params(m, tys, vals)
-            })
-            .expect("memory");
-        let flats = flats.expect("lowering");
-        let func = self.funcs[which];
-        self.engine
-            .call(&mut self.inst, &func, &flats, &mut self.handler)
-            .unwrap_or_else(|t| panic!("the benchmark guest trapped: {t}"));
-    }
-}
-
-fn admitted(name: &str, bytes: &[u8]) -> (Vec<u8>, florn_admission::ModuleManifest) {
+/// Admit under the kit's limits: the admitted bytes and the config of the defaults.
+fn admitted(name: &str, bytes: &[u8]) -> (Vec<u8>, Vec<u8>) {
     let a = Admission::default()
-        .admit(name, bytes, &ClassLimits::defaults())
+        .admit(name, bytes, &crate::host::kit_limits())
         .unwrap_or_else(|e| panic!("{name}: {:?}", e.codes()));
-    (a.bytes.clone(), a.manifest.clone())
+    let config = florn_host::run::default_config(&a).expect("the defaults fill the config");
+    (a.bytes.clone(), config)
 }
 
-fn ports(n: u32) -> Val {
-    Val::List(
-        (0..n)
-            .map(|p| Val::Record(vec![Val::U32(p), Val::U32(0), Val::str(&format!("p{p}"))]))
-            .collect(),
-    )
+fn clock() -> f64 {
+    use std::sync::OnceLock;
+    static START: OnceLock<Instant> = OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_secs_f64()
 }
 
-fn init_vals(manifest: &florn_admission::ModuleManifest, ports_n: u32) -> Vec<Val> {
-    let config = encode_config(1, manifest, &BTreeMap::new(), TickLength::Ns, &NoUnits)
-        .expect("the defaults fill the config");
-    vec![
-        Val::U64(0),
-        Val::U32(1),
-        ports(ports_n),
-        Val::bytes(&config),
-    ]
-}
-
-/// Microseconds per call: the best of `repeats` rounds of `n` calls, after a warm-up.
-fn best_of(repeats: usize, n: u64, mut call: impl FnMut()) -> f64 {
-    for _ in 0..n.min(100) {
-        call();
-    }
-    let mut best = f64::INFINITY;
-    for _ in 0..repeats {
-        let start = Instant::now();
-        for _ in 0..n {
-            call();
-        }
-        let us = start.elapsed().as_secs_f64() * 1e6 / n as f64;
-        best = best.min(us);
-    }
-    best
-}
-
-/// One crossing figure.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Crossing {
-    /// `0` is the call floor: a call that carries nothing and returns at once.
-    pub bytes: usize,
-    pub metered: bool,
-    pub micros: f64,
-}
-
-/// The crossing benchmark (RFC 005 rule 11), plus the 1,500-byte point RFC 005 §11 compares the
-/// kernel path with. `scale` divides the iteration counts (1 publishes; 20 for a quick check).
+/// The crossing benchmark (RFC 005 rule 11) over the kit's crossing guest, under Wasmtime.
+/// `scale` divides the iteration counts (1 publishes; 20 for a quick check).
 pub fn crossing(scale: u64) -> Vec<Crossing> {
-    let spec = core_import_spec();
     let raw = guests::crossing();
-    let (metered_bytes, manifest) = admitted("crossing", &raw);
-    let mut out = Vec::new();
-    for metered in [false, true] {
-        let bytes = if metered { &metered_bytes } else { &raw };
-        let mut d = Driver::new(bytes, metered, &spec);
-        d.call(0, &init_vals(&manifest, 1));
-        for size in [0usize, 64, 1_500, 65_536] {
-            let n = match size {
-                0 | 64 => 20_000,
-                1_500 => 10_000,
-                _ => 1_000,
-            } / scale;
-            let micros = if size == 0 {
-                let vals = [Val::U64(1), Val::U32(0)];
-                best_of(5, n, || d.call(2, &vals))
-            } else {
-                let payload: Vec<u8> = (0..size).map(|i| i as u8).collect();
-                let vals = [Val::U64(1), Val::U32(0), Val::bytes(&payload)];
-                best_of(5, n, || d.call(1, &vals))
-            };
-            out.push(Crossing {
-                bytes: size,
-                metered,
-                micros,
-            });
-        }
-        assert!(d.handler.calls > 0, "the guest crossed back");
-    }
-    out
-}
-
-/// One cost figure: a guest's activation, metered against unmetered.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Cost {
-    pub guest: &'static str,
-    pub activations: u64,
-    pub unmetered_micros: f64,
-    pub metered_micros: f64,
-}
-
-impl Cost {
-    pub fn ratio(&self) -> f64 {
-        self.metered_micros / self.unmetered_micros
-    }
-}
-
-/// The 1,500-byte record buffer the protocol guest parses: 124 records of a key and a value.
-pub fn protocol_buffer(ordinal: u64) -> Vec<u8> {
-    let mut p = Vec::with_capacity(1_500);
-    p.extend_from_slice(&124u32.to_le_bytes());
-    for i in 0..124u64 {
-        let key = ((ordinal.wrapping_mul(131) + i * 7) % 1_000) as u32;
-        p.extend_from_slice(&key.to_le_bytes());
-        p.extend_from_slice(&(ordinal + i).to_le_bytes());
-    }
-    p.extend_from_slice(&0u64.to_le_bytes());
-    assert_eq!(p.len(), 1_500);
-    p
+    let (metered, config) = admitted("crossing", &raw);
+    bench::crossing(
+        &mut engine,
+        &raw,
+        &metered,
+        &config,
+        &core_import_spec(),
+        scale,
+        &clock,
+    )
+    .expect("the crossing benchmark runs")
 }
 
 /// The cost benchmark (RFC 003 §7 step 2): the two guests, `activations` each, run-only time.
 pub fn cost(activations: u64) -> Vec<Cost> {
-    let spec = core_import_spec();
     let mut out = Vec::new();
-    for (guest, name) in [("bench_protocol", "B1"), ("bench_compute", "B2")] {
+    for guest in ["bench_protocol", "bench_compute"] {
         let raw = guests::bytes(guest);
-        let (metered_bytes, manifest) = admitted(guest, &raw);
-        let mut micros = [0.0; 2];
-        for (i, metered) in [false, true].into_iter().enumerate() {
-            let bytes = if metered { &metered_bytes } else { &raw };
-            let mut d = Driver::new(bytes, metered, &spec);
-            d.call(0, &init_vals(&manifest, 1));
-            let mut ordinal = 0u64;
-            micros[i] = best_of(1, activations, || {
-                let payload = if guest == "bench_protocol" {
-                    protocol_buffer(ordinal)
-                } else {
-                    ordinal.to_le_bytes().to_vec()
-                };
-                ordinal += 1;
-                d.call(1, &[Val::U64(ordinal), Val::U32(0), Val::bytes(&payload)]);
-            });
-        }
-        let _ = name;
-        out.push(Cost {
-            guest,
-            activations,
-            unmetered_micros: micros[0],
-            metered_micros: micros[1],
-        });
+        let (metered, config) = admitted(guest, &raw);
+        let protocol = guest == "bench_protocol";
+        let payload = move |ordinal: u64| {
+            if protocol {
+                protocol_buffer(ordinal)
+            } else {
+                ordinal.to_le_bytes().to_vec()
+            }
+        };
+        out.push(
+            bench::cost(
+                &mut engine,
+                guest,
+                &raw,
+                &metered,
+                &config,
+                &core_import_spec(),
+                activations,
+                &payload,
+                &clock,
+            )
+            .expect("the cost benchmark runs"),
+        );
     }
     out
 }
@@ -344,8 +145,7 @@ pub const BASELINE_NATIVE: [(usize, f64); 3] = [(0, 0.3), (64, 0.6), (65_536, 2.
 
 pub fn figures(quick: bool) -> Figures {
     let engine = {
-        let e = WasmtimeEngine::new(Limits::default()).expect("engine");
-        let info = e.info();
+        let info = florn_engine::Engine::info(&engine());
         format!("{} {}", info.name, info.version)
     };
     Figures {
@@ -371,7 +171,7 @@ impl Figures {
             "## Conformance kit figures: {} on {}\n\n### Crossing (RFC 005 rule 11), microseconds per call\n\n| Crossing | Unmetered | Metered | Stage 0 baseline |\n|---|---|---|---|\n",
             self.engine, self.arch
         );
-        for size in [0usize, 64, 1_500, 65_536] {
+        for size in bench::CROSSING_SIZES {
             let get = |m: bool| {
                 self.crossing
                     .iter()
