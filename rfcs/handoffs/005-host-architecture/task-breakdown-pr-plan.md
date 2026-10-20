@@ -38,4 +38,5 @@ Independent of the order above: PR-04 may precede PR-03; PR-08 may follow PR-03 
 | PR-11 | **merged** | `ee6ed27` with the shipped-modules follow-up `9ee461a`, 2026-10-20; CI green on three architectures, the kit's figures printed by each | C11: pending |
 | PR-12 | **merged** | `48c89a9` with the lint follow-up that follows it, 2026-10-20; CI green: three native architectures, and the kit in Chromium and Firefox on Linux and WebKit on macOS | C12: pending |
 | PR-13 | **merged** | `31eba4b` with the Wasmtime follow-up `f89ed91`, 2026-10-20; CI green on three native architectures and three browsers | C13: pending |
-| PR-14 | not started | | |
+| PR-14a | **merged** | `2c4a494`, 2026-10-20 (hardening from the audit; the split is the owner's decision AD-18); CI green on three native architectures and three browsers; the dispatched run 39427693248 green with the fuzz job | — |
+| PR-14b | not started | | |
