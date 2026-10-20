@@ -181,6 +181,7 @@ fn send(m: Message) -> i32 {
 /// `ptr` and `len` are a buffer of `florn_alloc`, taken back here.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn florn_load_scenario(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: the worker's script passes back a buffer of `florn_alloc` with its length, once.
     let bytes = unsafe { take(ptr, len) };
     send(Message::Command(Command::LoadScenario { bytes }))
 }
@@ -189,6 +190,7 @@ pub unsafe extern "C" fn florn_load_scenario(ptr: *mut u8, len: u32) -> i32 {
 /// As `florn_load_scenario`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn florn_load_module(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: the worker's script passes back a buffer of `florn_alloc` with its length, once.
     let bytes = unsafe { take(ptr, len) };
     send(Message::Command(Command::LoadModule { bytes }))
 }
@@ -197,6 +199,7 @@ pub unsafe extern "C" fn florn_load_module(ptr: *mut u8, len: u32) -> i32 {
 /// As `florn_load_scenario`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn florn_admit(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: the worker's script passes back a buffer of `florn_alloc` with its length, once.
     let bytes = unsafe { take(ptr, len) };
     send(Message::Command(Command::Admit { bytes }))
 }
@@ -209,6 +212,7 @@ pub unsafe extern "C" fn florn_admit(ptr: *mut u8, len: u32) -> i32 {
 /// As `florn_load_scenario`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn florn_admit_kit(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: the worker's script passes back a buffer of `florn_alloc` with its length, once.
     let bytes = unsafe { take(ptr, len) };
     let mut limits = Options::default().class_defaults;
     limits.memory_bytes = 2 * 1024 * 1024;
@@ -286,26 +290,68 @@ pub extern "C" fn florn_pump(max_ticks: u32) -> i32 {
     })
 }
 
-/// The transport's form: one encoded control message in, the replies as JSON out.
+/// The transport's form: one encoded control message in, the encoded replies through the
+/// controller's byte interface, rendered as JSON for the page. The encoder and the decoder are
+/// exercised in the browser on both directions.
 ///
 /// # Safety
 /// As `florn_load_scenario`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn florn_handle(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: the worker's script passes back a buffer of `florn_alloc` with its length, once.
     let bytes = unsafe { take(ptr, len) };
     CONTROLLER.with(|slot| {
         let mut slot = slot.borrow_mut();
         let Some(c) = slot.as_mut() else {
             return -1;
         };
-        let replies: Vec<Message> = match florn_control::decode(&bytes) {
-            Ok(env) => c.handle(env),
-            Err(e) => vec![Message::Notification(e.notification())],
-        };
+        let encoded = c.handle_bytes(&bytes);
+        let replies: Vec<Message> = encoded
+            .iter()
+            .filter_map(|b| florn_control::decode(b).ok().map(|e| e.message))
+            .collect();
         let n = replies.len() as i32;
         set_out(replies_json(&replies).into_bytes());
         n
     })
+}
+
+/// The run record of the current run (`export`, confirmed): the bytes in `OUT`, or -1.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_export_record() -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        let replies = c.handle(Envelope::new(Message::Command(Command::Export {
+            kind: florn_control::ExportKind::RunRecord {
+                trace: true,
+                payloads: false,
+            },
+            confirmed: true,
+        })));
+        for m in replies {
+            if let Message::Answer(Answer::Exported { bytes, .. }) = m {
+                let n = bytes.len() as i32;
+                set_out(bytes);
+                return n;
+            }
+        }
+        set_out(Vec::new());
+        -1
+    })
+}
+
+/// A replay of a run record (RFC 005 rule 26, `replay`): the replies as JSON.
+///
+/// # Safety
+/// As `florn_load_scenario`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn florn_replay(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: as above.
+    let record = unsafe { take(ptr, len) };
+    send(Message::Command(Command::Replay { record }))
 }
 
 /// The crossing benchmark (RFC 005 rule 11) over the kit's crossing guest, given as bytes:
@@ -315,6 +361,7 @@ pub unsafe extern "C" fn florn_handle(ptr: *mut u8, len: u32) -> i32 {
 /// As `florn_load_scenario`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn florn_bench_crossing(ptr: *mut u8, len: u32, scale: u32) -> i32 {
+    // SAFETY: as above.
     let raw = unsafe { take(ptr, len) };
     match bench_crossing(&raw, u64::from(scale)) {
         Ok(json) => {
@@ -419,7 +466,9 @@ pub unsafe extern "C" fn florn_bench_cost(
     name_len: u32,
     activations: u32,
 ) -> i32 {
+    // SAFETY: as above.
     let raw = unsafe { take(ptr, len) };
+    // SAFETY: as above, for the name's buffer.
     let name = String::from_utf8_lossy(&unsafe { take(name_ptr, name_len) }).into_owned();
     match bench_cost(&name, &raw, u64::from(activations)) {
         Ok(json) => {

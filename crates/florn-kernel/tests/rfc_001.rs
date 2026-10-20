@@ -330,6 +330,59 @@ fn zero_delay_chain_ends_with_the_microstep_fault_naming_the_origin() {
 }
 
 #[test]
+fn too_many_events_in_one_instant_end_the_run_with_the_fault_naming_the_origins() {
+    // Three pingers with one period over a mesh without delay: at tick 10, three timers fire
+    // and six messages arrive in the same instant, above a limit of five.
+    let mut r = Run::new(
+        Config {
+            events_per_instant: 5,
+            ..config(1, TiePolicy::ByIdentity)
+        },
+        vec![
+            (
+                1,
+                Script::Pinger {
+                    period: 10,
+                    bytes: vec![1],
+                },
+            ),
+            (
+                2,
+                Script::Pinger {
+                    period: 10,
+                    bytes: vec![2],
+                },
+            ),
+            (
+                3,
+                Script::Pinger {
+                    period: 10,
+                    bytes: vec![3],
+                },
+            ),
+        ],
+        0,
+    );
+    r.init();
+    r.run(1_000);
+    match r.kernel.run_fault() {
+        Some(RunFault::EventsPerInstantLimit {
+            instant,
+            limit,
+            origins,
+        }) => {
+            assert_eq!(instant.tick, 10);
+            assert_eq!(*limit, 5);
+            assert!(
+                !origins.is_empty() && origins.iter().all(|o| (1..=3).contains(o)),
+                "{origins:?}"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
 fn activation_that_faults_leaves_no_message() {
     let mut r = Run::new(
         config(3, TiePolicy::ByIdentity),

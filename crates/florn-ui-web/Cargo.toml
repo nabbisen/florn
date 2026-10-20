@@ -16,7 +16,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 florn-control = { workspace = true }
 florn-host = { workspace = true }
-florn-engine = { workspace = true }
+florn-engine = { workspace = true, features = ["bench"] }
 florn-engine-web = { workspace = true }
 florn-platform-web = { workspace = true }
 blake3 = { workspace = true }

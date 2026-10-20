@@ -36,6 +36,11 @@ function capacity() {
   return { instances, memory_bytes: 1024 * 1024 * 1024 };
 }
 
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function fetchBytes(path) {
   const r = await fetch(path);
   if (!r.ok) throw new Error(`${path}: ${r.status}`);
@@ -67,7 +72,32 @@ async function request() {
       text,
       modules,
       seed: seed === null ? null : seed,
+      replay: query.get("replay") === "1",
       transfer: modules.map((m) => m.bytes.buffer),
+    };
+  }
+  const overflow = query.get("overflow");
+  if (overflow) {
+    // More echo actors than the renderer holds, with the capacity told to be ample: the Host
+    // must end the run with `host.instance-failed` and the page must live (RFC 005 rule 10).
+    const count = parseInt(overflow, 10);
+    const echo = await fetchBytes("scenarios/modules/echo.wasm");
+    const hash = await sha256Hex(echo);
+    let text = `florn = 1\nname = "overflow"\ndomains = ["core"]\n\n[time]\ntick = "1ns"\nend = "10ns"\n\n[order]\ntie = "by-identity"\n\n[seed]\nroot = 1\n\n[limits.default]\nmemory = "2MiB"\n\n[modules.echo]\nsha256 = "${hash}"\ncontract = "florn:core/guest@0.1.0"\n`;
+    for (let id = 1; id <= count; id++) {
+      text += `\n[[actors]]\nid = ${id}\nname = "a${id}"\nkind = "module"\nmodule = "echo"\nports = []\n`;
+    }
+    return {
+      type: "scenario",
+      ...base,
+      // Told ample, so that the estimate passes and the renderer's own ceiling is what fails.
+      capacity: { instances: 100000, memory_bytes: 64 * 1024 * 1024 * 1024 },
+      name: "overflow",
+      text,
+      modules: [{ name: "echo", bytes: echo }],
+      seed: "1",
+      replay: false,
+      transfer: [echo.buffer],
     };
   }
   const bench = query.get("bench");

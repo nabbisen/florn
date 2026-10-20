@@ -48,7 +48,7 @@ ALLOWED = {
     "florn-guest": set(),
     "florn-kernel": set(),
     "florn-abi": set(),
-    "florn": set(),
+    "florn": {"florn-cli"},
 }
 bad = 0
 for crate in sorted(workspace):

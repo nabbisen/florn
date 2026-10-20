@@ -6,6 +6,7 @@
 //! Implemented by PR-05 of `rfcs/handoffs/005-host-architecture/task-breakdown-pr-plan.md`.
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "bench")]
 pub mod bench;
 #[cfg(feature = "conformance")]
 pub mod conformance;

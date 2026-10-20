@@ -122,6 +122,30 @@ for (const name of browsers) {
     check(first.support && first.support.host_build === "browser", `${name}: the Host says it is the browser build`, first.support);
   }
 
+  // Replay under the browser Host (RFC 005 section 11, replay; AC-003's browser half): the
+  // record exported by the worker replays to a match in the same worker.
+  try {
+    const s = "echo-pair";
+    const r = await open(`scenario=${s}&seed=${digests.runs[s].seed}&replay=1`);
+    check(r.replay && r.replay.outcome === "replay.matched" && r.replay.chain === digests.runs[s].chain, `${name}: the record replays to a match in the browser`, r.replay || {});
+  } catch (err) {
+    check(false, `${name}: replay`, { error: String(err).split("\n")[0] });
+  }
+
+  // Instance failure (RFC 005 rule 10): more actors than the renderer holds arrive as
+  // `host.instance-failed`, the run ends, the page lives.
+  if (name !== "webkit") {
+    try {
+      const r = await open("overflow=1500", 600000);
+      // The run never starts: the failure is reported with the actor and the engine's text, and
+      // the Host is ready for another run (the engine came back).
+      const failed = (r.events || []).find((x) => x.code === "host.instance-failed");
+      check(Boolean(failed) && r.state === "ready", `${name}: an instance failure is reported as host.instance-failed and the Host lives`, { state: r.state, code: failed ? failed.code : null, text: failed ? String(failed.params.text.value).slice(0, 60) : null, error: r.error });
+    } catch (err) {
+      check(false, `${name}: instance failure`, { error: String(err).split("\n")[0] });
+    }
+  }
+
   // The transport's form refuses bytes that are no message with its code.
   try {
     const h = await open("bench=handle");

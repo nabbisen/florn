@@ -93,8 +93,10 @@ impl Stream {
     /// RFC 003 rule 22). Generates the blocks up to the position; linear in `drawn`.
     pub fn at(key: StreamKey, drawn: u64) -> Self {
         let mut s = Self::new(key);
-        // Two words of 32 bits per draw: skip whole blocks of 16 words, then the remainder.
-        let words = drawn * 2;
+        // Two words of 32 bits per draw: skip whole blocks of 16 words, then the remainder. A
+        // position no run can reach (a hostile checkpoint) saturates rather than overflows;
+        // the fuzz target of RFC 006 rule 7 found the overflow.
+        let words = drawn.saturating_mul(2);
         s.counter = words / 16;
         s.index = 16;
         for _ in 0..(words % 16) {
@@ -247,5 +249,23 @@ mod tests {
             StreamKey::derive(1, 1, "actor"),
             StreamKey::derive(1, 1, "connection")
         );
+    }
+}
+
+#[cfg(test)]
+mod position_tests {
+    use super::*;
+
+    #[test]
+    fn a_position_beyond_any_run_does_not_overflow() {
+        let key = StreamKey::derive(1, 2, "actor");
+        let s = Stream::at(key, u64::MAX);
+        assert_eq!(s.drawn(), u64::MAX);
+        let t = Stream::at(key, 5);
+        let mut u = Stream::new(key);
+        for _ in 0..5 {
+            u.next_u64();
+        }
+        assert_eq!(t, u);
     }
 }

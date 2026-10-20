@@ -84,8 +84,8 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 | Quotas | `rfc_003::each_quota_faults_one_above_and_passes_one_below`; `rfc_002::timers_…`; `rfc_002::telemetry_…` |
 | Memory | `rfc_001::memory_within_the_limit_is_never_refused` |
 | Estimate before instantiate | `rfc_003::an_estimate_above_capacity_is_refused_before_anything_is_instantiated` |
-| Capacity probe | `florn-cli`'s `probe_prints_the_capacity_and_bad_arguments_print_usage` |
-| Export and restore (AC-006) | `ac::ac_006_…` |
+| Capacity probe | the runner's `probe_prints_the_capacity_and_bad_arguments_print_usage` (`crates/florn/tests/cli.rs`) |
+| Export and restore (AC-006) | `ac::ac_006_…` natively; the browser half waits for the restore command of release 0.3, since the control interface of 0.1 carries no restore |
 | Versions | `rfc_003::a_checkpoint_of_another_version_is_refused_naming_the_field`; cost-model version 2 does not exist yet |
 | Cost benchmark | `rfc_003::the_cost_benchmark_produces_its_figures`; the figures from `figures` |
 | NaN probe | `rfc_003::the_nan_probe_reports_five_patterns`; the bits per architecture from `figures` in CI |
@@ -98,12 +98,13 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 | Tiers | `ac::ac_001_…`, `rfc_001::observation_changes_nothing` (through the control interface) |
 | Engine adapter rules | `rfc_005::the_crossing_benchmark_produces_its_figures`; the figures from `figures`; in the browser, the driver's crossing figures and its check that the worker made no view per lowering |
 | Payload digests | `ac::ac_003_…` (the record's payload digests); the kernel-path figure from `figures` |
-| Replay | `ac::ac_003_…` |
+| Replay | `ac::ac_003_…` (matched, and a divergent record names its interval); the runner's exit code 2 test; the browser driver's replay check |
 | Interventions | `rfc_001::a_run_with_an_intervention_replays_to_the_same_digest` |
 | Control interface | `florn-host`'s `tests/control.rs` |
 | Run record | `ac::ac_003_…` |
-| Capacity | `rfc_003::an_estimate_…`; `florn-cli`'s probe test |
+| Capacity | `rfc_003::an_estimate_…`; the runner's probe test |
 | Native cache | `rfc_005::the_second_run_of_a_scenario_does_not_compile_the_module` |
+| Instance failure | the browser driver's overflow check: `host.instance-failed`, the run ends, the page lives |
 
 ## The figures
 

@@ -1,4 +1,3 @@
-//! The `florn` name on crates.io is reserved by this facade. The product lives in the `florn-*`
-//! crates of this workspace (RFC 005 §9); this crate re-exports nothing until release 0.1 decides
-//! what a single dependency on `florn` should mean.
+//! The crate that carries the name: its binary is the headless runner (`florn-cli`). The library
+//! re-exports nothing before release 1.0, so that nothing becomes an API by accident.
 #![forbid(unsafe_code)]

@@ -16,3 +16,5 @@ wat = { workspace = true, optional = true }
 [features]
 # The adapter conformance cases of `conformance`, run by each adapter's tests.
 conformance = ["dep:wat"]
+# The benchmark drivers of the conformance kit and the browser test page.
+bench = []

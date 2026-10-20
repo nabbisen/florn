@@ -4,9 +4,8 @@
 //! RFC 002 rule 8 (every failure is the `contract` fault) and the canonical NaN of rule 9.
 //!
 //! The one place besides the adapters where `unsafe` may appear, with the invariant stated at each
-//! use — none is needed so far.
-//!
-//! Implemented by PR-04 of `rfcs/handoffs/005-host-architecture/task-breakdown-pr-plan.md`.
+//! use; none is needed so far, and the crate forbids it until one is.
+#![forbid(unsafe_code)]
 
 pub mod core_world;
 mod lift;

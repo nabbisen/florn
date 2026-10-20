@@ -341,7 +341,7 @@ pub struct Trace {
 }
 
 impl Trace {
-    /// The provisional chain interval (RFC 005 rule 23).
+    /// The chain interval (RFC 005 rule 23), as measured in Phase 1.
     /// The interval of RFC 005 rule 23 as measured in Phase 1: 40 bytes per 1,000 records,
     /// and a divergence localised within about ten milliseconds of work.
     pub const DEFAULT_INTERVAL: u64 = 1_000;

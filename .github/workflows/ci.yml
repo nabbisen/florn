@@ -5,15 +5,20 @@
 # native Host. The browser matrix (Chromium and Firefox on Linux, WebKit on macOS, through
 # Playwright) runs the conformance kit's scenarios and benchmarks under the browser Host.
 #
-# Only GitHub's own actions are used; tools are installed from crates.io with a lock file. RFC 006
-# rule 5 steps 4 and 5 (licences, advisories, fuzzing) run here; fuzzing joins in Phase 1.
+# Only GitHub's own actions are used; tools are installed from crates.io and npm with lock files.
+# RFC 006 rule 5 steps 4 and 5 (licences, advisories, fuzzing) run here: the fuzz job weekly, on
+# dispatch and on a tag.
 
 name: ci
 
 on:
   push:
     branches: [main]
+    tags: ["[0-9]*"]
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
 
 permissions:
   contents: read
@@ -42,7 +47,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          key: cargo-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml') }}
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Lint, native (every target, warnings denied)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Lint, wasm32 (the browser crates)
+        run: cargo clippy --locked --target wasm32-unknown-unknown -p florn-engine-web -p florn-platform-web -p florn-ui-web -- -D warnings
       - name: Check, native
         run: cargo check --workspace --all-targets --locked
       - name: Test, native
@@ -51,7 +62,11 @@ jobs:
         run: cargo check --locked --target wasm32-unknown-unknown -p florn-kernel -p florn-abi -p florn-model -p florn-admission -p florn-control -p florn-host -p florn-engine -p florn-engine-web -p florn-platform -p florn-platform-web -p florn-guest -p florn-ui-model -p florn-ui-scene -p florn-ui-web
       - name: Guests (the SDK's example modules for the wasm32 target)
         run: cargo build --locked --release --target wasm32-unknown-unknown -p florn-guest --examples
-      - name: Figures (the conformance kit's benchmarks, RFC 005 rule 11 and RFC 003 section 7)
+      - name: Figures, quick (the kit's benchmarks run; the published figures come from a dispatched or tagged run)
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: cargo run --locked --release -p florn-conformance -- figures --quick
+      - name: Figures (RFC 005 rule 11 and RFC 003 section 7; the release notes copy this table)
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
         run: cargo run --locked --release -p florn-conformance -- figures
       - name: Dependency direction (RFC 005 rules 1 and 43)
         run: python3 -I ci/check-deps.py
@@ -77,7 +92,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-browser-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          key: cargo-browser-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml') }}
       - name: The Host's worker module (RFC 005 rule 32)
         run: |
           cargo build --locked --release --target wasm32-unknown-unknown -p florn-ui-web
@@ -87,6 +102,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: ci/browser/package-lock.json
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ matrix.os }}-${{ hashFiles('ci/browser/package-lock.json') }}
       - name: Playwright (test tooling, pinned by the lock file; nothing of it is linked into florn)
         working-directory: ci/browser
         run: |
@@ -95,6 +114,26 @@ jobs:
       - name: The conformance kit under the browser Host (AC-001, AC-002, AC-007; RFC 005 section 11)
         working-directory: ci/browser
         run: node run.js --browsers ${{ matrix.browsers }}
+
+  fuzz:
+    name: fuzz (RFC 006 rule 7; weekly, on dispatch, and on a tag)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nightly toolchain (cargo-fuzz needs it; nothing of it ships)
+        run: rustup toolchain install nightly --profile minimal
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-fuzz
+            ~/.cargo/registry
+            fuzz/target
+          key: fuzz-${{ hashFiles('fuzz/Cargo.lock', 'Cargo.lock') }}
+      - name: cargo-fuzz
+        run: command -v cargo-fuzz || cargo install cargo-fuzz --version 0.13.2 --locked
+      - name: Every target, three minutes each
+        run: ci/fuzz.sh 180
 
   licences:
     name: licences and advisories (RFC 006 rule 6)

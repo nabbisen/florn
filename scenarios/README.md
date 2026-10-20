@@ -13,7 +13,7 @@ cargo run --release -p florn-conformance -- scenarios
 Run one with the headless runner:
 
 ```sh
-cargo run --release -p florn-cli -- run scenarios/echo-pair.toml --modules scenarios/modules --seed 42
+cargo run --release -p florn -- run scenarios/echo-pair.toml --modules scenarios/modules --seed 42
 ```
 
 The `chain` line printed must equal the scenario's `chain` in `digests.toml`. The whole set, as a loop (checklist C9):
@@ -23,12 +23,12 @@ for f in scenarios/*.toml; do
   n=$(basename "$f" .toml); [ "$n" = digests ] && continue
   seed=$(sed -n "/^\[runs.\"$n\"\]/,/^$/p" scenarios/digests.toml | sed -n 's/^seed = //p')
   want=$(sed -n "/^\[runs.\"$n\"\]/,/^$/p" scenarios/digests.toml | sed -n 's/^chain = "\(.*\)"/\1/p')
-  got=$(cargo run --release -q -p florn-cli -- run "$f" --modules scenarios/modules --seed "$seed" --out /tmp/"$n".florn-run 2>/dev/null | sed -n 's/^chain = //p')
+  got=$(cargo run --release -q -p florn -- run "$f" --modules scenarios/modules --seed "$seed" --out /tmp/"$n".florn-run 2>/dev/null | sed -n 's/^chain = //p')
   [ "$got" = "$want" ] && echo "$n: matched" || echo "$n: DIFFERS ($got)"
 done
 ```
 
-The `zero-delay` scenario ends with the run fault of RFC 001 rule 13 by design; the runner exits with 0 and prints `ended = host-fault`, and its digest is recorded like the others.
+The `zero-delay` scenario ends with the run fault of RFC 001 rule 13 by design; the runner prints `ended = host-fault` and exits with 3, and its digest is recorded like the others.
 
 | Scenario | What it shows |
 |---|---|

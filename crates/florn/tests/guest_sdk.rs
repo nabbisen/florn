@@ -199,6 +199,41 @@ fn the_sdk_guests_admit_and_run() {
             == 1,
         "the probe's 0/0 report"
     );
+    // A chain without delay ends the run with the fault of RFC 001 rule 13: exit code 3.
+    let text = scenario(&guests, 100, &[(1, "pinger", 1), (2, "pinger", 1)], &[vec![(1, 0), (2, 0)]])
+        .replace(
+            "id = 1\nname = \"a1\"\nkind = \"module\"\nmodule = \"pinger\"\nports = [{ id = 0, name = \"p0\", type = \"core/port\" }]\n",
+            "id = 1\nname = \"a1\"\nkind = \"module\"\nmodule = \"pinger\"\nports = [{ id = 0, name = \"p0\", type = \"core/port\" }]\n[actors.config]\nperiod = 0\nat-init = true\necho = true\n",
+        )
+        .replace(
+            "id = 2\nname = \"a2\"\nkind = \"module\"\nmodule = \"pinger\"\nports = [{ id = 0, name = \"p0\", type = \"core/port\" }]\n",
+            "id = 2\nname = \"a2\"\nkind = \"module\"\nmodule = \"pinger\"\nports = [{ id = 0, name = \"p0\", type = \"core/port\" }]\n[actors.config]\nperiod = 0\necho = true\n",
+        );
+    let scen = d.join("zero-delay.toml");
+    std::fs::write(&scen, text).unwrap();
+    let out = florn()
+        .args([
+            "run",
+            scen.to_str().unwrap(),
+            "--modules",
+            guests.to_str().unwrap(),
+            "--seed",
+            "1",
+            "--out",
+            d.join("zero-delay.florn-run").to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        value(&String::from_utf8_lossy(&out.stdout), "ended"),
+        Some("host-fault")
+    );
     // Each hostile guest faults with its kind; the echo neighbour continues to the end.
     for (name, fault) in [
         ("hostile_loop", "fault.budget"),

@@ -23,7 +23,7 @@ pub use package::{Package, PackageMeta};
 pub use quantity::{Decimal, Quantity, TickLength};
 
 /// The maxima that bound every allocation a manifest could size (RFC 004 rule 39, RFC 006 §7).
-/// Host constants; provisional until Phase 1 measures (RFC 003 open question 1).
+/// Host constants, as RFC 003 rule 19 records them after the Phase 1 measurements.
 pub mod maxima {
     /// Bytes of manifest text.
     pub const MANIFEST_BYTES: usize = 4 * 1024 * 1024;
@@ -40,7 +40,7 @@ pub mod maxima {
 }
 
 /// The Host's maxima for the limits of `[limits]` (RFC 004 rule 15, RFC 003 rule 19).
-/// A manifest may only lower them. The defaults are the browser Host's provisional values.
+/// A manifest may only lower them. The defaults are the browser Host's values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HostMaxima {
     pub budget: u64,

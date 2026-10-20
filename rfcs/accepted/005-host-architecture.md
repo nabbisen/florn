@@ -1,6 +1,6 @@
 # RFC 005 — Host architecture: one core, adapters, control interface, repository layout
 
-**Status.** Accepted (2026-10-14). Amended 2026-10-19 by PR-08: rule 26 gains `load-module`, the command that supplies a module a manifest references by hash (a package carries its own). Amended 2026-10-14 with the results of the proof of concept on telemetry transport: rule 14 (record size, ring, queue), rule 32 (worker readiness), rule 33 (hosting requirement), open question 3. Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 10 (compiled-module cache in the browser adapter), rule 17 (swapping cost and policy). Rule 8's choice recorded 2026-10-20 by PR-12: the budget is one Host-owned global shared by every guest instance, reached by the Host through the exports of a six-instruction module that imports the same global, a WebAssembly-to-WebAssembly call; the cost of the two accesses per activation is the metered-minus-unmetered difference of the call floor in the conformance kit's browser figures. The same path serves the calls into a guest (an index of the Host module's exported function table) and out of it (the Host's exports bound as the guest's imports). Open questions 1 and 2 resolved 2026-10-20 by PR-13 (rules 22 and 23); the formats of 0.1 are frozen the same day: the trace records of rule 20, the control messages of rule 25, `run.toml` and the checkpoint of rule 29, each with a version of 1, their encodings recorded by the conformance kit's format tests.
+**Status.** Accepted (2026-10-14). Amended 2026-10-19 by PR-08: rule 26 gains `load-module`, the command that supplies a module a manifest references by hash (a package carries its own). Amended 2026-10-14 with the results of the proof of concept on telemetry transport: rule 14 (record size, ring, queue), rule 32 (worker readiness), rule 33 (hosting requirement), open question 3. Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 10 (compiled-module cache in the browser adapter), rule 17 (swapping cost and policy). Rule 8's choice recorded 2026-10-20 by PR-12: the budget is one Host-owned global shared by every guest instance, reached by the Host through the exports of a six-instruction module that imports the same global, a WebAssembly-to-WebAssembly call; the cost of the two accesses per activation is the metered-minus-unmetered difference of the call floor in the conformance kit's browser figures. The same path serves the calls into a guest (an index of the Host module's exported function table) and out of it (the Host's exports bound as the guest's imports). Open questions 1 and 2 resolved 2026-10-20 by PR-13 (rules 22 and 23); the formats of 0.1 are frozen the same day: the trace records of rule 20, the control messages of rule 25, `run.toml` and the checkpoint of rule 29, each with a version of 1, their encodings recorded by the conformance kit's format tests. Rules 20 and 29 amended 2026-10-20 by PR-14a (the trace's version is the record's; `diagnostic.bin` listed).
 **Tracks.** Requirements ARCH-007, ARCH-008, ARCH-009, ACT-007, DES-004, DES-007, DES-011, DES-012, OBS-001, OBS-002, OBS-003, OBS-008, WEB-001, WEB-002, WEB-003, WEB-006, WEB-009, WEB-010, WEB-012, MIG-001 to MIG-005, CTL-001 to CTL-004, SEC-008, DATA-006, DATA-012, UI-007, UI-011, UI-013, AUTO-001, AUTO-002, AUTO-006, PKG-001, PKG-007, NFR-003, NFR-005, NFR-009, NFR-013. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The structure of the Host and its two adapters; the engine adapter's rules; the trace encoding and the digest; the control interface and the run record; the browser Host's hosting rules; the three-layer user interface; the repository layout.
 **Depends on.** [RFC 001](./001-determinism-contract.md) rules 33 to 55; [RFC 002](./002-guest-contract.md) for the ABI and effects; [RFC 003](./003-module-admission-and-limits.md) for admission, capacity, and state export; [RFC 004](./004-core-model.md) for the manifest, the package, the canonical encoding, and the coded errors.
@@ -122,7 +122,7 @@ The terms of RFC 001 to RFC 004 apply. In addition:
 
 ## 5. Trace, encoding, digest
 
-**Rule 20.** The trace consists of the records of RFC 001 rule 44 in the canonical encoding of RFC 004 §5, applied to these record formats.
+**Rule 20.** The trace consists of the records of RFC 001 rule 44 in the canonical encoding of RFC 004 §5, applied to these record formats. The trace format carries no version of its own: its version is the run record's (rule 29).
 
 | Record | Fields, in order |
 |---|---|
@@ -170,6 +170,7 @@ The terms of RFC 001 to RFC 004 apply. In addition:
 | `trace/<n>.bin` | The trace in chunks of the interval of rule 23 | Optional |
 | `payloads/<digest>` | Payload bytes by digest, when the export includes them | Optional |
 | `diagnostic.log` | One coded record per line: admission results, faults, limit events, interventions, capacity warnings (SEC-008) | Yes |
+| `diagnostic.bin` | The same log in the canonical encoding of RFC 007 rule 12, the form a front end re-renders in any language | Yes |
 | `README.md` | For people | No |
 
 A run record contains no scenario text and no module bytes; it references them by hash. A package (RFC 004 §6) and a run record are different files for different questions: what world, and what happened in it.
@@ -238,7 +239,7 @@ florn/
     florn-core/wit/            florn:core (RFC 002 §4; a test checks equality with the RFC)
     florn-network/wit/         florn:network (Phase 2)
   crates/
-    florn/                     the facade that reserves the name; re-exports nothing before 0.1
+    florn/                     the crate that carries the name: the binary `florn` (the runner's entry point); its library re-exports nothing before 1.0
     florn-kernel/              time, queue, order, activation, effects, trace, digest, replay
     florn-abi/                 canonical ABI lifting and lowering (RFC 002 §2), shared by both engine adapters
     florn-model/               manifest, package, canonical encoding, validation (RFC 004)
@@ -257,7 +258,7 @@ florn/
     florn-ui-model/            view model (§8)
     florn-ui-scene/            scene (§8)
     florn-ui-web/              browser shell (Leptos); later florn-ui-native
-    florn-cli/                 the headless runner, binary `florn` (§6, rule 31)
+    florn-cli/                 the headless runner as a library (§6, rule 31); its tests live with the binary in `florn/`
   scenarios/                   example scenarios with recorded digests (PKG-005, AUTO-003)
   docs/                        the book: requirements, guides
   rfcs/                        this directory

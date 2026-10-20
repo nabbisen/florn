@@ -269,7 +269,25 @@ function runScenario(m) {
   const state = (out() || []).find((x) => x.kind === "run-state") || {};
   host.exports.florn_support();
   const support = (out() || []).find((x) => x.kind === "support") || {};
-  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support };
+  let replay = null;
+  if (m.replay) {
+    // Export the record and replay it in this same worker: the comparison must match.
+    const n = host.exports.florn_export_record();
+    if (n > 0) {
+      const record = hostBytes().slice(host.exports.florn_out_ptr(), host.exports.florn_out_ptr() + host.exports.florn_out_len());
+      host.exports.florn_replay(give(record), record.length);
+      const started = out() || [];
+      host.exports.florn_advance(0xffffffff, 0xffffffff);
+      const replies = out() || [];
+      host.exports.florn_run_state();
+      const after = (out() || []).find((x) => x.kind === "run-state") || {};
+      const outcome = [...started, ...replies].find((x) => x.code === "replay.matched" || x.code === "replay.diverged");
+      replay = { record_bytes: record.length, outcome: outcome ? outcome.code : null, chain: after.chain };
+    } else {
+      replay = { error: "no record exported" };
+    }
+  }
+  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay };
 }
 
 function runBench(m) {

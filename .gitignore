@@ -2,3 +2,6 @@
 /docs/book
 /ci/browser/node_modules
 /crates/florn-ui-web/www/florn_host.wasm
+/fuzz/target
+/fuzz/artifacts
+/fuzz/corpus

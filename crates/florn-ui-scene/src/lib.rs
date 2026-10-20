@@ -1,4 +1,4 @@
 //! The scene: what to draw; depends on `florn-ui-model` only (RFC 005 §8).
 //!
-//! Implemented by the pull requests of `rfcs/handoffs/005-host-architecture/task-breakdown-pr-plan.md`.
+//! Empty in release 0.1; the scene arrives with the 0.2 shell (RFC 005 rule 37).
 #![forbid(unsafe_code)]

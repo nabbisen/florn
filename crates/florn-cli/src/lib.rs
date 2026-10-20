@@ -1,5 +1,6 @@
-//! The headless runner, binary `florn` (RFC 005 rule 31; external design §4): a front end like
-//! the others, driving the Host through the control interface and nothing else.
+//! The headless runner (RFC 005 rule 31; external design §4): a front end like the others,
+//! driving the Host through the control interface and nothing else. The binary `florn` is the
+//! `florn` crate, whose `main` calls [`run`] with the process's arguments.
 //!
 //! ```text
 //! florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N]
@@ -7,21 +8,21 @@
 //! florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]
 //! florn admit <module.wasm>
 //! florn probe [--instances N] [--memory BYTES]
+//! florn help
 //! ```
 //!
 //! Messages are English from the built-in table; `run` prints the chain, `replay` the
 //! comparison, `admit` the manifest and the admitted hash, `probe` the capacity. Exit codes: 0
-//! done, 1 refused or failed, 2 a replay diverged.
+//! done, 1 refused or failed, 2 a replay diverged, 3 the run ended with a run fault (the
+//! `ended` line says which).
 #![forbid(unsafe_code)]
 
-mod english;
+pub mod english;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use florn_control::{
-    Answer, Command, Envelope, ExportKind, Message, Notification, Query, SeedChoice, Unit,
-};
+use florn_control::{Answer, Command, Envelope, ExportKind, Message, Query, SeedChoice, Unit};
 use florn_engine_wasmtime::{Limits, WasmtimeEngine};
 use florn_host::{Controller, Options};
 use florn_platform_native::NativePlatform;
@@ -41,7 +42,7 @@ struct Args {
 }
 
 fn usage() -> &'static str {
-    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]"
+    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done; 1 refused or failed; 2 the replay diverged; 3 the run ended with a run fault"
 }
 
 fn parse_args(argv: &[String]) -> Result<Args, String> {
@@ -270,7 +271,11 @@ fn cmd_run(args: &Args) -> Result<ExitCode, String> {
         }
         _ => return Err("the run record was not written".into()),
     }
-    Ok(if state.reproducible {
+    // A run fault (a limit of RFC 001 rule 13, or a Host fault) is its own exit code, so that a
+    // script can tell it from a refusal; the `ended` line names the reason.
+    Ok(if state.ended.as_deref() != Some("end-reached") {
+        ExitCode::from(3)
+    } else if state.reproducible {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)
@@ -390,8 +395,8 @@ fn cmd_probe(args: &Args) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn main() -> ExitCode {
-    let argv: Vec<String> = std::env::args().skip(1).collect();
+/// The runner over the process's arguments (without the program name); the exit code.
+pub fn run(argv: Vec<String>) -> ExitCode {
     let args = match parse_args(&argv) {
         Ok(a) => a,
         Err(e) => {
@@ -408,6 +413,10 @@ fn main() -> ExitCode {
             println!("florn {}", env!("CARGO_PKG_VERSION"));
             Ok(ExitCode::SUCCESS)
         }
+        "help" | "--help" | "-h" => {
+            println!("{}", usage());
+            Ok(ExitCode::SUCCESS)
+        }
         _ => Err(usage().to_string()),
     };
     match result {
@@ -418,6 +427,3 @@ fn main() -> ExitCode {
         }
     }
 }
-
-#[allow(dead_code)]
-fn _notification_type_is_used(_: &Notification) {}

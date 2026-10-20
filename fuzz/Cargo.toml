@@ -1,0 +1,65 @@
+[package]
+name = "florn-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "The fuzz targets of RFC 006 rule 7: every parser of untrusted input, run with cargo-fuzz on the nightly toolchain (test tooling; nothing of it ships)"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+florn-model = { path = "../crates/florn-model" }
+florn-admission = { path = "../crates/florn-admission" }
+florn-host = { path = "../crates/florn-host" }
+florn-control = { path = "../crates/florn-control" }
+florn-kernel = { path = "../crates/florn-kernel" }
+
+[[bin]]
+name = "manifest"
+path = "fuzz_targets/manifest.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "package"
+path = "fuzz_targets/package.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "record"
+path = "fuzz_targets/record.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "checkpoint"
+path = "fuzz_targets/checkpoint.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "control"
+path = "fuzz_targets/control.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "trace"
+path = "fuzz_targets/trace.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "module"
+path = "fuzz_targets/module.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "run_toml"
+path = "fuzz_targets/run_toml.rs"
+test = false
+doc = false

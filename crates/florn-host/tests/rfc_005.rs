@@ -510,6 +510,30 @@ fn the_estimate_refuses_before_anything_is_instantiated() {
         florn_host::HostError::Refused(e) => assert_eq!(e.codes(), ["host.capacity-exceeded"]),
         other => panic!("{other}"),
     }
+    // Within capacity but at nine tenths of it: a warning precedes the limit.
+    let mut platform = FixedPlatform {
+        capacity: Capacity {
+            instances: 2,
+            memory_bytes: 1 << 40,
+            swap_cost_us_per_kb: None,
+        },
+        ..Default::default()
+    };
+    let run = Run::new(
+        support::engine(),
+        Admission::default(),
+        &mut platform,
+        spec.manifest(),
+        &spec.modules(),
+        Seed::Given(1),
+        options(),
+    )
+    .expect("two instances fit");
+    assert!(
+        run.log().codes().contains(&"host.capacity-warning"),
+        "{:?}",
+        run.log().codes()
+    );
     // A chosen seed becomes an input.
     let mut platform = FixedPlatform {
         seeds: vec![123_456],

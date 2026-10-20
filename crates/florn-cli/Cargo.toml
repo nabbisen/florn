@@ -1,6 +1,6 @@
 [package]
 name = "florn-cli"
-description = "The headless runner, binary `florn`: run, replay, admit, probe"
+description = "The headless runner as a library: run, replay, admit, probe; the binary `florn` is the florn crate"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,10 +16,3 @@ florn-engine-wasmtime = { workspace = true }
 florn-platform-native = { workspace = true }
 florn-model = { workspace = true }
 
-[dev-dependencies]
-florn-host = { workspace = true, features = ["test-guests"] }
-wat = { workspace = true }
-
-[[bin]]
-name = "florn"
-path = "src/main.rs"

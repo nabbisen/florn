@@ -16,7 +16,7 @@ florn-abi = { workspace = true }
 florn-model = { workspace = true }
 florn-admission = { workspace = true }
 florn-control = { workspace = true }
-florn-engine = { workspace = true, features = ["conformance"] }
+florn-engine = { workspace = true, features = ["conformance", "bench"] }
 florn-engine-wasmtime = { workspace = true }
 florn-platform = { workspace = true }
 florn-platform-native = { workspace = true }

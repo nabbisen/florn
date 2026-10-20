@@ -63,8 +63,8 @@ pub struct WebPlatform {
 }
 
 impl WebPlatform {
-    /// The capacity the page gives: measured by its probe, or the family's provisional figure
-    /// (RFC 003 rule 20; the probe is measured in PR-13).
+    /// The capacity the page gives: the family's measured ceiling with a margin
+    /// (RFC 003 rule 20; the ceilings measured by the conformance kit's probe).
     pub fn with_capacity(instances: u64, memory_bytes: u64) -> Self {
         Self {
             capacity: Capacity {

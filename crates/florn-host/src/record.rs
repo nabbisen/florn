@@ -16,6 +16,9 @@ pub const EXTENSION: &str = "florn-run";
 pub const MAX_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 pub const MAX_ENTRY_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_ENTRIES: usize = 1_000_000;
+/// The most a reader allocates before it has read that much: a lying entry size costs nothing
+/// (RFC 006 section 7).
+const PREALLOC_BYTES: u64 = 1024 * 1024;
 
 /// What goes into a run record (RFC 005 rule 30: the preview lists the same).
 #[derive(Clone, Debug, Default)]
@@ -143,12 +146,30 @@ pub fn read(bytes: &[u8]) -> Result<Read_, String> {
         }
         entries.push(f.name().map_err(|e| e.to_string())?.into_owned());
     }
+    {
+        let mut seen = std::collections::BTreeSet::new();
+        if let Some(dup) = entries.iter().find(|e| !seen.insert(e.as_str())) {
+            return Err(format!("duplicate entry {dup}"));
+        }
+    }
+    // Every entry is read through a bounded reader; the declared size is a claim, not a plan.
+    let mut total: u64 = 0;
     let mut get = |name: &str| -> Result<Option<Vec<u8>>, String> {
-        let Ok(mut f) = archive.by_name(name) else {
+        let Ok(f) = archive.by_name(name) else {
             return Ok(None);
         };
-        let mut v = Vec::with_capacity(f.size() as usize);
-        f.read_to_end(&mut v).map_err(|e| e.to_string())?;
+        let declared = f.size();
+        let mut v = Vec::with_capacity(declared.min(PREALLOC_BYTES) as usize);
+        f.take(MAX_ENTRY_BYTES + 1)
+            .read_to_end(&mut v)
+            .map_err(|e| e.to_string())?;
+        if v.len() as u64 > MAX_ENTRY_BYTES {
+            return Err("file.too-large".into());
+        }
+        total = total.saturating_add(v.len() as u64);
+        if total > MAX_BYTES {
+            return Err("file.too-large".into());
+        }
         Ok(Some(v))
     };
     let run_text = get("run.toml")?.ok_or("run.toml missing")?;

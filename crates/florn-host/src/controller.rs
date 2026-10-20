@@ -58,6 +58,7 @@ pub struct Controller<E: Engine> {
     target: Option<u64>,
     subs: Subscriptions,
     log_seen: usize,
+    dropped_seen: u64,
 }
 
 impl<E: Engine> Controller<E> {
@@ -80,6 +81,7 @@ impl<E: Engine> Controller<E> {
             target: None,
             subs: Subscriptions::default(),
             log_seen: 0,
+            dropped_seen: 0,
         }
     }
 
@@ -219,6 +221,21 @@ impl<E: Engine> Controller<E> {
             self.log_seen = run.log().entries().len();
         }
         self.drain_telemetry(out);
+        // Records the display path dropped since the last advance (RFC 005 rule 14).
+        if let Some(run) = &self.run {
+            let dropped = run.telemetry_dropped();
+            if dropped > self.dropped_seen {
+                let n = Code::TelemetryDropped.notification(
+                    Scope::run(),
+                    vec![
+                        Value::Count(dropped - self.dropped_seen),
+                        Value::Enum("messages".into()),
+                    ],
+                );
+                self.dropped_seen = dropped;
+                out.push(Message::Notification(n));
+            }
+        }
         self.progress(out);
     }
 
@@ -269,6 +286,21 @@ impl<E: Engine> Controller<E> {
                 if matches!(self.state, RunState::Running | RunState::Paused) {
                     return self.notify(out, self.not_now(name));
                 }
+                // The module maximum applies before anything is held (RFC 006 section 7).
+                let max = florn_model::package::MAX_MODULE_BYTES;
+                if bytes.len() as u64 > max {
+                    return self.notify(
+                        out,
+                        Code::ModuleTooLarge.notification(
+                            Scope::file("module"),
+                            vec![
+                                Value::Enum("bytes".into()),
+                                Value::Count(bytes.len() as u64),
+                                Value::Count(max),
+                            ],
+                        ),
+                    );
+                }
                 let h = hex(&florn_admission::sha256(&bytes));
                 self.modules.insert(h, bytes);
                 self.refresh_ready();
@@ -278,7 +310,17 @@ impl<E: Engine> Controller<E> {
                 let Some(admission) = self.admission.as_mut() else {
                     return self.notify(out, self.not_now(name));
                 };
-                match admission.admit("module", &bytes, &ClassLimits::defaults()) {
+                // Under the loaded scenario's default class when there is one, so that the hash
+                // printed is the hash a run of that scenario records; else the Host's defaults.
+                let limits = match &self.scenario {
+                    Some(l) => ClassLimits::resolve(
+                        &l.manifest.limits_for("default"),
+                        &self.options.class_defaults,
+                        &self.options.host,
+                    ),
+                    None => self.options.class_defaults,
+                };
+                match admission.admit("module", &bytes, &limits) {
                     Ok(a) => {
                         let summary = module_summary("module", &a.manifest, &a.source_sha256);
                         out.push(Message::Answer(Answer::Admitted {
@@ -410,6 +452,16 @@ impl<E: Engine> Controller<E> {
                         Some(read.run),
                         out,
                     ),
+                    Err(reason) if reason == "file.too-large" => {
+                        out.push(Message::Notification(Code::FileTooLarge.notification(
+                            Scope::file("record"),
+                            vec![
+                                Value::Enum("run-record".into()),
+                                Value::Bytes(record.len() as u64),
+                                Value::Bytes(record::MAX_BYTES),
+                            ],
+                        )))
+                    }
                     Err(reason) => {
                         out.push(Message::Notification(Code::FileUnreadable.notification(
                             Scope::file("record"),
@@ -544,7 +596,7 @@ impl<E: Engine> Controller<E> {
                     SeedChoice::Given(s) => Seed::Given(s),
                     SeedChoice::Choose => Seed::Choose,
                 };
-                Run::new(
+                Run::try_new(
                     engine,
                     admission,
                     self.platform.as_mut(),
@@ -553,6 +605,13 @@ impl<E: Engine> Controller<E> {
                     seed,
                     options,
                 )
+                .map_err(|parts| {
+                    // A failed start gives the engine back: the Host goes on (RFC 005 rule 10).
+                    let (e, engine, admission) = *parts;
+                    self.engine = Some(engine);
+                    self.admission = Some(admission);
+                    e
+                })
             }
         };
         match result {
@@ -565,9 +624,16 @@ impl<E: Engine> Controller<E> {
                 out.push(Message::Answer(Answer::Done));
             }
             Err(e) => {
-                // The engine is lost with the failed run; a new one is the caller's to supply.
                 self.state = RunState::Ready;
                 match e {
+                    HostError::InstanceFailed { actor, text } => {
+                        out.push(Message::Notification(
+                            Code::HostInstanceFailed.notification(
+                                Scope::actor(actor),
+                                vec![Value::Identity(actor), Value::Text(text)],
+                            ),
+                        ));
+                    }
                     HostError::Refused(errors) => {
                         for err in errors.0 {
                             out.push(Message::Notification(
@@ -609,6 +675,10 @@ impl<E: Engine> Controller<E> {
     }
 
     fn export(&mut self, kind: ExportKind, confirmed: bool, out: &mut Vec<Message>) {
+        // A record is a run at rest: not while a paced advance is in progress.
+        if self.state == RunState::Running {
+            return self.notify(out, self.not_now("export"));
+        }
         let file_kind = kind.file_kind();
         let built: Built = match kind {
             ExportKind::RunRecord { trace, payloads } => match &self.run {

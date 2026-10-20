@@ -325,12 +325,17 @@ pub fn render(n: &Notification) -> String {
     let mut text = match what(&n.code) {
         Some(w) => w.to_string(),
         None => {
+            // RFC 007 rule 10: an unknown code is rendered as `message.unknown`, with the code
+            // and the parameters shown raw.
             let params: Vec<String> = n
                 .params
                 .iter()
                 .map(|(k, v)| format!("{k}={}", format_value(v)))
                 .collect();
-            return format!("{} ({})", n.code, params.join(", "));
+            let sentence = what("message.unknown").unwrap_or("{code} ({params})");
+            return sentence
+                .replace("{code}", &n.code)
+                .replace("{params}", &params.join(", "));
         }
     };
     for (name, v) in &n.params {
@@ -377,6 +382,22 @@ mod tests {
             assert_eq!(placeholders, params, "{}", e.name);
             assert!(w.ends_with('.'), "{}: a whole sentence", e.name);
         }
+    }
+
+    #[test]
+    fn an_unknown_code_is_rendered_with_its_code_and_parameters() {
+        let n = florn_control::Notification::new(
+            "future.code",
+            florn_control::Severity::Info,
+            florn_control::Scope::run(),
+            florn_control::Ends::Nothing,
+        )
+        .with("x", Value::Count(7));
+        let text = render(&n);
+        assert!(
+            text.contains("unknown message") && text.contains("future.code") && text.contains("7"),
+            "{text}"
+        );
     }
 
     #[test]

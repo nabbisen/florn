@@ -89,7 +89,7 @@ pub struct Options {
     /// Keep payload bytes by digest (for the payload export); hashes each payload once more.
     pub keep_payloads: bool,
     pub chain_interval: u64,
-    /// The provisional defaults of RFC 003 rule 19 for limits a scenario leaves unset.
+    /// The defaults of RFC 003 rule 19 (measured in Phase 1) for limits a scenario leaves unset.
     pub class_defaults: ClassLimits,
     pub host: HostMaxima,
     /// `native`, `browser`
@@ -141,6 +141,11 @@ pub enum HostError {
     Engine(EngineError),
     /// The actor is not module-backed, or has no instance.
     NoInstance(Identity),
+    /// The engine could not hold the actor's instance: `host.instance-failed` (RFC 005 rule 10).
+    InstanceFailed {
+        actor: Identity,
+        text: String,
+    },
     /// The run has ended.
     Ended,
     /// A checkpoint does not match this run's inputs: `checkpoint.mismatch` with the field.
@@ -169,6 +174,9 @@ impl std::fmt::Display for HostError {
             HostError::Refused(e) => write!(f, "{e}"),
             HostError::Engine(e) => write!(f, "{e}"),
             HostError::NoInstance(id) => write!(f, "actor {id} has no instance"),
+            HostError::InstanceFailed { actor, text } => {
+                write!(f, "host.instance-failed: actor {actor}: {text}")
+            }
             HostError::Ended => write!(f, "the run has ended"),
             HostError::CheckpointMismatch {
                 what,
@@ -343,6 +351,24 @@ impl<E: Engine> Run<E> {
         seed: Seed,
         options: Options,
     ) -> Result<Self, HostError> {
+        Self::try_new(
+            engine, admission, platform, scenario, modules, seed, options,
+        )
+        .map_err(|parts| parts.0)
+    }
+
+    /// As [`Self::new`], but a failure gives the engine and the admission cache back (boxed, as
+    /// the engine is large), so that a front end can start another run (RFC 005 rule 10: the
+    /// run ends, the Host does not).
+    pub fn try_new(
+        engine: E,
+        admission: Admission,
+        platform: &mut dyn Platform,
+        scenario: Manifest,
+        modules: &BTreeMap<String, Vec<u8>>,
+        seed: Seed,
+        options: Options,
+    ) -> Result<Self, Box<(HostError, E, Admission)>> {
         let seed = match seed {
             Seed::Given(s) => s,
             Seed::Choose => platform.new_seed(),
@@ -350,7 +376,10 @@ impl<E: Engine> Run<E> {
         let mut run = Self::prepare(
             engine, admission, platform, scenario, modules, seed, options,
         )?;
-        run.instantiate_all()?;
+        if let Err(e) = run.instantiate_all() {
+            let (engine, admission) = run.into_parts();
+            return Err(Box::new((e, engine, admission)));
+        }
         run.init_all();
         Ok(run)
     }
@@ -365,7 +394,7 @@ impl<E: Engine> Run<E> {
         modules: &BTreeMap<String, Vec<u8>>,
         seed: u64,
         options: Options,
-    ) -> Result<Self, HostError> {
+    ) -> Result<Self, Box<(HostError, E, Admission)>> {
         let capacity = platform.capacity();
         let created_ms = platform.wall_clock_ms();
         let run_id = format!("{created_ms:x}-{seed:x}");
@@ -456,7 +485,7 @@ impl<E: Engine> Run<E> {
             }
         }
         if !errors.is_empty() {
-            return Err(errors.into());
+            return Err(Box::new((errors.into(), engine, admission)));
         }
         // Stage 3: the estimate against limits and capacity (RFC 003 rule 20).
         let est = estimate(
@@ -481,7 +510,7 @@ impl<E: Engine> Run<E> {
                         Ends::Command,
                     ));
                 }
-                return Err(e.into());
+                return Err(Box::new((e.into(), engine, admission)));
             }
         };
         for (what, used, cap) in [
@@ -664,7 +693,8 @@ impl<E: Engine> Run<E> {
                     Ends::Command,
                 ));
             }
-            return Err(errors.into());
+            let (engine, admission) = run.into_parts();
+            return Err(Box::new((errors.into(), engine, admission)));
         }
         for c in &run.scenario.changes {
             let mut e = florn_model::canonical::Encoder::default();
@@ -694,14 +724,21 @@ impl<E: Engine> Run<E> {
                 // RFC 005 rule 10: a failure to hold the instance names the actor and the
                 // engine's text; a refusal of the module names the module (RFC 003 rule 26).
                 let n = match &e {
-                    EngineError::Resource(text) => Notification::new(
-                        "host.instance-failed",
-                        Severity::Error,
-                        Scope::actor(id),
-                        Ends::Run,
-                    )
-                    .with("actor", Value::Identity(id))
-                    .with("text", Value::Text(text.clone())),
+                    EngineError::Resource(text) => {
+                        let n = Notification::new(
+                            "host.instance-failed",
+                            Severity::Error,
+                            Scope::actor(id),
+                            Ends::Run,
+                        )
+                        .with("actor", Value::Identity(id))
+                        .with("text", Value::Text(text.clone()));
+                        self.log.push(self.wall_ms, &self.run_id, n);
+                        return Err(HostError::InstanceFailed {
+                            actor: id,
+                            text: text.clone(),
+                        });
+                    }
                     other => Notification::new(
                         "host.engine-refused",
                         Severity::Error,
@@ -1187,8 +1224,15 @@ impl<E: Engine> Run<E> {
     /// Restore an actor into a fresh instance (RFC 003 rule 22): grow the memory, write the bytes,
     /// set the globals, verify the tables, restore the kernel's state. Host-owned globals reset.
     pub fn restore_actor(&mut self, id: Identity, state: &ActorState) -> Result<(), HostError> {
-        if !self.actors.contains_key(&id) {
-            return Err(HostError::NoInstance(id));
+        let limit = self
+            .actors
+            .get(&id)
+            .ok_or(HostError::NoInstance(id))?
+            .limits
+            .memory_bytes;
+        // RFC 006 section 7: a checkpoint's memory is at most the actor's memory limit.
+        if state.memory.len() as u64 > limit {
+            return Err(HostError::Malformed("memory above the actor's limit"));
         }
         self.drop_instance(id);
         self.instantiate(id)?;
@@ -1268,7 +1312,8 @@ impl<E: Engine> Run<E> {
         let seed = checkpoint.identity.root_seed;
         let mut run = Self::prepare(
             engine, admission, platform, scenario, modules, seed, options,
-        )?;
+        )
+        .map_err(|parts| parts.0)?;
         let id = &checkpoint.identity;
         let hex = florn_model::canonical::hex;
         if id.scenario_sha256 != run.inputs.scenario_sha256 {
@@ -1344,7 +1389,8 @@ impl<E: Engine> Run<E> {
         let seed = record.inputs.root_seed;
         let mut run = Self::prepare(
             engine, admission, platform, scenario, modules, seed, options,
-        )?;
+        )
+        .map_err(|parts| parts.0)?;
         let hex = florn_model::canonical::hex;
         let i = &record.inputs;
         if i.scenario_sha256 != run.inputs.scenario_sha256 {

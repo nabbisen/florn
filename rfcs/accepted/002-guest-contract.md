@@ -1,6 +1,6 @@
 # RFC 002 — Guest contract: artifact, ABI, activation, layering
 
-**Status.** Accepted (2026-10-14)
+**Status.** Accepted (2026-10-14) Rule 36 and the randomness row of section 10 amended 2026-10-20 by PR-14a.
 **Tracks.** Requirements ARCH-001, ARCH-003, ARCH-004, ARCH-006, ARCH-010, ACT-001, ACT-002, ACT-003, ACT-005, ACT-009, BUS-002, BUS-005, OBS-008, SEC-002, SEC-003, MIG-001, MIG-008, NUM-006, PKG-003, PKG-004, PKG-006, PKG-007, AUTO-007, AC-005, AC-007. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The form of a guest module, its self-description, the core contract every domain builds on, what happens during an activation, the guest SDK, and the guest half of the conformance kit.
 **Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md) for time, activation, effects, randomness, and faults. [RFC 004 — Core model](./004-core-model.md) for identities, the scenario's `config`, ports, and the canonical encoding.
@@ -291,7 +291,7 @@ world guest {
 
 **Rule 35.** One event addressed to the actor causes one call into the guest (RFC 001 rule 20). The Host does not batch events into one call, and the contract does not expose a list of events. Measured on every engine, the crossing costs 0.2–0.3 µs at its floor and the copy is not the cost below a few kilobytes; batching is an optimisation a specific contract may propose later with measurements, not a principle of the design.
 
-**Rule 36.** `init` is the first activation of every actor. For actors of the scenario it happens at tick 0, before any event, in ascending order of identity. Its effects are committed and traced like any other activation's; a timer set in `init` with delay `d` fires at tick `d`. An actor created by an intervention is initialised at the instant the intervention is applied.
+**Rule 36.** `init` is the first activation of every actor. For actors of the scenario it happens at tick 0, before any event, in ascending order of identity. Its effects are committed and traced like any other activation's; a timer set in `init` with delay `d` fires at tick `d`. An actor created by an intervention is initialised at the instant the intervention is applied. An `init` that faults is a fault at tick 0: under the `drop` policy the actor handles nothing for the whole run, and the run continues (amended 2026-10-20, PR-14a).
 
 ### 6.2 Host functions during an activation
 
@@ -383,7 +383,7 @@ Each property has a test in the conformance kit (AUTO-007). The guest half runs 
 | Init | A timer set in `init` with delay 10 fires at tick 10; actors are initialised in ascending identity order; an actor created by an intervention is initialised at that instant. |
 | Timers | Set then cancel in one activation leaves no timer; set twice with one identity fires once; the 17th pending timer under a quota of 16 faults as `quota`. |
 | Effects | An actor sends and then traps: the trace holds the fault and no message (RFC 001). |
-| Randomness | An actor draws twice and traps; after reset it draws the same two values. A third actor's presence changes no draw of the first two. |
+| Randomness | An actor draws twice and traps; its stream stands where the activation began, so that after a restore (release 0.3) it draws the same two values. A third actor's presence changes no draw of the first two. |
 | Telemetry | A report on an undeclared channel faults as `contract`; reports above the quota fault as `quota`; channel 0 text appears in the diagnostic log. |
 | Compound activation | A device-model guest that mutates its state in `evaluate` and receives `reject-step` shows the state of the last `accept-step`; a call out of sequence faults as `contract`. |
 | Two domains | A world including interfaces of two domain packages admits, and each domain validates its own ports. |

@@ -12,7 +12,7 @@ fn florn() -> Command {
 }
 
 fn dir(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("florn-cli-{}-{name}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("florn-run-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
@@ -235,4 +235,78 @@ fn probe_prints_the_capacity_and_bad_arguments_print_usage() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(1));
+}
+
+#[test]
+fn a_diverged_replay_exits_with_2() {
+    let d = dir("diverged");
+    let (scen, modules) = write_scenario(&d);
+    let record = d.join("a.florn-run");
+    let out = florn()
+        .args([
+            "run",
+            scen.to_str().unwrap(),
+            "--modules",
+            modules.to_str().unwrap(),
+            "--seed",
+            "5",
+            "--out",
+            record.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Alter one stored chain point and write the record back.
+    let read = florn_host::record::read(&std::fs::read(&record).unwrap()).unwrap();
+    let mut run = read.run.clone();
+    let n = run.chain.len();
+    assert!(n >= 1, "the end point is always stored");
+    run.chain[n - 1].1[0] ^= 1;
+    let bytes = florn_host::record::write(&florn_host::record::Contents {
+        run: Some(run),
+        trace: None,
+        payloads: None,
+        log: florn_host::DiagnosticLog::default(),
+        readme: None,
+    })
+    .unwrap();
+    let altered = d.join("altered.florn-run");
+    std::fs::write(&altered, bytes).unwrap();
+    let out = florn()
+        .args([
+            "replay",
+            altered.to_str().unwrap(),
+            scen.to_str().unwrap(),
+            "--modules",
+            modules.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        value(&String::from_utf8_lossy(&out.stdout), "replay"),
+        Some("diverged")
+    );
+    assert!(String::from_utf8_lossy(&out.stderr).contains("replay.diverged"));
+}
+
+#[test]
+fn help_prints_the_usage_and_exits_with_0() {
+    let out = florn().arg("help").output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("florn run") && text.contains("exit codes"),
+        "{text}"
+    );
 }

@@ -183,6 +183,39 @@ fn ac_003_a_run_replays_from_its_record_and_an_altered_module_is_refused() {
         "matched at every stored point"
     );
     assert_eq!(replay.chain(), run.chain());
+    // A record with one stored chain point altered: the replay reports the first divergent
+    // interval (RFC 005 rule 23; RFC 001 rule 50).
+    let mut altered = read.run.clone();
+    let n = altered.chain.len();
+    assert!(n >= 3, "the record stores several points");
+    altered.chain[n - 2].1[0] ^= 1;
+    let mut replay = Run::replay(
+        engine(),
+        Admission::default(),
+        &mut FixedPlatform::default(),
+        s.manifest(),
+        &s.modules(),
+        &altered,
+        options(),
+    )
+    .expect("the replay starts");
+    replay.run_to_end();
+    match replay.comparison() {
+        Some(Comparison::Diverged { from, to }) => {
+            assert_eq!(
+                to,
+                altered.chain[n - 2].0,
+                "the altered point ends the interval"
+            );
+            assert_eq!(
+                from,
+                altered.chain[n - 3].0,
+                "the point before it begins the interval"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(replay.log().codes().contains(&"replay.diverged"));
     // One byte of the echo module altered (inside its manifest's description, so that the module
     // stays valid): refused with `module.hash-mismatch` naming both hashes.
     let mut modules = s.modules();

@@ -2,6 +2,8 @@
 # RFC 005 rule 43, checked in CI by ci/check-deps.py. The root is a virtual manifest; the crate
 # `crates/florn` reserves the name `florn`.
 [workspace]
+# The fuzz targets build with cargo-fuzz on nightly, outside the workspace (RFC 006 rule 7).
+exclude = ["fuzz"]
 resolver = "3"
 members = ["crates/*"]
 
@@ -31,6 +33,7 @@ florn-platform-native = { path = "crates/florn-platform-native" }
 florn-platform-web = { path = "crates/florn-platform-web" }
 florn-guest = { path = "crates/florn-guest" }
 florn-conformance = { path = "crates/florn-conformance" }
+florn-cli = { path = "crates/florn-cli" }
 florn-ui-model = { path = "crates/florn-ui-model" }
 florn-ui-scene = { path = "crates/florn-ui-scene" }
 # External, pinned (implementation handoff section 2); added to a crate only by the PR that needs it
@@ -57,3 +60,5 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 debug = false
+# No symbol names in a release artefact: the worker module shrinks by a fifth.
+strip = "symbols"

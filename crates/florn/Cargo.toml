@@ -11,3 +11,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+florn-cli = { workspace = true }
+
+[dev-dependencies]
+florn-host = { workspace = true, features = ["test-guests"] }
+wat = { workspace = true }

@@ -428,6 +428,11 @@ checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 [[package]]
 name = "florn"
 version = "0.0.0"
+dependencies = [
+ "florn-cli",
+ "florn-host",
+ "wat",
+]
 
 [[package]]
 name = "florn-abi"
@@ -461,7 +466,6 @@ dependencies = [
  "florn-host",
  "florn-model",
  "florn-platform-native",
- "wat",
 ]
 
 [[package]]

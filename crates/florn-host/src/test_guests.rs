@@ -223,7 +223,7 @@ pub fn contract_section() -> Vec<u8> {
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
-    florn_model::canonical::hex(&florn_admission::sha256(bytes))
+    crate::run::sha256_hex(bytes)
 }
 
 /// An actor line of a scenario.

@@ -32,7 +32,7 @@ Entry point: [`README.md`](./README.md). This file says what to build, crate by 
 | `sha2` | 0.11 | Module and scenario identity (RFC 004) |
 | `toml` | Current, pinned | Manifest and package metadata |
 | Playwright | 1.64.0 (test only, not linked; `ci/browser/package-lock.json`) | Browser matrix in CI from PR-12: Chromium and Firefox on Linux, WebKit on macOS |
-| `cargo-deny` 0.20.2, `cargo-audit`, `cargo-fuzz`, `cargo-mutants` | Pinned in CI | RFC 006 rules 5 to 7 |
+| `cargo-deny` 0.20.2; `cargo-fuzz` 0.13.2 on the nightly toolchain | Pinned in CI: `cargo deny` on every push (advisories as `cargo audit` would report them); the fuzz job weekly, on dispatch and on a tag | RFC 006 rules 5 to 7. `cargo-mutants` is deferred to 0.2 by the owner's decision of 2026-10-20 |
 
 A version is changed by a PR that says why, and the run identity records the versions a build used (RFC 005 rule 44).
 

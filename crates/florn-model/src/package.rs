@@ -71,17 +71,41 @@ impl Package {
             }));
             return Err(errors);
         }
+        {
+            // Entry names are unique, or the package is not one file (RFC 006 section 7).
+            let mut names = std::collections::BTreeSet::new();
+            for i in 0..archive.len() {
+                let name = archive
+                    .by_index(i)
+                    .ok()
+                    .and_then(|f| f.name().ok().map(|n| n.into_owned()));
+                if let Some(n) = name
+                    && !names.insert(n.clone())
+                {
+                    errors.push(Error::new(Kind::FileUnreadable {
+                        kind: "package",
+                        reason: format!("duplicate entry {n}"),
+                    }));
+                    return Err(errors);
+                }
+            }
+        }
+        /// Read an entry of at most `max` bytes through a bounded reader: the declared size
+        /// is checked but never allocated for before the bytes arrive.
         fn read_entry(
             archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
             name: &str,
             max: u64,
         ) -> Option<Vec<u8>> {
-            let mut f = archive.by_name(name).ok()?;
+            let f = archive.by_name(name).ok()?;
             if f.size() > max {
                 return None;
             }
-            let mut v = Vec::with_capacity(f.size() as usize);
-            f.read_to_end(&mut v).ok()?;
+            let mut v = Vec::with_capacity(f.size().min(1024 * 1024) as usize);
+            f.take(max + 1).read_to_end(&mut v).ok()?;
+            if v.len() as u64 > max {
+                return None;
+            }
             Some(v)
         }
         let manifest_text = match read_entry(

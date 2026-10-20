@@ -22,7 +22,7 @@ pub struct Quotas {
 }
 
 impl Default for Quotas {
-    /// The provisional defaults of RFC 003 rule 19.
+    /// The defaults of RFC 003 rule 19, measured in Phase 1.
     fn default() -> Self {
         Self {
             effects_per_activation: 1_000,
