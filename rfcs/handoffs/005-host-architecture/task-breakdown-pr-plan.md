@@ -39,4 +39,4 @@ Independent of the order above: PR-04 may precede PR-03; PR-08 may follow PR-03 
 | PR-12 | **merged** | `48c89a9` with the lint follow-up that follows it, 2026-10-20; CI green: three native architectures, and the kit in Chromium and Firefox on Linux and WebKit on macOS | C12: pending |
 | PR-13 | **merged** | `31eba4b` with the Wasmtime follow-up `f89ed91`, 2026-10-20; CI green on three native architectures and three browsers | C13: pending |
 | PR-14a | **merged** | `2c4a494`, 2026-10-20 (hardening from the audit; the split is the owner's decision AD-18); CI green on three native architectures and three browsers; the dispatched run 39427693248 green with the fuzz job | — |
-| PR-14b | not started | | |
+| PR-14b | **merged; 0.1.0 tagged** | `a0cd26f`, 2026-10-20; CI run 39433381510 green; tag `0.1.0`: release workflow run 39435182249 green (runner ×3, test page bundle, SHA256SUMS published at https://github.com/nabbisen/florn/releases/tag/0.1.0); the tag's CI run 39435182258 carries the fuzz job and the full figures | C14: the owner accepts the phase against its exit criteria; C1 to C13 pending |
