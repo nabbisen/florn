@@ -55,3 +55,31 @@ crate-type = ["cdylib"]
 [[example]]
 name = "hostile_wasi"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "pinger"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "bench_protocol"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "bench_compute"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "timers"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "chatter"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "heap"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "clock"
+crate-type = ["cdylib"]

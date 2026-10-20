@@ -112,7 +112,7 @@ pub fn lift_string(mem: &dyn Memory, ptr: u32, len: u32) -> Result<Val, AbiError
 
 pub fn lift_list(mem: &dyn Memory, elem: &Ty, ptr: u32, len: u32) -> Result<Val, AbiError> {
     if let Ty::U8 = elem {
-        return Ok(Val::bytes(&mem.read(ptr, len)?));
+        return Ok(Val::Bytes(mem.read(ptr, len)?));
     }
     let bytes = len
         .checked_mul(elem.size())

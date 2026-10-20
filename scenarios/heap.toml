@@ -1,0 +1,30 @@
+# heap: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "heap"
+domains = ["core"]
+
+[time]
+tick = "1ns"
+end = "10001ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 1
+
+[limits.default]
+memory = "4MiB"
+
+[modules.heap]
+sha256 = "9149a0e2be47f68fc55110afd5255466078f6e1cc8950d6640cba57a86110292"
+contract = "florn:core/guest@0.1.0"
+
+[[actors]]
+id = 1
+name = "a1"
+kind = "module"
+module = "heap"
+ports = []

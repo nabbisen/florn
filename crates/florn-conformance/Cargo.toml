@@ -1,6 +1,6 @@
 [package]
 name = "florn-conformance"
-description = "The conformance kit"
+description = "The conformance kit: guests, scenarios with recorded digests, the RFC verification tables, the crossing and cost benchmarks"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,3 +10,20 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+florn-host = { workspace = true, features = ["test-guests"] }
+florn-kernel = { workspace = true }
+florn-abi = { workspace = true }
+florn-model = { workspace = true }
+florn-admission = { workspace = true }
+florn-control = { workspace = true }
+florn-engine = { workspace = true, features = ["conformance"] }
+florn-engine-wasmtime = { workspace = true }
+florn-platform = { workspace = true }
+florn-platform-native = { workspace = true }
+wat = { workspace = true }
+wasm-encoder = { workspace = true }
+toml = { workspace = true }
+
+[[bin]]
+name = "florn-conformance"
+path = "src/main.rs"

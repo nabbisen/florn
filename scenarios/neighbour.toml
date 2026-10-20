@@ -1,0 +1,30 @@
+# neighbour: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "neighbour"
+domains = ["core"]
+
+[time]
+tick = "1ns"
+end = "1000ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 1
+
+[limits.default]
+memory = "2MiB"
+
+[modules.echo]
+sha256 = "afb5f0af8d42217acc767a8b8746263eeaaa24748d632c0b357daf28cbdc5095"
+contract = "florn:core/guest@0.1.0"
+
+[[actors]]
+id = 2
+name = "a2"
+kind = "module"
+module = "echo"
+ports = []

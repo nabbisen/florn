@@ -16,6 +16,9 @@ pub enum Val {
     F64(f64),
     String(String),
     List(Vec<Val>),
+    /// A `list<u8>` as bytes: lifted and lowered as one copy, never one value per byte
+    /// (RFC 005 rule 11).
+    Bytes(Vec<u8>),
     Enum(u32),
     Record(Vec<Val>),
     Option(Option<Box<Val>>),
@@ -26,7 +29,7 @@ pub enum Val {
 
 impl Val {
     pub fn bytes(b: &[u8]) -> Val {
-        Val::List(b.iter().map(|x| Val::U8(*x)).collect())
+        Val::Bytes(b.to_vec())
     }
     pub fn str(s: &str) -> Val {
         Val::String(s.to_string())
@@ -34,6 +37,7 @@ impl Val {
     /// The bytes of a `list<u8>`, if this is one.
     pub fn as_bytes(&self) -> Option<Vec<u8>> {
         match self {
+            Val::Bytes(b) => Some(b.clone()),
             Val::List(items) => items
                 .iter()
                 .map(|v| if let Val::U8(b) = v { Some(*b) } else { None })

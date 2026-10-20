@@ -184,17 +184,15 @@ struct Slot<E: Engine> {
 /// What an activation ended with.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Outcome {
-    Committed,
+    /// Committed, with the channel 0 texts of the activation for the diagnostic log (RFC 002 rule 33).
+    Committed { texts: Vec<String> },
     Faulted {
         kind: FaultKind,
         parameter: u32,
         metered: u64,
     },
     /// A Host fault (RFC 001 rule 65): the run ends, not reproducible.
-    HostFault {
-        reason: &'static str,
-        text: String,
-    },
+    HostFault { reason: &'static str, text: String },
 }
 
 /// The Host's side of the imports for one activation (RFC 003 rule 17; RFC 002 §5).
@@ -1022,7 +1020,21 @@ impl<E: Engine> Run<E> {
             )
         };
         match outcome {
-            Outcome::Committed => {}
+            Outcome::Committed { texts } => {
+                // Channel 0 is text for the author; it reaches the diagnostic log (RFC 002 §10).
+                for text in texts {
+                    let n = Notification::new(
+                        "actor.text",
+                        Severity::Info,
+                        Scope::actor(id),
+                        Ends::Nothing,
+                    )
+                    .with("actor", Value::Identity(id))
+                    .with("text", Value::Text(text))
+                    .at(at(instant));
+                    self.notify(n);
+                }
+            }
             Outcome::Faulted {
                 kind,
                 parameter,
@@ -1499,6 +1511,11 @@ fn activate_slot<E: Engine>(
             }
             match kernel.commit(act, &mut slot.sink, metered, world) {
                 Ok(()) => {
+                    let texts = reports
+                        .iter()
+                        .filter(|(channel, _)| *channel == 0)
+                        .map(|(_, payload)| String::from_utf8_lossy(payload).into_owned())
+                        .collect();
                     for (channel, payload) in reports {
                         if telemetry.len() >= telemetry_capacity {
                             telemetry.pop_front();
@@ -1514,7 +1531,7 @@ fn activate_slot<E: Engine>(
                     for p in kept {
                         payloads.entry(*blake3::hash(&p).as_bytes()).or_insert(p);
                     }
-                    Outcome::Committed
+                    Outcome::Committed { texts }
                 }
                 Err(refusal) => {
                     let (kind, parameter) = match &refusal {

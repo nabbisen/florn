@@ -467,6 +467,21 @@ dependencies = [
 [[package]]
 name = "florn-conformance"
 version = "0.0.0"
+dependencies = [
+ "florn-abi",
+ "florn-admission",
+ "florn-control",
+ "florn-engine",
+ "florn-engine-wasmtime",
+ "florn-host",
+ "florn-kernel",
+ "florn-model",
+ "florn-platform",
+ "florn-platform-native",
+ "toml",
+ "wasm-encoder 0.261.0",
+ "wat",
+]
 
 [[package]]
 name = "florn-control"

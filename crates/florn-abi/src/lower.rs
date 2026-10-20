@@ -34,6 +34,11 @@ pub fn store(mem: &mut dyn Memory, ty: &Ty, val: &Val, addr: u32) -> Result<(), 
             mem.write(addr, &ptr.to_le_bytes())?;
             mem.write(addr + 4, &len.to_le_bytes())
         }
+        (Ty::List(elem), Val::Bytes(b)) if matches!(elem.as_ref(), Ty::U8) => {
+            let (ptr, len) = lower_bytes(mem, b, 1)?;
+            mem.write(addr, &ptr.to_le_bytes())?;
+            mem.write(addr + 4, &len.to_le_bytes())
+        }
         (Ty::List(elem), Val::List(items)) => {
             let (ptr, len) = lower_list(mem, elem, items)?;
             mem.write(addr, &ptr.to_le_bytes())?;
@@ -190,6 +195,11 @@ pub fn lower(
         }
         (Ty::String, Val::String(s)) => {
             let (ptr, len) = lower_bytes(mem, s.as_bytes(), 1)?;
+            out.push(Flat::I32(ptr as i32));
+            out.push(Flat::I32(len as i32));
+        }
+        (Ty::List(elem), Val::Bytes(b)) if matches!(elem.as_ref(), Ty::U8) => {
+            let (ptr, len) = lower_bytes(mem, b, 1)?;
             out.push(Flat::I32(ptr as i32));
             out.push(Flat::I32(len as i32));
         }

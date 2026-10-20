@@ -1,0 +1,128 @@
+# Recorded digests of the shipped scenarios (AUTO-003), written by
+# `cargo run --release -p florn-conformance -- scenarios`. The kit's test runs every
+# scenario and compares; continuous integration does so on three architectures.
+
+recorded-on = "x86_64"
+
+[modules]
+bench_compute = "f3b9e5e534bed9ed9ea00d14e23631a0663d40d300ccaaad05f03242650ddf00"
+bench_protocol = "d85599f1a090ffc43051855598dd93ac1d4bb5e2d55aebf04193ac95e044017f"
+chatter = "715f9b9bf12df13b237579a7a96fbb42f3ef509e83af7433b82b6b6cad58dbef"
+clock = "6f2461bb4881273aad8711b75461efdc17ca81ddc4c1f3f2bd7721ffc2d71463"
+echo = "afb5f0af8d42217acc767a8b8746263eeaaa24748d632c0b357daf28cbdc5095"
+heap = "9149a0e2be47f68fc55110afd5255466078f6e1cc8950d6640cba57a86110292"
+hostile_bad_pointer = "609e2f50abc60b454c55ad6d137d224ba5edda22f16c8cab2ce2173ea2c44a6a"
+hostile_flood = "f702710a788423419e76d0026caa14108e122a3a2581f7adcba437efab395a8a"
+hostile_grow = "3aad48be60605f2086e51c08fa324a0fab9b7ad69f05721c48b3740892e75583"
+hostile_loop = "697ac510ccc71c0365ce757983aa145e5482d79ca50b1ffdaab7c438e3a8d5ec"
+hostile_recurse = "409c23fffcc980818ade407dcb3fa620cd76b955e1183e2aa4e7b76eaafcf48e"
+hostile_wasi = "7c9de5c9861dbf6a35f1b5d831b0a33abb46e355a4d80bf7cf0485a66aa3b030"
+pinger = "f2d8efce8af64b283ae210f8d01a6c3c667d5a8bb7cdb596f0defbf7be2cc0f9"
+probe = "cff09e3c31469f1cc2652aceb35714aaf7ac0caa3604372e7b7bb2a81d1dbda7"
+timers = "4e9f63b594698ef005bb72d738da2e6470938cf602abfda5756da262b51f9ac8"
+
+[admitted]
+bench_compute = "df00d9586d3c314cd5b25e74e8ccb2a62164eb22a6463e18422c00499df51ab4"
+bench_protocol = "f5b2226f36afe8c061e9bfc306e7f90b703572d273fd29af16a36cb3b0320baa"
+chatter = "edafca732477744aeaa223d36c52613ee665491add2f938db1f2535567e4fd1e"
+clock = "b45f9c4a82123a0ce3d33d4c892393bceed56b15fa255f4216ff3efeb1d55100"
+echo = "39f3abf7bfce947c45f309d4d568b5db946d10c1afb80486e89c4a585b4f06bd"
+heap = "bbc666d11dcecb1f10493f843d674a19ba29a9fb4d789a977232c5e046c7fcec"
+hostile_bad_pointer = "2140dc183f046e616b0ad8f5508b5c5ba57dd119a8409cb0076669ed11770a13"
+hostile_flood = "94bec4848b4d3702793605878dd332810aaa63a6da7789d0164d878e5809344f"
+hostile_grow = "f6b2293e9efc13bbd21e89fe5f45e3872797bb5f94e26d32e30f3c332c760dfa"
+hostile_loop = "3afa0bd76ba2fcaa3cd6cf078e8f55e3d9a967861228717a610401983005f907"
+hostile_recurse = "5cb6ecfdf3fb2a3d17bc508cf2e19510c2fdcdc8608baec1990d6ed5813028cc"
+pinger = "852e1961e3c89dccf6d7936906e8c417c5a1d8abf00342431aa8815d2e22cf5b"
+probe = "500a8b799df5474c5dfc250659ae9566599d7f5bf500415d919cbecaa424a5ed"
+timers = "13660ec751d65b60bec5dd6611a21ece690639ce94f6e43479fceb096df24d2d"
+
+[runs."bench-compute"]
+seed = 1
+chain = "7adcef788658bc3b7a648fdfb2e9b46e4bb982f57f1c7874088aae87ab46fed6"
+records = 2002
+ended = "end-reached"
+
+[runs."bench-protocol"]
+seed = 1
+chain = "e950007db42de361bbf88cce7dbaebccb0921e92677d99562532d7314f3fa7af"
+records = 29999
+ended = "end-reached"
+
+[runs."echo-pair"]
+seed = 42
+chain = "9dbd61be3d9ab2b1563c0d18741319bdbf4f48266ab409f4d71db401540db6bc"
+records = 5285
+ended = "end-reached"
+
+[runs."heap"]
+seed = 1
+chain = "2af63b7b195997cb459cdd0946ea451909e103790fe1c69845f4ae5d739e52c0"
+records = 10001
+ended = "end-reached"
+
+[runs."hostile-bad-pointer"]
+seed = 1
+chain = "5442b3b482f7ddecc54ca437065bccd316966b31cdf19db4762a7e16b8508087"
+records = 102
+ended = "end-reached"
+
+[runs."hostile-flood"]
+seed = 1
+chain = "c689db641f1c77b17b2522e01b0109ccc9927e7dec9d19634d09822d2165a629"
+records = 102
+ended = "end-reached"
+
+[runs."hostile-grow"]
+seed = 1
+chain = "08788f5a6207661d9d76134a39b0de55bacdf34425e3d47fa6d6f67f35095568"
+records = 102
+ended = "end-reached"
+
+[runs."hostile-loop"]
+seed = 1
+chain = "ddcb7d04821768529ef1fdd8e530eedc066661ed01a8bb80bcb460007a151095"
+records = 102
+ended = "end-reached"
+
+[runs."hostile-recurse"]
+seed = 1
+chain = "0c3694de08e79ccca78ae630acd37908abf735f898c7ce10d14ad8a82c47fa35"
+records = 102
+ended = "end-reached"
+
+[runs."neighbour"]
+seed = 1
+chain = "3944d3db1e8394c45ebc67d3914ef7a975aeab65cd17a98230f4796417470752"
+records = 100
+ended = "end-reached"
+
+[runs."race-by-identity"]
+seed = 99
+chain = "58c60a12009e68f9c48a0e7e83cf67fe817078caa27e861e737f77365e7013c0"
+records = 67003
+ended = "end-reached"
+
+[runs."race-by-identity-reversed"]
+seed = 99
+chain = "58c60a12009e68f9c48a0e7e83cf67fe817078caa27e861e737f77365e7013c0"
+records = 67003
+ended = "end-reached"
+
+[runs."race-by-seed"]
+seed = 99
+chain = "5642cea6b83f31203f43db5a4e6dd5e5ae43d426d30b591f6a5ec7c5630493fe"
+records = 67003
+ended = "end-reached"
+
+[runs."race-by-seed-reversed"]
+seed = 99
+chain = "5642cea6b83f31203f43db5a4e6dd5e5ae43d426d30b591f6a5ec7c5630493fe"
+records = 67003
+ended = "end-reached"
+
+[runs."zero-delay"]
+seed = 1
+chain = "a321a7af8fc6a30c33c4bb9b2ce0f075b032eeb51c08cc9d72473a5c20d13d80"
+records = 1001
+ended = "host-fault"

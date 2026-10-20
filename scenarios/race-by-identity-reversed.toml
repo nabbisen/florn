@@ -1,0 +1,64 @@
+# race-by-identity-reversed: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "race-by-identity-reversed"
+domains = ["core"]
+
+[time]
+tick = "1ns"
+end = "70001ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 99
+
+[limits.default]
+memory = "2MiB"
+
+[modules.echo]
+sha256 = "afb5f0af8d42217acc767a8b8746263eeaaa24748d632c0b357daf28cbdc5095"
+contract = "florn:core/guest@0.1.0"
+
+[modules.pinger]
+sha256 = "f2d8efce8af64b283ae210f8d01a6c3c667d5a8bb7cdb596f0defbf7be2cc0f9"
+contract = "florn:core/guest@0.1.0"
+
+[[actors]]
+id = 3
+name = "a3"
+kind = "module"
+module = "echo"
+ports = [{ id = 0, name = "p0", type = "core/port" }, { id = 1, name = "p1", type = "core/port" }]
+
+[[actors]]
+id = 2
+name = "a2"
+kind = "module"
+module = "pinger"
+ports = [{ id = 0, name = "p0", type = "core/port" }]
+[actors.config]
+period = 7
+payload = 8
+
+[[actors]]
+id = 1
+name = "a1"
+kind = "module"
+module = "pinger"
+ports = [{ id = 0, name = "p0", type = "core/port" }]
+[actors.config]
+period = 7
+payload = 8
+
+[[connections]]
+id = 1000
+name = "c0"
+ports = ["a1.p0", "a3.p0"]
+
+[[connections]]
+id = 1001
+name = "c1"
+ports = ["a2.p0", "a3.p1"]

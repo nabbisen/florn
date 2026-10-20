@@ -197,6 +197,7 @@ pub const TABLE: &[(&str, &str)] = &[
         "actor.faulted",
         "Actor {actor} faulted with {fault} after {metered} units of work; the policy is {policy}.",
     ),
+    ("actor.text", "Actor {actor} says: {text}."),
     ("run.ended", "The run ended: {reason}."),
     (
         "run.limit-exceeded",

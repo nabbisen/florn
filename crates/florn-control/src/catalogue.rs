@@ -97,6 +97,7 @@ pub enum Code {
     HostSwapping,
     HostLimitedBy,
     ActorFaulted,
+    ActorText,
     RunEnded,
     RunLimitExceeded,
     InterventionApplied,
@@ -665,6 +666,14 @@ pub const CATALOGUE: &[Entry] = &[
         severity: Severity::Error,
         scope: ScopeKind::Actor,
         ends: Ends::Activation,
+    },
+    Entry {
+        code: Code::ActorText,
+        name: "actor.text",
+        params: &[("actor", ParamType::Identity), ("text", ParamType::Text)],
+        severity: Severity::Info,
+        scope: ScopeKind::Actor,
+        ends: Ends::Nothing,
     },
     Entry {
         code: Code::RunEnded,

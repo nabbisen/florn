@@ -1,0 +1,41 @@
+# hostile-flood: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "hostile-flood"
+domains = ["core"]
+
+[time]
+tick = "1ns"
+end = "1000ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 1
+
+[limits.default]
+memory = "2MiB"
+
+[modules.hostile_flood]
+sha256 = "f702710a788423419e76d0026caa14108e122a3a2581f7adcba437efab395a8a"
+contract = "florn:core/guest@0.1.0"
+
+[modules.echo]
+sha256 = "afb5f0af8d42217acc767a8b8746263eeaaa24748d632c0b357daf28cbdc5095"
+contract = "florn:core/guest@0.1.0"
+
+[[actors]]
+id = 1
+name = "a1"
+kind = "module"
+module = "hostile_flood"
+ports = [{ id = 0, name = "p0", type = "core/port" }]
+
+[[actors]]
+id = 2
+name = "a2"
+kind = "module"
+module = "echo"
+ports = []

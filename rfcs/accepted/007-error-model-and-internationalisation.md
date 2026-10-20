@@ -1,6 +1,6 @@
 # RFC 007 — Error model and internationalisation
 
-**Status.** Accepted (2026-10-14). Open question 3 decided at acceptance: unit symbols stay as symbols in every language (rule 19). Amended 2026-10-14 by PR-02: four codes added to section 4.1 (`manifest.too-large`, `manifest.invalid`, `manifest.type`, `quantity.out-of-range`) and two enumerations, as the model crate needed them. Amended 2026-10-17 by PR-06: one code added to section 4.2 (`module.export-reserved`), as the admission crate needed it. Amended 2026-10-19 by PR-07: one code added to section 4.3 (`run.limit-exceeded`, the run faults of RFC 001 rule 13) and its enumeration `run-limit`.
+**Status.** Accepted (2026-10-14). Open question 3 decided at acceptance: unit symbols stay as symbols in every language (rule 19). Amended 2026-10-14 by PR-02: four codes added to section 4.1 (`manifest.too-large`, `manifest.invalid`, `manifest.type`, `quantity.out-of-range`) and two enumerations, as the model crate needed them. Amended 2026-10-17 by PR-06: one code added to section 4.2 (`module.export-reserved`), as the admission crate needed it. Amended 2026-10-19 by PR-07: one code added to section 4.3 (`run.limit-exceeded`, the run faults of RFC 001 rule 13) and its enumeration `run-limit`. Amended 2026-10-20 by PR-11: one code added to section 4.3 (`actor.text`), the channel 0 text of RFC 002 rule 33 as it reaches the diagnostic log.
 **Tracks.** Requirements CTL-003, CTL-004, UI-009, UI-011, UI-012, SEC-008, NFR-009, ACT-005, ACT-011, DATA-007. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The three families of error; the form of every message the Host produces for a person: a code, typed parameters, a severity, a scope; the catalogue of codes named by RFC 001 to 006 and the external design; the diagnostic log; the translation catalogues of every front end and the rules by which text is produced from codes; the handling of languages, numbers, units, and text input.
 **Depends on.** [RFC 001](./001-determinism-contract.md) rules 24 and 65; [RFC 002](./002-guest-contract.md) rules 41 and 42; [RFC 003](./003-module-admission-and-limits.md) §2 and §5; [RFC 004](./004-core-model.md) §7; [RFC 005](./005-host-architecture.md) §6; [RFC 006](./006-security-baseline-browser-host.md) §5 to §7; the external design (`docs/src/external-design.md`) §3.8, §3.12, §5, §8.
@@ -159,6 +159,7 @@ The codes of RFC 001 to 006 and the external design, with their parameters, seve
 | `host.swapping` | `resident: count`, `actors: count`, `cost: count` (µs per KB) | info | run | nothing |
 | `host.limited-by` | `what: enum(limiting-factor)` | info | run | nothing |
 | `actor.faulted` | `actor: identity`, `fault: code`, `metered: count`, `policy: enum(faulted-policy)` | error | actor | activation |
+| `actor.text` | `actor: identity`, `text: text` | info | actor | nothing |
 | `run.ended` | `reason: enum(end-reason)` | info | run | run |
 | `run.limit-exceeded` | `what: enum(run-limit)`, `limit: count`, `origins: text` | error | run | run |
 | `intervention.applied` | `at: instant`, `kind: name` | info | run | nothing |

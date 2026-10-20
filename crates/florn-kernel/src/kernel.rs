@@ -580,10 +580,12 @@ impl Kernel {
             }
         }
         if timers.len() > quota_timers {
+            // The parameter is the quota's index in RFC 003 rule 16's table (RFC 005 rule 20):
+            // `pending-timers` is the sixth row, as the Host numbers the other quotas.
             return self.fail_with(
                 act,
                 FaultKind::Quota,
-                0,
+                6,
                 metered,
                 CommitRefusal::PendingTimers {
                     limit: quota_timers,

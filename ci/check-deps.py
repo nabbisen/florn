@@ -44,7 +44,7 @@ ALLOWED = {
     "florn-ui-scene": {"florn-ui-model"},
     "florn-ui-web": {"florn-control", "florn-ui-model", "florn-ui-scene", "florn-host", "florn-engine-web", "florn-platform-web"},
     "florn-cli": {"florn-control", "florn-host", "florn-engine-wasmtime", "florn-platform-native", "florn-model"},
-    "florn-conformance": {"florn-host", "florn-model", "florn-control", "florn-engine-wasmtime", "florn-platform-native", "florn-guest", "florn-kernel", "florn-admission", "florn-abi"},
+    "florn-conformance": {"florn-host", "florn-model", "florn-control", "florn-engine", "florn-engine-wasmtime", "florn-platform", "florn-platform-native", "florn-guest", "florn-kernel", "florn-admission", "florn-abi"},
     "florn-guest": set(),
     "florn-kernel": set(),
     "florn-abi": set(),
