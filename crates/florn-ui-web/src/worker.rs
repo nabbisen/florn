@@ -367,6 +367,45 @@ fn bench_crossing(raw: &[u8], scale: u64) -> Result<String, String> {
     Ok(format!("[{}]", items.join(",")))
 }
 
+/// The hash benchmark (RFC 005 rule 22): BLAKE3 against SHA-256 at 64 bytes, 1,500 bytes and
+/// 64 KiB, as the trace digests every effect's payload; the figures as JSON.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_bench_hash(scale: u32) -> i32 {
+    use sha2::Digest;
+    let clock = florn_platform_web::now_seconds;
+    let mut items = Vec::new();
+    for size in [64usize, 1_500, 65_536] {
+        let payload: Vec<u8> = (0..size).map(|i| (i * 7) as u8).collect();
+        let n = (match size {
+            64 => 200_000,
+            1_500 => 50_000,
+            _ => 2_000,
+        } / u64::from(scale).max(1))
+        .max(10);
+        let mut sink = 0u8;
+        let blake3_micros = bench::best_of(5, n, &clock, || {
+            sink ^= blake3::hash(&payload).as_bytes()[0];
+            Ok(())
+        });
+        let sha256_micros = bench::best_of(5, n, &clock, || {
+            sink ^= sha2::Sha256::digest(&payload)[0];
+            Ok(())
+        });
+        std::hint::black_box(sink);
+        match (blake3_micros, sha256_micros) {
+            (Ok(b), Ok(s)) => items.push(format!(
+                "{{\"bytes\":{size},\"blake3_micros\":{b},\"sha256_micros\":{s}}}"
+            )),
+            _ => {
+                set_out(b"\"the hash benchmark failed\"".to_vec());
+                return -1;
+            }
+        }
+    }
+    set_out(format!("[{}]", items.join(",")).into_bytes());
+    0
+}
+
 /// The cost benchmark (RFC 003 section 7, step 2) for one guest given as bytes, named so that
 /// the message of each activation is the guest's: the figure as JSON.
 ///
@@ -420,10 +459,11 @@ fn bench_cost(name: &str, raw: &[u8], activations: u64) -> Result<String, String
         &clock,
     )?;
     Ok(format!(
-        "{{\"guest\":{},\"activations\":{},\"unmetered_micros\":{},\"metered_micros\":{}}}",
+        "{{\"guest\":{},\"activations\":{},\"unmetered_micros\":{},\"metered_micros\":{},\"units_per_activation\":{}}}",
         json_str(&c.guest),
         c.activations,
         c.unmetered_micros,
-        c.metered_micros
+        c.metered_micros,
+        c.units_per_activation
     ))
 }

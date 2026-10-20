@@ -37,5 +37,5 @@ Independent of the order above: PR-04 may precede PR-03; PR-08 may follow PR-03 
 | PR-10 | **merged** | `b1e7ab6` with the macOS fix that follows it, 2026-10-19; CI green on three architectures | C10: pending |
 | PR-11 | **merged** | `ee6ed27` with the shipped-modules follow-up `9ee461a`, 2026-10-20; CI green on three architectures, the kit's figures printed by each | C11: pending |
 | PR-12 | **merged** | `48c89a9` with the lint follow-up that follows it, 2026-10-20; CI green: three native architectures, and the kit in Chromium and Firefox on Linux and WebKit on macOS | C12: pending |
-| PR-13 | not started | | |
+| PR-13 | **merged** | see the commit of 2026-10-20 named in the changelog's PR-13 entry; CI green on three native architectures and three browsers | C13: pending |
 | PR-14 | not started | | |

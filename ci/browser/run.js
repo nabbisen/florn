@@ -152,6 +152,18 @@ for (const name of browsers) {
     check(false, `${name}: cost benchmark`, { error: String(err).split("\n")[0] });
   }
 
+  // The hash figures (RFC 005 rule 22) and the capacity probe (RFC 003 rule 20).
+  try {
+    const h = await open(`bench=hash&scale=${quick ? 20 : 1}`);
+    check(h.status === 0 && Array.isArray(h.figures), `${name}: the hash benchmark runs`, { error: h.error });
+    for (const f of h.figures || []) console.log(JSON.stringify({ figure: "hash", browser: name, engine: h.engine, ...f }));
+    const p = await open("bench=probe&bound=5000");
+    console.log(JSON.stringify({ figure: "probe", browser: name, engine: p.engine, instances: p.instances, stopped_by: p.stopped_by, micros_per_instance: p.micros_per_instance, memory_pages: p.memory_pages }));
+    check(p.instances >= 100, `${name}: the renderer holds at least 100 instances`, { instances: p.instances });
+  } catch (err) {
+    check(false, `${name}: hash or probe`, { error: String(err).split("\n")[0] });
+  }
+
   // Rules 32 and 35: a start from the service worker's cache, offline, with the headers. The
   // last scenario's files were fetched under the service worker's control, so they are cached.
   try {

@@ -1,6 +1,6 @@
 # RFC 003 — Module admission and resource limits
 
-**Status.** Accepted (2026-10-14). Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 5 (table mutation refused), rule 23 (measured cost), open question 2. Amended 2026-10-17 by PR-06: rule 9 records the two library behaviours the wrapper corrects. Open question 4 resolved 2026-10-20 by PR-11 (the conformance kit's AArch64 runs).
+**Status.** Accepted (2026-10-14). Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 5 (table mutation refused), rule 23 (measured cost), open question 2. Amended 2026-10-17 by PR-06: rule 9 records the two library behaviours the wrapper corrects. Open question 4 resolved 2026-10-20 by PR-11 (the conformance kit's AArch64 runs). Open question 1 resolved 2026-10-20 by PR-13: rule 19 carries the measured defaults and maxima, rule 20 the measured ceilings.
 **Tracks.** Requirements ACT-003, ACT-005, ACT-006, ACT-007, ACT-008, ACT-010, SEC-001, SEC-002, SEC-004, SEC-005, DES-006, DATA-003, DATA-005, NFR-011, NFR-013, NFR-014, AC-002, AC-005, AC-006. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The step every module passes before it can act; the transformation that makes a module meterable, limited, and exportable; the cost model and its place in the run identity; the budgets, limits, and quotas and the faults they produce; the export and restore of guest state.
 **Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md) rules 24, 46, and 64 to 66. [RFC 002 — Guest contract](./002-guest-contract.md) for the artifact, the manifest, the admitted features, and the fault kinds. [RFC 004 — Core model](./004-core-model.md) for `[modules]`, `[limits]`, and the validation codes.
@@ -144,11 +144,11 @@ A start function runs at instantiation, outside any activation, before the budge
 
 **Rule 18.** The microstep and event limits of RFC 001 rule 13 are kernel limits on the run, not on an actor; they are declared in `[order]` (RFC 004) and are outside this RFC.
 
-**Rule 19.** Provisional defaults, to be confirmed or replaced by measurement in Phase 1 (open question 1). Until then they are the values of RFC 004 §3.4's example.
+**Rule 19.** The defaults and Host maxima, measured in Phase 1 by the conformance kit (open question 1, resolved 2026-10-20). The measurements: the protocol-style reference activation (B1) consumes 122,000 cost-model units and the compute-style one (B2) 10,150,000; the echo guest's 2,300; a metered unit costs 0.06 to 0.26 ns across the engines, so the default budget bounds one activation to about 6 to 26 ms and the maximum to about a quarter of a second; the kit's guests need a stack height of at most 47; a Rust guest's memory starts at 1.1 MiB and the heap guest reaches 3.3 MiB; the effect flood faults after 17,000 units; a 64 KiB payload costs 2 µs to cross and 5 µs (native) to 80 µs (browser) to digest.
 
 | Name | Default | Host maximum, browser | Host maximum, native |
 |---|---|---|---|
-| `budget` | 10,000,000 | 1,000,000,000 | 1,000,000,000 |
+| `budget` | 100,000,000 | 1,000,000,000 | 1,000,000,000 |
 | `stack` | 1,024 | 65,536 | 65,536 |
 | `memory` | 4 MiB | 64 MiB | 1 GiB |
 | `effects-per-activation` | 1,000 | 100,000 | 100,000 |
@@ -157,7 +157,7 @@ A start function runs at instantiation, outside any activation, before the budge
 | `telemetry-per-activation` | 16 KiB | 16 MiB | 16 MiB |
 | Module size (rule 5) | — | 32 MiB | 32 MiB |
 
-**Rule 20.** Capacity. At start-up the Host probes what it can hold: the number of instances it can create (the browser renderer's ceiling, about 125 in Chromium and 1,000 in Firefox, independent of instance size) and the memory it can reserve. Stage 3 compares the scenario's resident need — one instance per guest-backed actor, each with its memory limit — with the capacity, and refuses with `host.capacity-exceeded` naming the need and the capacity before anything is instantiated (WEB-007). From release 0.3 the Host may hold more actors than resident instances by swapping their state (§6); the check then applies to the resident set.
+**Rule 20.** Capacity. At start-up the Host probes what it can hold: the number of instances it can create (the browser renderer's ceiling, about 125 in Chromium and 1,000 in Firefox, independent of instance size; the conformance kit's probe measured 123 and 998 in Phase 1, and the browser Host assumes 120 and 990 since a probe at start-up would use up what it measures; natively 20,000 instances of the echo guest in one store at 5.3 µs each, the probe's own bound) and the memory it can reserve. Stage 3 compares the scenario's resident need — one instance per guest-backed actor, each with its memory limit — with the capacity, and refuses with `host.capacity-exceeded` naming the need and the capacity before anything is instantiated (WEB-007). From release 0.3 the Host may hold more actors than resident instances by swapping their state (§6); the check then applies to the resident set.
 
 ## 6. State export and restore
 
@@ -260,7 +260,7 @@ Each property has a test in the conformance kit, run under both Hosts (AUTO-005,
 
 | # | Question | Decided by |
 |---|---|---|
-| 1 | The defaults and Host maxima of rule 19. | Measurement in Phase 1, before release 0.1.0. |
+| 1 | ~~The defaults and Host maxima of rule 19.~~ Resolved 2026-10-20 by the conformance kit's figures (PR-13): the table of rule 19 with its measurements; the budget default rose from 10,000,000 to 100,000,000 because the compute-style reference activation needs 10,150,000. | — |
 | 2 | ~~The cost of the export pass and of export and restore (rule 23).~~ Resolved 2026-10-14 by the proof of concept on snapshot and restore; see rule 23. | — |
 | 3 | Whether the browser Host reaches the budget global through a shared global or through a WebAssembly-to-WebAssembly call (rule 11), and the measured saving. | RFC 005, with the crossing benchmark. |
 | 4 | ~~The sign of the default NaN on AArch64 and its consequence for a continuous domain's tolerance (§9).~~ Resolved 2026-10-20 by the conformance kit's AArch64 runs in CI: under Wasmtime the default NaN of `0/0` and `inf − inf` is positive (`0x7ff8…`) on AArch64 and negative (`0xfff8…`) on x86-64; `sqrt(−1)` through the SDK's `libm` and `−NaN × 1` agree on both. A continuous domain's comparison must treat every NaN as one value, as §9 does at the contract and in the trace; a guest that reports raw NaN bits on telemetry is architecture-dependent. | — |

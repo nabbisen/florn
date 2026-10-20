@@ -8,9 +8,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use florn_platform::{Capacity, Platform};
 
-/// The native Host on this machine. The capacity is provisional (RFC 003 open question 1): the
-/// instance count is bounded by the engine's store limits, the memory by what the runner is told
-/// it may use; both are overridable from the command line until the probe is measured (PR-13).
+/// The native Host on this machine. The instance count is bounded by the engine's store limits
+/// (measured: 20,000 instances of the echo guest in one store at 5.3 µs each, the probe's own
+/// bound), the memory by what the runner is told it may use; both are overridable from the
+/// command line.
 #[derive(Clone, Debug)]
 pub struct NativePlatform {
     capacity: Capacity,

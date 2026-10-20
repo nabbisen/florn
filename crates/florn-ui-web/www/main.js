@@ -25,7 +25,9 @@ if ("serviceWorker" in navigator && query.get("sw") !== "0") {
   navigator.serviceWorker.register("sw.js").catch((e) => console.warn("service worker:", e));
 }
 
-// The capacity: the family's provisional figure (RFC 003 rule 20; POC-4), until PR-13 measures.
+// The capacity (RFC 003 rule 20): the family's measured ceiling with a margin for the Host's
+// own module. The kit's probe (?bench=probe) found 123 instances in Chromium and 998 in Firefox,
+// as POC-4 did; a probe at start-up would use up what it measures, so the figure is assumed.
 function capacity() {
   const ua = navigator.userAgent;
   const instances = /Firefox\//.test(ua) ? 990 : 120;
@@ -77,6 +79,12 @@ async function request() {
       guests.push({ name, bytes: await fetchBytes(`scenarios/modules/${name}.wasm`) });
     }
     return { type: "bench", ...base, kind: "cost", guests, activations: parseInt(query.get("activations") || "10000", 10), transfer: guests.map((g) => g.bytes.buffer) };
+  }
+  if (bench === "hash") {
+    return { type: "bench", ...base, kind: "hash", scale: parseInt(query.get("scale") || "1", 10), transfer: [] };
+  }
+  if (bench === "probe") {
+    return { type: "bench", ...base, kind: "probe", bound: parseInt(query.get("bound") || "5000", 10), transfer: [] };
   }
   if (bench === "handle") {
     return { type: "bench", ...base, kind: "handle", transfer: [] };

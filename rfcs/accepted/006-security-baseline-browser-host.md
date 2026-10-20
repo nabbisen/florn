@@ -1,6 +1,6 @@
 # RFC 006 — Security baseline for the browser Host
 
-**Status.** Accepted (2026-10-14). Open question 1 decided at acceptance: MPL-2.0 and every other copyleft licence are refused outright (rule 6).
+**Status.** Accepted (2026-10-14). Open question 1 decided at acceptance: MPL-2.0 and every other copyleft licence are refused outright (rule 6). Section 7 carries the exact maxima since 2026-10-20 (PR-13).
 **Tracks.** Requirements SEC-001 to SEC-012, WEB-002, WEB-005, WEB-006, WEB-009, WEB-010, WEB-012, ACT-003, ACT-005, ACT-006, ACT-010, DATA-003, DATA-007, MIG-006, MIG-008, AUTO-005. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The threat model of the browser Host, scoped to what is built; the controls that answer it, each pointing at the RFC that specifies the mechanism; what florn deliberately does not claim; the security review that every release performs; the supply-chain policy.
 **Depends on.** [RFC 002](./002-guest-contract.md) (what a guest can reach), [RFC 003](./003-module-admission-and-limits.md) (admission and limits), [RFC 004](./004-core-model.md) (manifest and package identity), [RFC 005](./005-host-architecture.md) (the Host, the control interface, hosting), and the external design (`docs/src/external-design.md`, §1, §3.9, §6).
@@ -128,15 +128,15 @@ The maxima below bound every allocation that untrusted input could size. They ar
 
 | Input | Maximum | Where checked |
 |---|---|---|
-| Module file | 32 MiB; functions, globals, tables, segments, imports, exports, custom sections each bounded | RFC 003 rule 5, before parsing further |
-| Manifest text | 4 MiB; actors, ports per actor, connections, ports per connection, scheduled changes each bounded; counts checked before the elements are parsed | RFC 004 rule 39 |
-| Package | Entry count and total size bounded; entries hashed as they are read | RFC 004 §6 |
-| Run record | Chunk and total size bounded; a chunk is parsed only after its declared size is checked | RFC 005 rule 29 |
+| Module file | 32 MiB; 100,000 functions, 10,000 globals, 16 tables with 1,000,000 elements, 10,000 segments with 32 MiB of data, 1,000 imports, 1,000 exports, 64 custom sections | RFC 003 rule 5, before parsing further |
+| Manifest text | 4 MiB; 16 domains, 10,000 modules, 100,000 actors, 4,096 ports per actor, 1,000,000 connections, 4,096 ports per connection, 100,000 scheduled changes, 1,024 limit classes, names of 256 bytes; counts checked before the elements are parsed | RFC 004 rule 39 |
+| Package | 10,256 entries, 2 GiB in all, a module entry 32 MiB; entries hashed as they are read | RFC 004 §6 |
+| Run record | 1,000,000 entries, an entry 1 GiB, 4 GiB in all; a chunk is parsed only after its declared size is checked | RFC 005 rule 29 |
 | Checkpoint | Memory size at most the actor's memory limit; global and table counts as the layout declares | RFC 003 rule 22 |
-| Payload, telemetry, effects, timers | The quotas of RFC 003 §5 | The import handlers |
-| Control-interface message | Size bounded; unknown fields refused | RFC 005 rule 27 |
+| Payload, telemetry, effects, timers | The quotas of RFC 003 §5: 64 KiB, 16 KiB, 1,000 and 64 by default; 16 MiB, 16 MiB, 100,000 and 65,536 at most | The import handlers |
+| Control-interface message | Unknown fields refused; a trace window of at most 10,000 records | RFC 005 rule 27 |
 
-The exact values are set with the defaults of RFC 003 rule 19 in Phase 1 and recorded in the same table.
+The values were set with the defaults of RFC 003 rule 19 in Phase 1 (2026-10-20, PR-13) and are the constants of the model, admission, record and control crates.
 
 ## 8. The security review
 

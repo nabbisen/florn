@@ -80,7 +80,7 @@ fn ac_002_hostile_guests_fault_at_one_point_and_the_neighbour_continues() {
         assert_eq!(f[0].1, kind, "{guest:?}");
         assert!(f[0].2 > 0, "{guest:?}: metered work at the fault");
         if kind == FaultKind::Budget {
-            assert_eq!(f[0].2, 10_000_000, "{guest:?}: the whole budget");
+            assert_eq!(f[0].2, 100_000_000, "{guest:?}: the whole budget");
         }
         assert!(!a.alive(1), "{guest:?}: the actor handles nothing further");
         assert!(a.alive(2));

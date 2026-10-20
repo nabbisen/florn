@@ -81,7 +81,7 @@ ended = "end-reached"
 
 [runs."hostile-loop"]
 seed = 1
-chain = "ddcb7d04821768529ef1fdd8e530eedc066661ed01a8bb80bcb460007a151095"
+chain = "15a17c912c430b7d3b0c54ceef07927223d4ae1dc205a9c9d358253fc818dc3f"
 records = 102
 ended = "end-reached"
 

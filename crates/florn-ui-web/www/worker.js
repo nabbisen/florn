@@ -286,6 +286,39 @@ function runBench(m) {
     }
     return { kind: "cost", figures, engine: family() };
   }
+  if (m.kind === "hash") {
+    const r = host.exports.florn_bench_hash(m.scale);
+    return { kind: "hash", status: r, figures: out(), engine: family() };
+  }
+  if (m.kind === "probe") {
+    // The capacity probe (RFC 003 rule 20): instances of a one-page module until the renderer
+    // refuses, up to the bound given; then the largest memory one instance may reserve.
+    // The memory first, while the address space is free; the instances after, since what the
+    // probe makes stays until the page goes.
+    let memoryPages = 0;
+    for (const pages of [1024, 4096, 16384, 32768, 65536]) {
+      try {
+        new WebAssembly.Memory({ initial: pages });
+        memoryPages = pages;
+      } catch (e) {
+        break;
+      }
+    }
+    const tiny = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 5, 3, 1, 0, 1]));
+    const kept = [];
+    let error = null;
+    const t0 = performance.now();
+    while (kept.length < m.bound) {
+      try {
+        kept.push(new WebAssembly.Instance(tiny, {}));
+      } catch (e) {
+        error = String((e && e.message) || e);
+        break;
+      }
+    }
+    const perInstance = (performance.now() - t0) * 1000 / Math.max(1, kept.length);
+    return { kind: "probe", instances: kept.length, stopped_by: error, micros_per_instance: perInstance, memory_pages: memoryPages, engine: family() };
+  }
   if (m.kind === "handle") {
     // The transport's form with bytes that are no control message: the coded refusal.
     host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes);

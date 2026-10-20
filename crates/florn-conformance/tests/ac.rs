@@ -124,7 +124,7 @@ fn ac_002_the_hostile_scenarios_fault_at_one_point_and_the_neighbour_continues()
         assert_eq!(found, kind, "{name}");
         assert!(metered > 0, "{name}: metered work at the fault");
         match kind {
-            FaultKind::Budget => assert_eq!(metered, 10_000_000, "{name}: the whole budget"),
+            FaultKind::Budget => assert_eq!(metered, 100_000_000, "{name}: the whole budget"),
             FaultKind::Quota => assert_eq!(parameter, 4, "{name}: the effects quota"),
             FaultKind::Contract => assert_eq!(parameter, 8, "{name}: RFC 002 rule 8"),
             _ => {}

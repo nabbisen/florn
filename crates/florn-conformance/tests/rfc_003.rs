@@ -44,7 +44,7 @@ fn a_looping_realloc_faults_as_budget_not_as_a_host_error() {
     let run = host::run(&s);
     let f = faults(&run);
     assert_eq!(f.len(), 1);
-    assert_eq!(f[0], (2, FaultKind::Budget, 0, 10_000_000));
+    assert_eq!(f[0], (2, FaultKind::Budget, 0, 100_000_000));
     assert_eq!(host::ended(&run), florn_host::EndReason::EndReached);
     assert!(run.reproducible(), "a guest fault, not a Host fault");
     assert!(!run.log().codes().contains(&"host.not-reproducible"));
@@ -205,4 +205,20 @@ fn the_nan_probe_reports_five_patterns() {
     let s = Scenario::new("probe", 10).actor(actor(1, "probe", 0));
     assert_eq!(host::run(&s).chain(), host::run(&s).chain());
     assert_eq!(reports(&host::run(&s), 1, 1).len(), 5);
+}
+
+#[test]
+fn the_hash_and_capacity_benchmarks_produce_their_figures() {
+    let h = bench::hash(50);
+    assert_eq!(h.len(), 3);
+    for f in &h {
+        assert!(f.blake3_micros > 0.0 && f.sha256_micros > 0.0, "{f:?}");
+        eprintln!(
+            "{} bytes: blake3 {:.2} µs, sha256 {:.2} µs",
+            f.bytes, f.blake3_micros, f.sha256_micros
+        );
+    }
+    let c = bench::capacity_native(200);
+    assert_eq!(c.instances, 200, "{}", c.stopped_by);
+    assert!(c.micros_per_instance > 0.0);
 }

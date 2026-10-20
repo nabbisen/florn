@@ -468,6 +468,7 @@ dependencies = [
 name = "florn-conformance"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "florn-abi",
  "florn-admission",
  "florn-control",
@@ -478,6 +479,7 @@ dependencies = [
  "florn-model",
  "florn-platform",
  "florn-platform-native",
+ "sha2 0.11.1",
  "toml",
  "wasm-encoder 0.261.0",
  "wat",
@@ -597,11 +599,13 @@ version = "0.0.0"
 name = "florn-ui-web"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "florn-control",
  "florn-engine",
  "florn-engine-web",
  "florn-host",
  "florn-platform-web",
+ "sha2 0.11.1",
 ]
 
 [[package]]

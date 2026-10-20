@@ -24,10 +24,11 @@ pub struct ClassLimits {
 }
 
 impl ClassLimits {
-    /// The provisional defaults of RFC 003 rule 19.
+    /// The defaults of RFC 003 rule 19, as measured in Phase 1: the budget covers the
+    /// compute-style reference activation (10.15 million units) ten times over.
     pub fn defaults() -> Self {
         Self {
-            budget: 10_000_000,
+            budget: 100_000_000,
             stack: 1_024,
             memory_bytes: 4 * 1024 * 1024,
             effects_per_activation: 1_000,

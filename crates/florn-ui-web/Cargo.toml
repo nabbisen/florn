@@ -19,6 +19,8 @@ florn-host = { workspace = true }
 florn-engine = { workspace = true }
 florn-engine-web = { workspace = true }
 florn-platform-web = { workspace = true }
+blake3 = { workspace = true }
+sha2 = { workspace = true }
 
 [[bin]]
 name = "florn-ui-web"

@@ -1,6 +1,6 @@
 # RFC 001 — Determinism contract
 
-**Status.** Accepted (2026-10-13). Open questions 1 to 5 are deferred as stated in their table; none blocks implementation.
+**Status.** Accepted (2026-10-13). Open questions 1 to 5 are deferred as stated in their table; none blocks implementation. Open questions 3 and 4 resolved 2026-10-20 by PR-13.
 **Tracks.** Requirements DES-001 to DES-010, BUS-002, BUS-004, BUS-007, FIN-004, FIN-006, NUM-002, NUM-006, NFR-001, NFR-011, DATA-002, DATA-005, AUTO-003, AUTO-004, AUTO-006. Requirement IDs refer to the florn requirements specification, which will be published under `docs/`.
 **Touches.** The kernel, every guest contract, the scenario format, replay, and the conformance tests.
 
@@ -422,6 +422,6 @@ Each property has a test in the conformance kit. The tests run under both Hosts.
 |---|---|---|
 | 1 | Are NaN values made canonical inside a guest, at the cost of speed, or only at the contract and in the trace? | Measurement in the proof of concept on limits |
 | 2 | Which generator, which derivation, which digest? Proposal: a ChaCha generator, keys derived with BLAKE3, digest with BLAKE3. | This RFC, before acceptance |
-| 3 | The default limits of rule 13. | Measurement in Phase 1 |
-| 4 | The interval of rule 48. | Measurement in Phase 1 |
+| 3 | ~~The default limits of rule 13.~~ The microstep and event limits stand at 1,000,000 per tick and 10,000,000 per instant (RFC 004 §3.4); the actor limits are RFC 003 rule 19, measured 2026-10-20. | — |
+| 4 | ~~The interval of rule 48.~~ Resolved 2026-10-20: 1,000 records (RFC 005 rule 23). | — |
 | 5 | Is the consumed work of rule 46 part of what is compared under Tier 2? It is equal under every engine if rule 66 holds. | After the proof of concept on limits |

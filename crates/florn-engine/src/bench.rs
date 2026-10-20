@@ -66,6 +66,9 @@ pub struct Driver<E: Engine> {
     tys: Vec<Vec<Ty>>,
     metered: bool,
     pub handler: Lifting,
+    /// The cost-model units the metered calls consumed, read from the budget global after each.
+    pub units: u64,
+    pub calls: u64,
 }
 
 impl<E: Engine> Driver<E> {
@@ -104,6 +107,8 @@ impl<E: Engine> Driver<E> {
             tys,
             metered,
             handler: Lifting::default(),
+            units: 0,
+            calls: 0,
         })
     }
 
@@ -130,8 +135,16 @@ impl<E: Engine> Driver<E> {
         let func = self.funcs[which].clone();
         self.engine
             .call(&mut self.inst, &func, &flats, &mut self.handler)
-            .map(|_| ())
-            .map_err(|t| t.to_string())
+            .map_err(|t| t.to_string())?;
+        self.calls += 1;
+        if self.metered
+            && let Some(GlobalValue::I64(remaining)) =
+                self.engine
+                    .global_get(&mut self.inst, Some(BUDGET_MODULE), BUDGET_NAME)
+        {
+            self.units += (BUDGET - remaining).max(0) as u64;
+        }
+        Ok(())
     }
 
     /// `init` with one port per `ports` and the config bytes.
@@ -254,6 +267,8 @@ pub struct Cost {
     pub activations: u64,
     pub unmetered_micros: f64,
     pub metered_micros: f64,
+    /// The cost-model units of one activation, averaged over the metered run.
+    pub units_per_activation: f64,
 }
 
 impl Cost {
@@ -286,6 +301,7 @@ pub fn cost<E: Engine>(
     clock: &dyn Fn() -> f64,
 ) -> Result<Cost, String> {
     let mut micros = [0.0; 2];
+    let mut units = 0.0;
     for (i, is_metered) in [false, true].into_iter().enumerate() {
         let mut d = Driver::new(make(), subject.bytes(is_metered), is_metered, spec)?;
         d.init(1, subject.config)?;
@@ -295,12 +311,17 @@ pub fn cost<E: Engine>(
             ordinal += 1;
             d.message(ordinal, 0, &p)
         })?;
+        if is_metered && d.calls > 1 {
+            // Every call but `init` was a message.
+            units = d.units as f64 / (d.calls - 1) as f64;
+        }
     }
     Ok(Cost {
         guest: subject.name.to_string(),
         activations,
         unmetered_micros: micros[0],
         metered_micros: micros[1],
+        units_per_activation: units,
     })
 }
 
