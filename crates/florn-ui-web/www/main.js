@@ -27,10 +27,12 @@ if ("serviceWorker" in navigator && query.get("sw") !== "0") {
 
 // The capacity (RFC 003 rule 20): the family's measured ceiling with a margin for the Host's
 // own module. The kit's probe (?bench=probe) found 123 instances in Chromium and 998 in Firefox,
-// as POC-4 did; a probe at start-up would use up what it measures, so the figure is assumed.
+// as POC-4 did, and no ceiling below 5,000 in WebKit; a probe at start-up would use up what it
+// measures, so the figure is assumed.
 function capacity() {
   const ua = navigator.userAgent;
-  const instances = /Firefox\//.test(ua) ? 990 : 120;
+  const chromium = /Chrome\/|Chromium\//.test(ua);
+  const instances = chromium ? 120 : 990;
   return { instances, memory_bytes: 1024 * 1024 * 1024 };
 }
 

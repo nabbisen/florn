@@ -21,7 +21,7 @@ Entry point: [`README.md`](./README.md). This file says what to build, crate by 
 |---|---|---|
 | Rust | 1.99.0, edition 2024 | `rust-toolchain.toml` in PR-01; the CI uses it |
 | Targets | `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `aarch64-apple-darwin`, `wasm32-unknown-unknown` | CI runs the three native ones |
-| Wasmtime | 48.0.6 (the 48 long-term-support line; 48.0.2 was measured, 48.0.6 closes the advisories of the line), features `cranelift`, `runtime`, `std`; no `component-model`, no `threads`, no `gc` | RFC 005 rule 9 settings |
+| Wasmtime | 48.0.7 (the 48 long-term-support line; 48.0.2 was measured, 48.0.6 and then 48.0.7 close the advisories of the line, the last two RUSTSEC-2026-0378 and -0379 on 2026-10-20), features `cranelift`, `runtime`, `std`; no `component-model`, no `threads`, no `gc` | RFC 005 rule 9 settings |
 | `fvm-wasm-instrument` | 0.4.0 | Wrapped by `florn-admission`; limiter before gas (RFC 003 rule 9) |
 | `wasmparser`, `wasm-encoder` | 0.261.0 | Validation and the reencoding passes |
 | `wit-component`, `wit-parser` | 0.261.0 | Decoding the `component-type` section at admission; the contract-of-record test |
