@@ -1,6 +1,6 @@
 # RFC 003 — Module admission and resource limits
 
-**Status.** Accepted (2026-10-14). Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 5 (table mutation refused), rule 23 (measured cost), open question 2. Amended 2026-10-17 by PR-06: rule 9 records the two library behaviours the wrapper corrects.
+**Status.** Accepted (2026-10-14). Amended 2026-10-14 with the results of the proof of concept on snapshot and restore: rule 5 (table mutation refused), rule 23 (measured cost), open question 2. Amended 2026-10-17 by PR-06: rule 9 records the two library behaviours the wrapper corrects. Open question 4 resolved 2026-10-20 by PR-11 (the conformance kit's AArch64 runs).
 **Tracks.** Requirements ACT-003, ACT-005, ACT-006, ACT-007, ACT-008, ACT-010, SEC-001, SEC-002, SEC-004, SEC-005, DES-006, DATA-003, DATA-005, NFR-011, NFR-013, NFR-014, AC-002, AC-005, AC-006. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The step every module passes before it can act; the transformation that makes a module meterable, limited, and exportable; the cost model and its place in the run identity; the budgets, limits, and quotas and the faults they produce; the export and restore of guest state.
 **Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md) rules 24, 46, and 64 to 66. [RFC 002 — Guest contract](./002-guest-contract.md) for the artifact, the manifest, the admitted features, and the fault kinds. [RFC 004 — Core model](./004-core-model.md) for `[modules]`, `[limits]`, and the validation codes.
@@ -263,5 +263,5 @@ Each property has a test in the conformance kit, run under both Hosts (AUTO-005,
 | 1 | The defaults and Host maxima of rule 19. | Measurement in Phase 1, before release 0.1.0. |
 | 2 | ~~The cost of the export pass and of export and restore (rule 23).~~ Resolved 2026-10-14 by the proof of concept on snapshot and restore; see rule 23. | — |
 | 3 | Whether the browser Host reaches the budget global through a shared global or through a WebAssembly-to-WebAssembly call (rule 11), and the measured saving. | RFC 005, with the crossing benchmark. |
-| 4 | The sign of the default NaN on AArch64 and its consequence for a continuous domain's tolerance (§9). | An AArch64 run in CI. |
+| 4 | ~~The sign of the default NaN on AArch64 and its consequence for a continuous domain's tolerance (§9).~~ Resolved 2026-10-20 by the conformance kit's AArch64 runs in CI: under Wasmtime the default NaN of `0/0` and `inf − inf` is positive (`0x7ff8…`) on AArch64 and negative (`0xfff8…`) on x86-64; `sqrt(−1)` through the SDK's `libm` and `−NaN × 1` agree on both. A continuous domain's comparison must treat every NaN as one value, as §9 does at the contract and in the trace; a guest that reports raw NaN bits on telemetry is architecture-dependent. | — |
 | 5 | Whether `host.capacity-exceeded` is a refusal or an offer to swap (rule 20) once swapping exists. | Phase 3, with the owner. |
