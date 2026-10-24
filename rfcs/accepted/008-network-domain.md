@@ -1,6 +1,6 @@
 # RFC 008 — Network domain: how a domain enters the Host, links, frames, the router contract, the guest ladder
 
-**Status.** Proposed (2026-10-24). The first domain RFC; answers the twelve design questions the audit before 0.1.0 listed for Phase 2.
+**Status.** Accepted (2026-10-24, the owner's word on the day it was proposed). The first domain RFC; answers the twelve design questions the audit before 0.1.0 listed for Phase 2. Implementation: Phase 2, release 0.2.0, by the handoff package `rfcs/handoffs/008-network-domain/`.
 
 **Tracks.** Requirements NET-001 to NET-004, NET-006 to NET-012, BUS-001, BUS-003, BUS-008, BUS-009, OBS-003, OBS-004, OBS-006, OBS-008, OBS-009, ARCH-006, ARCH-010, AC-008 to AC-011. Requirement IDs refer to `docs/src/requirements.md`.
 

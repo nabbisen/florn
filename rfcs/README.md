@@ -37,13 +37,13 @@ RFC enters it.
 
 ### Proposed
 
-| ID | Title | Proposed |
-|----|-------|----------|
-| 008 | [Network domain: how a domain enters the Host, links, frames, the router contract, the guest ladder](./proposed/008-network-domain.md) | 2026-10-24 |
+_None at present._
 
 ### Accepted
 
-_None at present._
+| ID | Title | Accepted | Implemented by |
+|----|-------|----------|----------------|
+| 008 | [Network domain: how a domain enters the Host, links, frames, the router contract, the guest ladder](./accepted/008-network-domain.md) | 2026-10-24 | Release 0.2 |
 
 ### Implemented
 
@@ -68,3 +68,4 @@ _None yet._
 | Companion of | Package | Date |
 |---|---|---|
 | 005 | [Phase 1 handoff package — core on two engines, release 0.1.0](./handoffs/005-host-architecture/README.md): implementation handoff, task breakdown and PR plan, acceptance and QA checklist; implements RFC 001 to 007 | 2026-10-14 |
+| 008 | [Phase 2 handoff package — network learning lab, release 0.2.0](./handoffs/008-network-domain/README.md): implementation handoff, task breakdown and PR plan, acceptance and QA checklist; implements RFC 008 and the 0.2 rules of RFC 005 | 2026-10-24 |
