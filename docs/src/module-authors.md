@@ -8,8 +8,9 @@ The Rust toolchain with the guest target, and the `florn` runner:
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo install --path crates/florn      # from a checkout of florn, or
+cargo install florn                    # from crates.io, or
 cargo install --git https://github.com/nabbisen/florn --tag 0.1.0 florn
+cargo install --path crates/florn      # from a checkout of florn
 ```
 
 `florn help` prints the commands and the exit codes.

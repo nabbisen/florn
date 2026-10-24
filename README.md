@@ -23,7 +23,7 @@ Release 0.1.0: the core on two Hosts. A deterministic kernel, module admission w
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo install --path crates/florn
+cargo install florn
 florn run scenarios/echo-pair.toml --modules scenarios/modules --seed 42
 ```
 

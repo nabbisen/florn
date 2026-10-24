@@ -5,8 +5,9 @@ The headless runner `florn` runs a scenario, writes a run record, replays one, a
 ## Getting the runner
 
 ```sh
+cargo install florn                                                          # from crates.io
+cargo install --git https://github.com/nabbisen/florn --tag 0.1.0 florn      # pinned to the tag
 cargo install --path crates/florn                                            # from a checkout
-cargo install --git https://github.com/nabbisen/florn --tag 0.1.0 florn      # from the release
 ```
 
 Release 0.1.0 also carries prebuilt binaries for x86-64 Linux, AArch64 Linux and Apple Silicon, with their SHA-256 in the release notes.
