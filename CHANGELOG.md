@@ -4,7 +4,11 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- RFC 008, the network domain, accepted on 2026-10-24; its Phase 2 handoff package under `rfcs/handoffs/008-network-domain/` (PR-15 to PR-22, release 0.2.0).
+
+### Changed
+- The thirteen public crates (the runner `florn`, the SDK `florn-guest`, and their library chain) are published on crates.io at 0.1.0 from the 0.1.0 release's code; the documentation names `cargo install florn` and `florn-guest = "0.1.0"` first.
 
 ## [0.1.0] - 2026-10-20
 
