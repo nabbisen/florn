@@ -93,7 +93,7 @@ fn with_sections(wat: &str, kind: &str) -> Vec<u8> {
     let mut bytes = wat::parse_str(wat).expect("the guest parses");
     CustomSection {
         name: "component-type:florn-core-guest".into(),
-        data: florn_host::test_guests::contract_section().into(),
+        data: florn_test_guests::contract_section().into(),
     }
     .append_to(&mut bytes);
     let manifest = format!(

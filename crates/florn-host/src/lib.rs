@@ -12,8 +12,6 @@ pub mod log;
 pub mod record;
 pub mod run;
 pub mod snapshot;
-#[cfg(feature = "test-guests")]
-pub mod test_guests;
 pub mod world;
 
 pub use controller::Controller;

@@ -29,7 +29,7 @@ pub mod telemetry;
 /// implementation of `exports::florn::core::actor::Guest`. The `actor!` macro writes that for you.
 pub mod bindings {
     wit_bindgen::generate!({
-        path: "../../contracts/florn-core/wit",
+        path: "wit",
         world: "guest",
         pub_export_macro: true,
         export_macro_name: "export_guest",

@@ -5,11 +5,11 @@
 use std::collections::BTreeMap;
 
 use florn_control::{Command, Envelope, Message, Query, SeedChoice, Subscription, Unit};
-use florn_host::test_guests::{Guest, ScenarioSpec, actor};
 use florn_host::{Environment, Options, Run, Seed};
 use florn_kernel::trace::{CommittedEffect, decode, encode};
 use florn_kernel::{EventKey, FaultKind, Record};
 use florn_platform::FixedPlatform;
+use florn_test_guests::{Guest, ScenarioSpec, actor};
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()

@@ -1,6 +1,8 @@
-//! Hand-written guests of the core world for tests, until the SDK's guests exist (PR-10): an
-//! echo, a pinger, a judge, and the five hostile guests of RFC 003 §10; a scenario builder over
-//! them. Behind the `test-guests` feature: the runner's and the kit's tests use it too.
+//! Hand-written guests of the core world for tests: an echo, a pinger, a judge, and the five
+//! hostile guests of RFC 003 §10, each with a global and a table for the export tests; a scenario
+//! builder over them. The Host's, the runner's and the conformance kit's tests use them; the
+//! crate is never published.
+#![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
 
@@ -223,7 +225,7 @@ pub fn contract_section() -> Vec<u8> {
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
-    crate::run::sha256_hex(bytes)
+    florn_model::canonical::hex(&florn_admission::sha256(bytes))
 }
 
 /// An actor line of a scenario.

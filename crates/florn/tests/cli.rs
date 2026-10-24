@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use florn_host::test_guests::{Guest, ScenarioSpec, actor};
+use florn_test_guests::{Guest, ScenarioSpec, actor};
 
 fn florn() -> Command {
     Command::new(env!("CARGO_BIN_EXE_florn"))

@@ -10,7 +10,8 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-florn-host = { workspace = true, features = ["test-guests"] }
+florn-host = { workspace = true }
+florn-test-guests = { workspace = true }
 florn-kernel = { workspace = true }
 florn-abi = { workspace = true }
 florn-model = { workspace = true }

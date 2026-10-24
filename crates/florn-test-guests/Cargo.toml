@@ -1,0 +1,18 @@
+[package]
+name = "florn-test-guests"
+description = "Hand-written guests of the core world and a scenario builder, for the tests of the Host, the runner and the conformance kit; not published"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+florn-model = { workspace = true }
+florn-admission = { workspace = true }
+wat = { workspace = true }
+wit-component = { workspace = true }
+wit-parser = { workspace = true }
+wasm-encoder = { workspace = true }

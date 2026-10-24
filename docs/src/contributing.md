@@ -42,3 +42,7 @@ Fuzzing needs the nightly toolchain and `cargo-fuzz`; `ci/fuzz.sh 60` runs every
 - A change of a file format or of an encoding needs a new version number and a new recorded value in the kit's format tests; a silent edit fails them.
 - Decisions are recorded as RFCs under `rfcs/` and never deleted; `rfcs/README.md` is the index, checked in CI.
 - Commit messages: a digest subject; a body of at most 400 characters when needed.
+
+## Publishing to crates.io
+
+The crates people consume and their dependency chain are publishable: `florn` (the runner), `florn-guest` (the SDK), and the library crates between them; the kit, the browser crates, the UI crates and the test guests are not. `ci/publish.sh --dry-run` packages and verifies every publishable crate in dependency order; `ci/publish.sh` publishes them with the owner's token after `cargo login`. A release's crates are published from the release's commit, with the version the tag names; the SDK's readme then names the registry form of the dependency.

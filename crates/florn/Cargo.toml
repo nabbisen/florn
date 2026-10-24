@@ -8,11 +8,12 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+publish = true
 
 [dependencies]
 florn-cli = { workspace = true }
 
 [dev-dependencies]
-florn-host = { workspace = true, features = ["test-guests"] }
+florn-host = { workspace = true }
+florn-test-guests = { workspace = true }
 wat = { workspace = true }

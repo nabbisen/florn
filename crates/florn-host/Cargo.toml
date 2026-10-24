@@ -7,7 +7,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+publish = true
 
 [dependencies]
 florn-kernel = { workspace = true }
@@ -20,16 +20,9 @@ florn-platform = { workspace = true }
 blake3 = { workspace = true }
 toml = { workspace = true }
 zip = { workspace = true }
-wat = { workspace = true, optional = true }
-wit-component = { workspace = true, optional = true }
-wit-parser = { workspace = true, optional = true }
-wasm-encoder = { workspace = true, optional = true }
-
-[features]
-# Hand-written guests of the core world and a scenario builder, for tests of the Host, the runner
-# and the kit.
-test-guests = ["dep:wat", "dep:wit-component", "dep:wit-parser", "dep:wasm-encoder"]
 
 [dev-dependencies]
 florn-engine-wasmtime = { workspace = true }
-florn-host = { workspace = true, features = ["test-guests"] }
+florn-test-guests = { workspace = true }
+wasm-encoder = { workspace = true }
+wat = { workspace = true }

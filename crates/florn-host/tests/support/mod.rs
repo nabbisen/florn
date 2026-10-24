@@ -1,7 +1,7 @@
-//! The hand-written guests of `florn_host::test_guests`, plus what needs the Wasmtime adapter.
+//! The hand-written guests of `florn-test-guests`, plus what needs the Wasmtime adapter.
 #![allow(dead_code)]
 
-pub use florn_host::test_guests::*;
+pub use florn_test_guests::*;
 
 use florn_admission::Admission;
 use florn_engine_wasmtime::{Limits, WasmtimeEngine};

@@ -431,6 +431,7 @@ version = "0.1.0"
 dependencies = [
  "florn-cli",
  "florn-host",
+ "florn-test-guests",
  "wat",
 ]
 
@@ -483,6 +484,7 @@ dependencies = [
  "florn-model",
  "florn-platform",
  "florn-platform-native",
+ "florn-test-guests",
  "sha2 0.11.1",
  "toml",
  "wasm-encoder 0.261.0",
@@ -543,15 +545,13 @@ dependencies = [
  "florn-control",
  "florn-engine",
  "florn-engine-wasmtime",
- "florn-host",
  "florn-kernel",
  "florn-model",
  "florn-platform",
+ "florn-test-guests",
  "toml",
  "wasm-encoder 0.261.0",
  "wat",
- "wit-component 0.261.0",
- "wit-parser 0.261.0",
  "zip",
 ]
 
@@ -589,6 +589,18 @@ version = "0.1.0"
 dependencies = [
  "florn-control",
  "florn-platform",
+]
+
+[[package]]
+name = "florn-test-guests"
+version = "0.1.0"
+dependencies = [
+ "florn-admission",
+ "florn-model",
+ "wasm-encoder 0.261.0",
+ "wat",
+ "wit-component 0.261.0",
+ "wit-parser 0.261.0",
 ]
 
 [[package]]

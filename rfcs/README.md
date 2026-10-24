@@ -37,7 +37,9 @@ RFC enters it.
 
 ### Proposed
 
-_None at present._
+| ID | Title | Proposed |
+|----|-------|----------|
+| 008 | [Network domain: how a domain enters the Host, links, frames, the router contract, the guest ladder](./proposed/008-network-domain.md) | 2026-10-24 |
 
 ### Accepted
 
