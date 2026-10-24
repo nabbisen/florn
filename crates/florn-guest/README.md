@@ -23,8 +23,9 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.1.0" }
-# or, from a checkout beside your crate:
+florn-guest = "0.1.0"
+# or, pinned to a tag or taken from a checkout beside your crate:
+# florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.1.0" }
 # florn-guest = { path = "../florn/crates/florn-guest" }
 
 [profile.release]

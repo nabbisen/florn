@@ -19,7 +19,8 @@ cargo install --git https://github.com/nabbisen/florn --tag 0.1.0 florn
 The SDK's readme (`crates/florn-guest/README.md`) carries a complete template: a `Cargo.toml` of a `cdylib` crate depending on `florn-guest`, and a `src/lib.rs` with one declaration and one `impl Actor`. The dependency is written in one of two forms:
 
 ```toml
-florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.1.0" }   # from the release
+florn-guest = "0.1.0"                                                         # from crates.io
+florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.1.0" }   # pinned to the tag
 florn-guest = { path = "../florn/crates/florn-guest" }                        # from a checkout
 ```
 
