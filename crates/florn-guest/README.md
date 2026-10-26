@@ -1,5 +1,7 @@
 # florn-guest
 
+For a guest of the network domain's router world (RFC 008), add `florn-guest-network` beside this crate; the module author's chapter has the network section.
+
 The guest SDK (RFC 002 section 8). A guest is one core WebAssembly module that implements the
 `florn:core/guest` world and carries its manifest. The SDK generates the bindings, writes the
 manifest section and the config decoder from one declaration, and provides the distributions,

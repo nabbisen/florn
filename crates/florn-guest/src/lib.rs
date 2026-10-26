@@ -30,7 +30,7 @@ pub mod telemetry;
 pub mod bindings {
     wit_bindgen::generate!({
         path: "wit",
-        world: "guest",
+        world: "florn:core/guest",
         pub_export_macro: true,
         export_macro_name: "export_guest",
         default_bindings_module: "florn_guest::bindings",

@@ -15,8 +15,12 @@
 //!     ],
 //!     telemetry: [(1, "neighbour-state", NeighbourState, [(neighbour, "neighbour", u64), (state, "state", u64)])],
 //!     resources: [("memory", "4MiB"), ("pending-timers", 16)],
+//!     tables: [("network", [("protocol", "ospf-subset")])],
 //! }
 //! ```
+//!
+//! `tables` is optional: one table per domain the guest speaks to, carried opaquely to the
+//! domain (RFC 008 rule 16: the network domain reads `protocol` for its decoders).
 //!
 //! This generates `MANIFEST` (the TOML text), the `florn.manifest` custom section, `Config` with
 //! one typed field per parameter and `Config::decode`, and one record type per channel with a
@@ -204,7 +208,8 @@ macro_rules! declare {
         ports: [ $( ( $pk:literal, $pt:literal, $pmin:literal, $pmax:literal ) ),* $(,)? ],
         params: [ $( ( $pn:ident, $pname:literal, $pty:ident, $preq:literal $(, default = $pdef:literal)? $(, unit = $punit:literal)? ) ),* $(,)? ],
         telemetry: [ $( ( $ch:literal, $chname:literal, $chty:ident, [ $( ( $fname:ident, $fieldname:literal, $fty:ident ) ),* $(,)? ] ) ),* $(,)? ],
-        resources: [ $( ( $rk:literal, $rv:literal ) ),* $(,)? ] $(,)?
+        resources: [ $( ( $rk:literal, $rv:literal ) ),* $(,)? ]
+        $( , tables: [ $( ( $tn:literal, [ $( ( $tk:literal, $tv:literal ) ),* $(,)? ] ) ),* $(,)? ] )? $(,)?
     ) => {
         /// The manifest, as the `florn.manifest` section carries it.
         pub const MANIFEST: &str = concat!(
@@ -229,6 +234,7 @@ macro_rules! declare {
             )*
             "\n[resources]\n",
             $( stringify!($rk), " = ", stringify!($rv), "\n", )*
+            $( $( "\n[", $tn, "]\n", $( $tk, " = ", stringify!($tv), "\n", )* )* )?
         );
 
         /// The `florn.manifest` custom section (RFC 002 rule 11). The section exists in the

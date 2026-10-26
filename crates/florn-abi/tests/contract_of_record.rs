@@ -28,6 +28,37 @@ fn core_wit_equals_rfc_002() {
     );
 }
 
+/// RFC 008 rule 15: the network contract's file equals the RFC's block.
+#[test]
+fn network_wit_equals_rfc_008() {
+    let rfc = std::fs::read_to_string(root().join("rfcs/accepted/008-network-domain.md"))
+        .or_else(|_| std::fs::read_to_string(root().join("rfcs/done/008-network-domain.md")))
+        .unwrap();
+    let file =
+        std::fs::read_to_string(root().join("contracts/florn-network/wit/network.wit")).unwrap();
+    assert_eq!(
+        first_wit_block(&rfc),
+        file,
+        "contracts/florn-network/wit/network.wit differs from RFC 008 §6"
+    );
+}
+
+/// The network package resolves over the core package, with the world `router`.
+#[test]
+fn network_wit_parses_as_package_florn_network() {
+    let mut resolve = wit_parser::Resolve::default();
+    resolve
+        .push_dir(root().join("contracts/florn-core/wit"))
+        .expect("the core WIT parses");
+    let (pkg, _) = resolve
+        .push_dir(root().join("contracts/florn-network/wit"))
+        .expect("the network WIT parses");
+    let name = &resolve.packages[pkg].name;
+    assert_eq!(name.namespace, "florn");
+    assert_eq!(name.name, "network");
+    assert!(resolve.select_world(&[pkg], Some("router")).is_ok());
+}
+
 #[test]
 fn core_wit_parses_as_package_florn_core() {
     let mut resolve = wit_parser::Resolve::default();

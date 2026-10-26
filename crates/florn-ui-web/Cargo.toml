@@ -19,6 +19,7 @@ florn-host = { workspace = true }
 florn-engine = { workspace = true, features = ["bench"] }
 florn-engine-web = { workspace = true }
 florn-platform-web = { workspace = true }
+florn-domain-network = { workspace = true }
 blake3 = { workspace = true }
 sha2 = { workspace = true }
 

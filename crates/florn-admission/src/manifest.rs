@@ -1,8 +1,9 @@
 //! Stage 2, the module manifest (RFC 002 §3): both custom sections, the schema of rule 12, the
 //! parameter types of rule 13, port kinds, channels, needs.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use florn_model::manifest::DomainMap;
 use florn_model::{DomainValue, Quantity};
 use toml::Value;
 
@@ -123,6 +124,9 @@ pub struct ModuleManifest {
     pub params: Vec<Param>,
     pub telemetry: Vec<Channel>,
     pub resources: Resources,
+    /// One table per domain the guest speaks to (`[network]`, RFC 008 rule 16), carried
+    /// opaquely to the domain; a top-level table under any other name.
+    pub domain_tables: BTreeMap<String, DomainMap>,
 }
 
 impl ModuleManifest {
@@ -439,6 +443,17 @@ pub fn value_fits(ty: ParamType, v: &DomainValue) -> bool {
     }
 }
 
+/// A domain's table, opaque (RFC 004 rule 32).
+fn domain_map(v: &Value) -> DomainMap {
+    match v {
+        Value::Table(t) => t
+            .iter()
+            .filter_map(|(k, v)| Some((k.clone(), domain_value(v)?)))
+            .collect(),
+        _ => BTreeMap::new(),
+    }
+}
+
 /// Parse the manifest text alone (rule 12).
 pub fn parse_manifest(text: &str) -> Result<ModuleManifest, Errors> {
     let table: toml::Table = match text.parse() {
@@ -448,21 +463,30 @@ pub fn parse_manifest(text: &str) -> Result<ModuleManifest, Errors> {
     let mut r = Reader {
         errors: Errors::default(),
     };
-    r.known(
-        &table,
-        "",
-        &[
-            "florn-module",
-            "world",
-            "kind",
-            "description",
-            "sdk",
-            "ports",
-            "params",
-            "telemetry",
-            "resources",
-        ],
-    );
+    const TOP: &[&str] = &[
+        "florn-module",
+        "world",
+        "kind",
+        "description",
+        "sdk",
+        "ports",
+        "params",
+        "telemetry",
+        "resources",
+    ];
+    // A top-level table under another name is a domain's (RFC 008 rule 16), read by the
+    // domain; anything else unknown is refused as before.
+    let mut domain_tables = BTreeMap::new();
+    let mut known_top: Vec<&str> = TOP.to_vec();
+    for (k, v) in &table {
+        if !TOP.contains(&k.as_str())
+            && let Value::Table(_) = v
+        {
+            domain_tables.insert(k.clone(), domain_map(v));
+            known_top.push(k.as_str());
+        }
+    }
+    r.known(&table, "", &known_top);
     match table.get("florn-module") {
         Some(Value::Integer(v)) if *v == MANIFEST_SCHEMA => {}
         Some(Value::Integer(v)) => r.errors.push(Error::at(
@@ -765,6 +789,7 @@ pub fn parse_manifest(text: &str) -> Result<ModuleManifest, Errors> {
             params,
             telemetry,
             resources,
+            domain_tables,
         }),
         _ => Err(r.errors),
     }

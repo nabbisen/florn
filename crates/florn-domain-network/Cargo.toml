@@ -1,0 +1,18 @@
+[package]
+name = "florn-domain-network"
+description = "The network domain of RFC 008: links and lans over interfaces, frames with delay, serialisation, jitter and loss, link and node interventions, the router contract's imports, the blackhole built-in"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = true
+
+[dependencies]
+florn-host = { workspace = true }
+florn-kernel = { workspace = true }
+florn-model = { workspace = true }
+florn-control = { workspace = true }
+florn-abi = { workspace = true }
+florn-admission = { workspace = true }

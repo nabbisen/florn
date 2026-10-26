@@ -16,8 +16,9 @@ use std::fmt;
 use std::sync::Arc;
 
 use florn_abi::core_world::{self, Signature};
-use florn_abi::{FlatType, Ty, Val};
+use florn_abi::{Ty, Val};
 use florn_admission::config::Units;
+use florn_admission::manifest::ModuleManifest;
 use florn_admission::world::{FuncSig, ImportInterface, WorldInterfaces, WorldSpec};
 use florn_control::{Ends, Notification};
 use florn_kernel::{Delivery, EventKey, Identity, Instant, Sink, Tick, World};
@@ -54,10 +55,11 @@ pub struct DomainWorld {
 }
 
 fn flat_sig(name: String, s: &Signature) -> FuncSig {
+    let (params, results) = Ty::flat_signature(&s.param_types(), s.result.as_ref());
     FuncSig {
         name,
-        params: s.param_types().iter().flat_map(Ty::flat_types).collect(),
-        results: s.result.as_ref().map_or(Vec::new(), Ty::flat_types),
+        params,
+        results,
     }
 }
 
@@ -178,6 +180,12 @@ pub trait Domain {
     /// Check every connection of its types, every actor of its port types, its top-level
     /// table and every built-in's ports and config; report every error in one pass.
     fn validate(&self, scenario: &Manifest) -> Vec<Notification>;
+    /// Check an admitted module's manifest for what concerns the domain: its table (RFC 008
+    /// rule 16) and the layouts of the channels the domain's views read (rule 17). A warning
+    /// reaches the log; an error refuses the run.
+    fn validate_module(&self, _module: &str, _manifest: &ModuleManifest) -> Vec<Notification> {
+        Vec::new()
+    }
     /// Build the run's state from the validated scenario: the connections' attributes and the
     /// streams derived for them (RFC 001 rules 28 to 31; `florn_kernel::StreamKey::derive`
     /// with the connection's identity and the purpose label).
@@ -417,8 +425,7 @@ impl WorldSigs {
     }
 
     fn push_export(&mut self, name: String, s: &Signature) {
-        let params: Vec<FlatType> = s.param_types().iter().flat_map(Ty::flat_types).collect();
-        let results: Vec<FlatType> = s.result.as_ref().map_or(Vec::new(), Ty::flat_types);
+        let (params, results) = Ty::flat_signature(&s.param_types(), s.result.as_ref());
         let shape = florn_abi::Shape::of(&params, &results).expect("admission checked the shape");
         self.exports.push((name, s.param_types(), shape));
     }

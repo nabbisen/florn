@@ -4,8 +4,8 @@
 //! needs a new version number, never a silent edit of the record.
 use std::collections::BTreeMap;
 
+use florn_conformance::host;
 use florn_control::{Command, Envelope, Message, Query, SeedChoice, Subscription, Unit};
-use florn_host::Domains;
 use florn_host::{Environment, Options, Run, Seed};
 use florn_kernel::trace::{CommittedEffect, decode, encode};
 use florn_kernel::{EventKey, FaultKind, Record};
@@ -161,7 +161,7 @@ fn the_run_record_and_the_checkpoint_of_a_fixed_run_are_recorded() {
         engine,
         florn_admission::Admission::default(),
         &mut FixedPlatform::default(),
-        &Domains::core(),
+        &host::domains(),
         spec.manifest(),
         &spec.modules(),
         Seed::Given(1),

@@ -144,6 +144,37 @@ The scenario format is RFC 004; the shipped scenarios under `scenarios/` are wor
 
 The default profile uses `std`: the standard library's allocator, and a panic aborts, which traps. `--no-default-features --features no-std` selects the SDK's allocator and a panic handler that traps, for a smaller module. The `#![no_std]` attribute in your own crate is a separate choice: the template uses it so that nothing of `std` is pulled in by accident, and it works under both profiles.
 
+## Network guests
+
+A guest of the network domain (RFC 008) speaks the router world, `florn:network/router@0.1.0`: the core world plus one import, `link-info`, and one export, `on-link`. It depends on `florn-guest` and on `florn-guest-network`, declares its interfaces with the port type `network/interface`, implements `florn_guest::Actor` and `florn_guest_network::Router`, and exports with `florn_guest_network::router!` instead of `actor!`:
+
+```toml
+[dependencies]
+florn-guest = "0.1.0"
+florn-guest-network = "0.1.0"
+```
+
+```rust
+florn_guest::declare! {
+    world: "florn:network/router@0.1.0",
+    kind: "net-echo",
+    description: "Echoes every frame through the interface it arrived on",
+    ports: [("eth", "network/interface", 1, 8)],
+    params: [],
+    telemetry: [],
+    resources: [("memory", "1MiB"), ("pending-timers", 1)],
+    tables: [("network", [("protocol", "net-echo")])],
+}
+
+impl florn_guest_network::Router for NetEcho {
+    fn on_link(&mut self, port: PortId, up: bool) { /* the link of `port` went up or down */ }
+}
+
+florn_guest_network::router!(NetEcho);
+```
+
+A frame is `on_message` through the interface's port, its payload the bytes the sender gave `send`. `link_info(port)` answers the state of one interface as it was when the activation began: whether the link is up, the per-port cost, the mtu, the bandwidth. The optional `tables` entry names the protocol the frames follow, so that the inspector decodes them with the domain's decoder for it; a protocol without a decoder is a warning at admission and the frames are shown as bytes. A guest that reports on channels named `neighbour` and `route` with the layouts of RFC 008 rule 17 gets its neighbours and routes shown by the network view. The example `net_echo` in `crates/florn-guest-network/examples` is the first rung of the ladder and the guest of the kit's network scenarios.
+
 ## Where to look next
 
 The fifteen example guests under `crates/florn-guest/examples/` show every feature in use: `echo` is the reference, `chatter` exercises parameters, telemetry and faults, `timers` the timer rules, `heap` state that grows, and the `hostile_*` guests each one fault kind. The conformance kit's readme maps every rule of RFC 002 and RFC 003 to the test that proves it.

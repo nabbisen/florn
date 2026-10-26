@@ -26,6 +26,7 @@ pub const SDK: &[&str] = &[
     "chatter",
     "heap",
     "clock",
+    "net_echo",
 ];
 
 /// The workspace root.
@@ -60,6 +61,8 @@ pub fn build(target_dir: &Path) -> PathBuf {
             "wasm32-unknown-unknown",
             "-p",
             "florn-guest",
+            "-p",
+            "florn-guest-network",
             "--examples",
             "--target-dir",
         ])

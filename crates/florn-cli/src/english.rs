@@ -229,6 +229,30 @@ pub const TABLE: &[(&str, &str)] = &[
         "The {domain} domain recorded {event} at {target}: {detail}.",
     ),
     (
+        "network.link-ports",
+        "The link {connection} joins {found} interfaces; a link joins exactly two.",
+    ),
+    (
+        "network.port-type",
+        "Port {port} of connection {connection} has the type {type}, which is not a network interface.",
+    ),
+    (
+        "network.attr-unknown",
+        "Connection {connection} sets {key}, which the network domain does not know.",
+    ),
+    (
+        "network.attr-type",
+        "Connection {connection} sets {key}, which must be {expected}.",
+    ),
+    (
+        "network.protocol-unknown",
+        "The module {module} declares the protocol {protocol}, for which there is no decoder; its frames are shown as bytes.",
+    ),
+    (
+        "network.telemetry-layout",
+        "The module {module} declares the channel {channel} with a layout the network view does not read.",
+    ),
+    (
         "control.version",
         "The front end speaks interface version {front-end}; this Host speaks {host}.",
     ),

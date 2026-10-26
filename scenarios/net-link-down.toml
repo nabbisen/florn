@@ -1,0 +1,65 @@
+# net-link-down: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "net-link-down"
+domains = ["core", "network"]
+
+[time]
+tick = "1ns"
+end = "1000ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 1
+
+[limits.default]
+memory = "2MiB"
+
+[modules.net_echo]
+sha256 = "8b499081bc13e1fca3b9c2a287126ae2cf10378db6cda1d05e389b55cc01a989"
+contract = "florn:network/router@0.1.0"
+
+[[actors]]
+id = 1
+name = "a1"
+kind = "module"
+module = "net_echo"
+ports = [{ id = 0, name = "p0", type = "network/interface" }]
+[actors.config]
+period = 10
+payload = 64
+echo = false
+
+[[actors]]
+id = 2
+name = "a2"
+kind = "module"
+module = "net_echo"
+ports = [{ id = 0, name = "p0", type = "network/interface" }]
+[actors.config]
+echo = true
+
+[[connections]]
+id = 1000
+name = "c0"
+type = "network/link"
+ports = ["a1.p0", "a2.p0"]
+[connections.attrs]
+delay = "3ns"
+[connections.attrs.per-port]
+"a1.p0" = { cost = 7 }
+
+[[changes]]
+at = "300ns"
+target = "c0"
+[changes.payload]
+enabled = false
+
+[[changes]]
+at = "600ns"
+target = "c0"
+[changes.payload]
+enabled = true

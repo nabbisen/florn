@@ -15,10 +15,11 @@ pub struct FuncSig {
 
 impl FuncSig {
     fn of(sig: &core_world::Signature) -> Self {
+        let (params, results) = Ty::flat_signature(&sig.param_types(), sig.result.as_ref());
         FuncSig {
             name: sig.name.to_string(),
-            params: sig.param_types().iter().flat_map(Ty::flat_types).collect(),
-            results: sig.result.as_ref().map_or(Vec::new(), Ty::flat_types),
+            params,
+            results,
         }
     }
 }

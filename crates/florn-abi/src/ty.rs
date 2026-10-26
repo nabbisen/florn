@@ -201,6 +201,22 @@ impl Ty {
         }
     }
 
+    /// The flat signature of a function in the canonical ABI: parameters beyond
+    /// [`MAX_FLAT_PARAMS`] travel through one pointer, a result beyond [`MAX_FLAT_RESULTS`]
+    /// through a return pointer passed as the last parameter.
+    pub fn flat_signature(params: &[Ty], result: Option<&Ty>) -> (Vec<FlatType>, Vec<FlatType>) {
+        let mut p: Vec<FlatType> = params.iter().flat_map(Ty::flat_types).collect();
+        if p.len() > MAX_FLAT_PARAMS {
+            p = vec![FlatType::I32];
+        }
+        let mut r: Vec<FlatType> = result.map_or(Vec::new(), Ty::flat_types);
+        if r.len() > MAX_FLAT_RESULTS {
+            p.push(FlatType::I32);
+            r = Vec::new();
+        }
+        (p, r)
+    }
+
     /// The flat types this type lowers to.
     pub fn flat_types(&self) -> Vec<FlatType> {
         match self {

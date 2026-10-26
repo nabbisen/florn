@@ -30,7 +30,8 @@ impl TickLength {
         }
     }
     /// The tick length in femtoseconds, as a power of ten.
-    fn femto_exponent(self) -> u32 {
+    /// The exponent of the tick's length in femtoseconds: `ns` is 6, `ps` 3, `fs` 0.
+    pub fn femto_exponent(self) -> u32 {
         match self {
             Self::Ns => 6,
             Self::Ps => 3,

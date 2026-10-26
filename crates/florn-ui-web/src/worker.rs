@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::fmt::Write as _;
 
 use florn_control::{Answer, Command, Envelope, Message, Query, SeedChoice, Subscription, Unit};
+use florn_domain_network::NetworkDomain;
 use florn_engine::bench;
 use florn_engine_web::WebEngine;
 use florn_host::Domains;
@@ -55,7 +56,7 @@ pub extern "C" fn florn_start(instances: u32, memory_bytes: f64) -> i32 {
         WebEngine::new(),
         florn_host::run::default_admission(),
         Box::new(platform),
-        Domains::core(),
+        Domains::core().with(NetworkDomain::new),
         Options {
             keep_records: false,
             keep_payloads: false,

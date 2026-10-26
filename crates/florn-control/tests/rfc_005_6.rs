@@ -443,10 +443,14 @@ fn the_catalogue_is_the_rfc() {
     .unwrap();
     let start = rfc.find("### 4.1").unwrap();
     let end = rfc.find("### 4.5").unwrap();
-    let rows: Vec<&str> = rfc[start..end]
+    let mut rows: Vec<&str> = rfc[start..end]
         .lines()
         .filter(|l| l.starts_with("| `"))
         .collect();
+    // Section 4.6, the network domain's codes, follows the enumerations.
+    let start = rfc.find("### 4.6").unwrap();
+    let end = rfc.find("## 5.").unwrap();
+    rows.extend(rfc[start..end].lines().filter(|l| l.starts_with("| `")));
     assert_eq!(rows.len(), CATALOGUE.len(), "one entry per row");
     for (row, entry) in rows.iter().zip(CATALOGUE) {
         let cells: Vec<&str> = row.trim_matches('|').split('|').map(str::trim).collect();

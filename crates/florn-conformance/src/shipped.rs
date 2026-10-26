@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::guests;
-use crate::scenario::{Scenario, actor};
+use crate::scenario::{Scenario, actor, builtin, router};
 
 /// A shipped scenario and what the kit expects of it.
 pub struct Shipped {
@@ -57,10 +57,33 @@ fn race(tie: &'static str, reversed: bool) -> Scenario {
     s.connect(&[(1, 0), (3, 0)]).connect(&[(2, 0), (3, 1)])
 }
 
+/// Two routers over one link (RFC 008 §12): `a1` sends a frame every `period` ticks through
+/// its interface, `a2` echoes it back when `echo` is on.
+fn net_pair(name: &str, end: u64, period: u64, payload: u64, echo: bool) -> Scenario {
+    Scenario::new(name, end)
+        .domain("network")
+        .actor(
+            router(1, "net_echo", 1)
+                .with("period", period.to_string())
+                .with("payload", payload.to_string())
+                .with("echo", "false"),
+        )
+        .actor(router(2, "net_echo", 1).with("echo", if echo { "true" } else { "false" }))
+}
+
 fn hostile(name: &str, guest: &'static str) -> Scenario {
     Scenario::new(name, 1_000)
         .actor(actor(1, guest, 1))
         .actor(actor(2, "echo", 0))
+}
+
+impl Shipped {
+    /// The sender's `count`: how many frames `a1` sends in all.
+    fn with_count(mut self, count: u64) -> Self {
+        let a = &mut self.scenario.actors[0];
+        a.config.push(("count", count.to_string()));
+        self
+    }
 }
 
 /// Every shipped scenario, in the order of the digests file.
@@ -129,6 +152,57 @@ fn definitions() -> Vec<Shipped> {
                 .actor(actor(1, "pinger", 1).with("payload", "8"))
                 .actor(actor(2, "bench_compute", 1))
                 .connect(&[(1, 0), (2, 0)]),
+        ),
+        // The network domain (RFC 008 §12). Delay and serialisation: a 1,500-byte frame over a
+        // 20 ns link at 1000 Gbit/s arrives 32 ticks after it was sent, and the echo 32 later.
+        normal(net_pair("net-delay", 1_000, 50, 1500, true).link(
+            "network/link",
+            &[(1, 0), (2, 0)],
+            &[("delay", "\"20ns\""), ("bandwidth", "\"1000Gbit/s\"")],
+        )),
+        // Loss: 10,000 frames at loss 0.1, drawn from the link's own stream.
+        normal(net_pair("net-loss", 10_100, 1, 64, false).link(
+            "network/link",
+            &[(1, 0), (2, 0)],
+            &[("loss", "0.1")],
+        ))
+        .with_count(10_000),
+        // Jitter: every arrival in [delay, delay + jitter].
+        normal(net_pair("net-jitter", 2_000, 10, 64, false).link(
+            "network/link",
+            &[(1, 0), (2, 0)],
+            &[("delay", "\"5ns\""), ("jitter", "\"7ns\"")],
+        )),
+        // Link down at 300 and up at 600: `on-link` at both ends, frames in flight arrive,
+        // sends while down are dropped.
+        normal(
+            net_pair("net-link-down", 1_000, 10, 64, true)
+                .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"3ns\"")])
+                .per_port((1, 0), &[("cost", "7")])
+                .change(300, &[("enabled", "false")])
+                .change(600, &[("enabled", "true")]),
+        ),
+        // A lan of three: a frame reaches the two others, each with its own loss draw.
+        normal(
+            net_pair("net-lan", 500, 10, 64, false)
+                .actor(router(3, "net_echo", 1).with("echo", "false"))
+                .link(
+                    "network/lan",
+                    &[(1, 0), (2, 0), (3, 0)],
+                    &[("delay", "\"2ns\""), ("loss", "0.2")],
+                ),
+        ),
+        // The blackhole built-in drops every frame and reports the count.
+        normal(
+            Scenario::new("net-blackhole", 200)
+                .domain("network")
+                .actor(
+                    router(1, "net_echo", 1)
+                        .with("period", "5")
+                        .with("echo", "false"),
+                )
+                .actor(builtin(2, "network/blackhole", "network/interface", 1))
+                .link("network/link", &[(1, 0), (2, 0)], &[]),
         ),
     ]
 }
@@ -297,11 +371,9 @@ pub fn record() -> Digests {
         ..Default::default()
     };
     for name in guests::SDK {
-        if let Ok(a) = florn_admission::Admission::default().admit(
-            name,
-            &module_bytes(name),
-            &crate::host::kit_limits(),
-        ) {
+        if let Ok(a) =
+            crate::host::admission().admit(name, &module_bytes(name), &crate::host::kit_limits())
+        {
             d.admitted.insert(name.to_string(), a.admitted_hex());
         }
     }

@@ -38,4 +38,10 @@ The `zero-delay` scenario ends with the run fault of RFC 001 rule 13 by design; 
 | `hostile-loop`, `hostile-recurse`, `hostile-grow`, `hostile-flood`, `hostile-bad-pointer` | AC-002: one fault each; the neighbour continues |
 | `zero-delay` | A chain without delay ends the run with the fault of RFC 001 rule 13 |
 | `heap` | AC-006: the export and restore reference, 10,000 activations |
+| `net-delay` | RFC 008 §12: a 1,500-byte frame over a 20 ns link at 1000 Gbit/s arrives 32 ticks after it was sent, and the echo 32 later |
+| `net-loss` | RFC 008 §12: 10,000 frames at `loss = 0.1`, drawn from the link's own stream; between 900 and 1,100 are dropped |
+| `net-jitter` | RFC 008 §12: every arrival within `[delay, delay + jitter]` |
+| `net-link-down` | RFC 008 §12: the link goes down at 300 and up at 600; `on-link` at both ends, frames in flight arrive, sends while down are dropped |
+| `net-lan` | RFC 008 §12: a lan of three; a frame reaches the two others, each with its own loss draw |
+| `net-blackhole` | RFC 008 §12: the `network/blackhole` built-in drops every frame and reports the count, with `metered = 0` |
 | `bench-protocol`, `bench-compute` | The kernel-path benchmarks of RFC 005 section 11 |

@@ -25,6 +25,20 @@ pub fn kit_limits() -> ClassLimits {
     }
 }
 
+/// The Host's domains as the shells compose them: the core and the network domain (RFC 008).
+pub fn domains() -> Domains {
+    Domains::core().with(florn_domain_network::NetworkDomain::new)
+}
+
+/// An admission step that admits the domains' worlds beside the core's (RFC 008 rule 6).
+pub fn admission() -> Admission {
+    let mut a = Admission::default();
+    for w in domains().worlds() {
+        a.add_world(w);
+    }
+    a
+}
+
 pub fn engine() -> WasmtimeEngine {
     WasmtimeEngine::new(Limits::default()).expect("the engine")
 }
@@ -52,7 +66,7 @@ pub fn try_start_with(
         engine,
         Admission::default(),
         &mut FixedPlatform::default(),
-        &Domains::core(),
+        &domains(),
         s.manifest(),
         &s.modules(),
         Seed::Given(s.seed),

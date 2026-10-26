@@ -21,6 +21,7 @@ florn-engine = { workspace = true, features = ["conformance", "bench"] }
 florn-engine-wasmtime = { workspace = true }
 florn-platform = { workspace = true }
 florn-platform-native = { workspace = true }
+florn-domain-network = { workspace = true }
 wat = { workspace = true }
 wasm-encoder = { workspace = true }
 wit-parser = { workspace = true }

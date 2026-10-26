@@ -1,0 +1,24 @@
+[package]
+name = "florn-guest-network"
+description = "The guest SDK for the router world of RFC 008 (florn:network@0.1.0): bindings, the Router trait, link-info"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = true
+readme = "README.md"
+
+[dependencies]
+florn-guest = { workspace = true, default-features = false }
+wit-bindgen = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["florn-guest/std"]
+no-std = ["florn-guest/no-std"]
+
+[[example]]
+name = "net_echo"
+crate-type = ["cdylib"]

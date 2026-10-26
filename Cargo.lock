@@ -463,6 +463,7 @@ name = "florn-cli"
 version = "0.1.0"
 dependencies = [
  "florn-control",
+ "florn-domain-network",
  "florn-engine-wasmtime",
  "florn-host",
  "florn-model",
@@ -477,6 +478,7 @@ dependencies = [
  "florn-abi",
  "florn-admission",
  "florn-control",
+ "florn-domain-network",
  "florn-engine",
  "florn-engine-wasmtime",
  "florn-host",
@@ -497,6 +499,18 @@ dependencies = [
 name = "florn-control"
 version = "0.1.0"
 dependencies = [
+ "florn-model",
+]
+
+[[package]]
+name = "florn-domain-network"
+version = "0.1.0"
+dependencies = [
+ "florn-abi",
+ "florn-admission",
+ "florn-control",
+ "florn-host",
+ "florn-kernel",
  "florn-model",
 ]
 
@@ -534,6 +548,14 @@ version = "0.1.0"
 dependencies = [
  "dlmalloc",
  "libm",
+ "wit-bindgen",
+]
+
+[[package]]
+name = "florn-guest-network"
+version = "0.1.0"
+dependencies = [
+ "florn-guest",
  "wit-bindgen",
 ]
 
@@ -619,6 +641,7 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "florn-control",
+ "florn-domain-network",
  "florn-engine",
  "florn-engine-web",
  "florn-host",

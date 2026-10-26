@@ -608,6 +608,21 @@ impl<E: Engine> Run<E> {
         if !errors.is_empty() {
             return Err(Box::new((errors.into(), engine, admission)));
         }
+        // The domains' view of each module's manifest (RFC 008 rule 1, `telemetry`; rule 16).
+        let mut refusals = Vec::new();
+        for (name, f) in &facts {
+            for d in &domain_values {
+                for n in d.validate_module(name, &f.manifest) {
+                    push(n.clone());
+                    if n.severity == Severity::Error {
+                        refusals.push(n);
+                    }
+                }
+            }
+        }
+        if !refusals.is_empty() {
+            return Err(Box::new((HostError::Domain(refusals), engine, admission)));
+        }
         // Stage 3: the estimate against limits and capacity (RFC 003 rule 20).
         let est = estimate(
             &scenario,

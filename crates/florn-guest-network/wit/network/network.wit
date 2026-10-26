@@ -1,0 +1,35 @@
+package florn:network@0.1.0;
+
+/// What a guest may ask about its interfaces, answered from the activation's starting state.
+interface link {
+    use florn:core/types@0.1.0.{port-id};
+
+    record interface-info {
+        /// The link is enabled and the node is up.
+        up: bool,
+        /// The metric of this interface, from the connection's per-port attributes.
+        cost: u32,
+        /// The largest frame this interface sends, in bytes.
+        mtu: u32,
+        /// Bits per second; zero when unlimited.
+        bandwidth: u64,
+    }
+
+    /// The state of one of this actor's interfaces.
+    link-info: func(port: port-id) -> interface-info;
+}
+
+/// Events of the network beyond the core's.
+interface router-events {
+    use florn:core/types@0.1.0.{tick, port-id};
+
+    /// The link of `port` went up or down.
+    on-link: func(now: tick, port: port-id, up: bool);
+}
+
+/// A router: the core world with the network's events.
+world router {
+    include florn:core/guest@0.1.0;
+    import link;
+    export router-events;
+}

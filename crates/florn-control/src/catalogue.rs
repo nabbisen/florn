@@ -120,6 +120,12 @@ pub enum Code {
     CheckpointMismatch,
     StorageCache,
     MessageUnknown,
+    NetworkLinkPorts,
+    NetworkPortType,
+    NetworkAttrUnknown,
+    NetworkAttrType,
+    NetworkProtocolUnknown,
+    NetworkTelemetryLayout,
 }
 
 impl Code {
@@ -891,6 +897,63 @@ pub const CATALOGUE: &[Entry] = &[
         params: &[("code", ParamType::Text), ("params", ParamType::Text)],
         severity: Severity::Warning,
         scope: ScopeKind::None,
+        ends: Ends::Nothing,
+    },
+    // Section 4.6: the network domain (RFC 008 rule 18).
+    Entry {
+        code: Code::NetworkLinkPorts,
+        name: "network.link-ports",
+        params: &[("connection", ParamType::Name), ("found", ParamType::Count)],
+        severity: Severity::Error,
+        scope: ScopeKind::Field,
+        ends: Ends::Command,
+    },
+    Entry {
+        code: Code::NetworkPortType,
+        name: "network.port-type",
+        params: &[
+            ("connection", ParamType::Name),
+            ("port", ParamType::Name),
+            ("type", ParamType::Text),
+        ],
+        severity: Severity::Error,
+        scope: ScopeKind::Field,
+        ends: Ends::Command,
+    },
+    Entry {
+        code: Code::NetworkAttrUnknown,
+        name: "network.attr-unknown",
+        params: &[("connection", ParamType::Name), ("key", ParamType::Name)],
+        severity: Severity::Error,
+        scope: ScopeKind::Field,
+        ends: Ends::Command,
+    },
+    Entry {
+        code: Code::NetworkAttrType,
+        name: "network.attr-type",
+        params: &[
+            ("connection", ParamType::Name),
+            ("key", ParamType::Name),
+            ("expected", ParamType::Text),
+        ],
+        severity: Severity::Error,
+        scope: ScopeKind::Field,
+        ends: Ends::Command,
+    },
+    Entry {
+        code: Code::NetworkProtocolUnknown,
+        name: "network.protocol-unknown",
+        params: &[("module", ParamType::Name), ("protocol", ParamType::Text)],
+        severity: Severity::Warning,
+        scope: ScopeKind::File,
+        ends: Ends::Nothing,
+    },
+    Entry {
+        code: Code::NetworkTelemetryLayout,
+        name: "network.telemetry-layout",
+        params: &[("module", ParamType::Name), ("channel", ParamType::Name)],
+        severity: Severity::Warning,
+        scope: ScopeKind::File,
         ends: Ends::Nothing,
     },
 ];

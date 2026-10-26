@@ -5,7 +5,6 @@ use florn_conformance::host::{self, faults, log_param, reports, sends};
 use florn_conformance::scenario::{Scenario, actor};
 use florn_conformance::shipped;
 use florn_control::{Answer, Command, Envelope, Message, Query, SeedChoice, Subscription, Unit};
-use florn_host::Domains;
 use florn_host::{Advance, Controller, EndReason, Intervention, Options, Run, RunToml, Seed};
 use florn_kernel::FaultKind;
 use florn_kernel::trace::Comparison;
@@ -115,7 +114,7 @@ fn a_run_with_an_intervention_replays_to_the_same_digest() {
         host::engine(),
         florn_admission::Admission::default(),
         &mut FixedPlatform::default(),
-        &Domains::core(),
+        &host::domains(),
         s.manifest(),
         &s.modules(),
         &record,
@@ -157,7 +156,7 @@ fn observation_changes_nothing() {
         host::engine(),
         florn_host::run::default_admission(),
         Box::new(NativePlatform::new()),
-        Domains::core(),
+        host::domains(),
         host::options(),
     );
     let send = |c: &mut Controller<_>, m: Message| c.handle(Envelope::new(m));

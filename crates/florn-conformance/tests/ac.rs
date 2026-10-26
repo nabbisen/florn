@@ -10,7 +10,6 @@ use florn_conformance::scenario::Scenario;
 use florn_conformance::{guests, shipped};
 use florn_control::{Answer, Command, Envelope, Message};
 use florn_engine::Engine;
-use florn_host::Domains;
 use florn_host::record::{self, Contents};
 use florn_host::{Advance, Checkpoint, Controller, EndReason, HostError, Run, Seed};
 use florn_kernel::FaultKind;
@@ -57,7 +56,7 @@ fn ac_001_every_shipped_scenario_produces_its_recorded_digest() {
             engine(),
             Admission::default(),
             &mut NativePlatform::new(),
-            &Domains::core(),
+            &host::domains(),
             manifest,
             &s.scenario.modules(),
             Seed::Given(r.seed),
@@ -170,7 +169,7 @@ fn ac_003_a_run_replays_from_its_record_and_an_altered_module_is_refused() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
-        &Domains::core(),
+        &host::domains(),
         s.manifest(),
         &s.modules(),
         &read.run,
@@ -196,7 +195,7 @@ fn ac_003_a_run_replays_from_its_record_and_an_altered_module_is_refused() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
-        &Domains::core(),
+        &host::domains(),
         s.manifest(),
         &s.modules(),
         &altered,
@@ -233,7 +232,7 @@ fn ac_003_a_run_replays_from_its_record_and_an_altered_module_is_refused() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
-        &Domains::core(),
+        &host::domains(),
         s.manifest(),
         &modules,
         Seed::Given(s.seed),
@@ -303,7 +302,7 @@ fn admit(bytes: Vec<u8>) -> Vec<Message> {
         engine(),
         florn_host::run::default_admission(),
         Box::new(NativePlatform::new()),
-        Domains::core(),
+        host::domains(),
         options(),
     );
     c.handle(Envelope::new(Message::Command(Command::Admit { bytes })))
@@ -433,7 +432,7 @@ fn ac_006_export_and_restore_equal_the_uninterrupted_run() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
-        &Domains::core(),
+        &host::domains(),
         s.manifest(),
         &s.modules(),
         &decoded,
@@ -451,7 +450,7 @@ fn ac_006_export_and_restore_equal_the_uninterrupted_run() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
-        &Domains::core(),
+        &host::domains(),
         s.manifest(),
         &s.modules(),
         &checkpoint,
