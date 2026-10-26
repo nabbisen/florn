@@ -6,6 +6,7 @@ use florn_admission::{Admission, ClassLimits};
 use florn_conformance::host::{self, faults, handled, refused, reports, texts};
 use florn_conformance::scenario::{Scenario, actor};
 use florn_conformance::{guests, shipped};
+use florn_host::Domains;
 use florn_host::{Advance, HostError, Run, Seed};
 use florn_kernel::FaultKind;
 use florn_model::{HostMaxima, Manifest};
@@ -72,6 +73,7 @@ fn a_module_without_a_manifest_or_with_disagreeing_sections_is_refused() {
         host::engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         manifest,
         &s.modules(),
         Seed::Given(1),
@@ -118,6 +120,7 @@ fn port_kinds_are_checked_against_the_declaration() {
         host::engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         manifest,
         &s.modules(),
         Seed::Given(1),

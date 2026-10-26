@@ -99,6 +99,14 @@ pub const TABLE: &[(&str, &str)] = &[
         "Actor {actor} sets the parameter {parameter}, which must be {expected}.",
     ),
     (
+        "connection.mixed-types",
+        "Connection {connection} joins ports of more than one domain.",
+    ),
+    (
+        "domain.unknown",
+        "The scenario declares the domain {domain}, which this Host does not provide.",
+    ),
+    (
         "module.invalid",
         "The module is not valid WebAssembly: {reason}.",
     ),
@@ -165,6 +173,10 @@ pub const TABLE: &[(&str, &str)] = &[
         "The module {module} was admitted as {admitted}; its admitted hash is {hash}.",
     ),
     (
+        "module.export-unsupported",
+        "The function {name} of the module's world has a signature no Host can call.",
+    ),
+    (
         "host.capacity-exceeded",
         "The scenario needs {need} {what}; this Host holds {capacity}.",
     ),
@@ -212,6 +224,10 @@ pub const TABLE: &[(&str, &str)] = &[
         "{records} telemetry records were dropped on the {path} path.",
     ),
     ("telemetry.transport", "Telemetry travels by {transport}."),
+    (
+        "domain.event",
+        "The {domain} domain recorded {event} at {target}: {detail}.",
+    ),
     (
         "control.version",
         "The front end speaks interface version {front-end}; this Host speaks {host}.",

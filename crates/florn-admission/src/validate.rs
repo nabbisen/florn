@@ -3,7 +3,8 @@
 
 use std::ops::Range;
 
-use florn_abi::FlatType;
+use florn_abi::core_world;
+use florn_abi::{FlatType, Shape};
 use wasmparser::{
     ExternalKind, FuncType, Imports, Operator, Parser, Payload, TypeRef, ValType, Validator,
     WasmFeatures,
@@ -421,6 +422,46 @@ pub fn validate(
     for (name, _, _) in &exports {
         if name.starts_with(RESERVED_PREFIX) {
             errors.push(Error::new(Kind::ExportReserved { name: name.clone() }));
+        }
+    }
+    // RFC 008 rule 6: every function of the world has a shape the Hosts' trampolines know, and
+    // a world's imports of one shape fit the trampolines compiled for it.
+    let mut per_shape: Vec<(Shape, u32)> = Vec::new();
+    for sig in world.imports.iter().flat_map(|i| i.functions.iter()) {
+        match Shape::of(&sig.params, &sig.results) {
+            Some(shape) => {
+                let core = world
+                    .imports
+                    .iter()
+                    .any(|i| i.module == core_world::HOST_MODULE && i.functions.contains(sig));
+                if !core {
+                    let n = match per_shape.iter_mut().find(|(s, _)| *s == shape) {
+                        Some((_, n)) => {
+                            *n += 1;
+                            *n
+                        }
+                        None => {
+                            per_shape.push((shape, 1));
+                            1
+                        }
+                    };
+                    if n > Shape::IMPORT_SLOTS {
+                        errors.push(Error::new(Kind::ExportUnsupported {
+                            name: sig.name.clone(),
+                        }));
+                    }
+                }
+            }
+            None => errors.push(Error::new(Kind::ExportUnsupported {
+                name: sig.name.clone(),
+            })),
+        }
+    }
+    for sig in &required {
+        if Shape::of(&sig.params, &sig.results).is_none() {
+            errors.push(Error::new(Kind::ExportUnsupported {
+                name: sig.name.clone(),
+            }));
         }
     }
     info.exports = exports.into_iter().map(|(n, _, _)| n).collect();

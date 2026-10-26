@@ -5,6 +5,7 @@ pub use florn_test_guests::*;
 
 use florn_admission::Admission;
 use florn_engine_wasmtime::{Limits, WasmtimeEngine};
+use florn_host::Domains;
 use florn_host::{Options, Run, Seed};
 use florn_platform::FixedPlatform;
 
@@ -26,6 +27,7 @@ pub fn new_run(spec: &ScenarioSpec, options: Options) -> Run<WasmtimeEngine> {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         spec.manifest(),
         &spec.modules(),
         Seed::Given(spec.seed),

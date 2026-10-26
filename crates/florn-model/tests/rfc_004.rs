@@ -297,7 +297,11 @@ fn reserved_identities_and_undeclared_domains() {
     .unwrap_err();
     assert_eq!(e.codes(), vec!["identity.reserved"]);
     let e = parse(&EXAMPLE.replace("type = \"network/ethernet\" },\n         { id = 1, name = \"eth1\", type = \"network/ethernet\" }]\n[actors.config]\nrouter-id = \"10.0.0.3\"", "type = \"network/ethernet\" },\n         { id = 1, name = \"eth1\", type = \"circuit/pin\" }]\n[actors.config]\nrouter-id = \"10.0.0.3\"")).unwrap_err();
-    assert_eq!(e.codes(), vec!["domain.undeclared"]);
+    // The circuit pin on a network link is undeclared and, by RFC 008 rule 2, a mixed connection.
+    assert_eq!(
+        e.codes(),
+        vec!["domain.undeclared", "connection.mixed-types"]
+    );
     let e = parse(&EXAMPLE.replace(
         "domains = [\"network\"]",
         "domains = [\"network\", \"circuit\"]\n\n[circuit]\nsolver = { }",

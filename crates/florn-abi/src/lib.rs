@@ -10,11 +10,13 @@
 pub mod core_world;
 mod lift;
 mod lower;
+pub mod shape;
 mod ty;
 mod val;
 
 pub use lift::{lift_flat_params, lift_results, load};
 pub use lower::{lower_flat_params, lower_result, store};
+pub use shape::Shape;
 pub use ty::{Flat, FlatType, MAX_FLAT_PARAMS, MAX_FLAT_RESULTS, Ty};
 pub use val::{Val, canonical_f32, canonical_f64};
 

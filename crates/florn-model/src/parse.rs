@@ -82,7 +82,7 @@ const ACTOR_KEYS: &[&str] = &[
     "id", "name", "kind", "module", "builtin", "class", "ports", "config",
 ];
 const PORT_KEYS: &[&str] = &["id", "name", "type"];
-const CONNECTION_KEYS: &[&str] = &["id", "name", "ports", "attrs"];
+const CONNECTION_KEYS: &[&str] = &["id", "name", "type", "ports", "attrs"];
 const CHANGE_KEYS: &[&str] = &["at", "target", "payload"];
 
 impl Parser {
@@ -880,6 +880,20 @@ impl Parser {
                 self.unknown_keys(ct, CONNECTION_KEYS, &path);
                 let id = self.identity(ct.get("id"), &format!("{path}.id"));
                 let name = self.string(ct.get("name"), &format!("{path}.name"), true);
+                // RFC 008 rule 8: a type's domain must be declared.
+                let ctype = self.string(ct.get("type"), &format!("{path}.type"), false);
+                if let Some(t) = &ctype {
+                    let d = domain_of(t);
+                    if d != "core" && !domains.iter().any(|x| x == d) {
+                        self.err(
+                            Kind::DomainUndeclared {
+                                domain: d.to_string(),
+                                where_: format!("{path}.type"),
+                            },
+                            &format!("{path}.type"),
+                        );
+                    }
+                }
                 let mut ports = Vec::new();
                 if let Some(plist) = self.array(
                     ct.get("ports"),
@@ -970,6 +984,28 @@ impl Parser {
                             &format!("{path}.ports"),
                         );
                     }
+                    // RFC 008 rule 2: one domain per connection, the type's and every port's.
+                    let mut seen: Vec<&str> = ctype.as_deref().map(domain_of).into_iter().collect();
+                    for pr in &ports {
+                        let d = actors
+                            .iter()
+                            .find(|a| a.id == pr.actor)
+                            .and_then(|a| a.ports.iter().find(|p| p.id == pr.port))
+                            .map(|p| domain_of(&p.r#type));
+                        if let Some(d) = d
+                            && !seen.contains(&d)
+                        {
+                            seen.push(d);
+                        }
+                    }
+                    if seen.len() > 1 {
+                        self.err(
+                            Kind::ConnectionMixedTypes {
+                                connection: name.clone(),
+                            },
+                            &format!("{path}.ports"),
+                        );
+                    }
                     if let Some(first) = identities.get(&id) {
                         self.err(
                             Kind::IdentityDuplicate {
@@ -994,6 +1030,7 @@ impl Parser {
                     connections.push(Connection {
                         id,
                         name,
+                        r#type: ctype,
                         ports,
                         attrs,
                         per_port,

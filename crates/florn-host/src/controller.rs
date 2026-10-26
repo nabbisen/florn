@@ -22,9 +22,9 @@ use florn_model::canonical::hex;
 use florn_model::{Manifest, Package, PackageMeta};
 use florn_platform::Platform;
 
+use crate::domain::{self, Domains};
 use crate::record::{self, Contents};
 use crate::run::{HostError, Options, Run, Seed};
-use crate::world::Intervention;
 
 /// What an export built: the file name, the bytes, whether payloads are in, the modules by hash.
 type Built = Result<(String, Vec<u8>, bool, Vec<(String, String)>), String>;
@@ -47,6 +47,7 @@ pub struct Controller<E: Engine> {
     engine: Option<E>,
     admission: Option<Admission>,
     platform: Box<dyn Platform>,
+    domains: Domains,
     options: Options,
     scenario: Option<Loaded>,
     /// Module bytes by their SHA-256 (hex).
@@ -64,14 +65,20 @@ pub struct Controller<E: Engine> {
 impl<E: Engine> Controller<E> {
     pub fn new(
         engine: E,
-        admission: Admission,
+        mut admission: Admission,
         platform: Box<dyn Platform>,
+        domains: Domains,
         options: Options,
     ) -> Self {
+        // The domains' worlds are admitted beside the core's (RFC 008 rule 6).
+        for w in domains.worlds() {
+            admission.add_world(w);
+        }
         Self {
             engine: Some(engine),
             admission: Some(admission),
             platform,
+            domains,
             options,
             scenario: None,
             modules: BTreeMap::new(),
@@ -423,22 +430,15 @@ impl<E: Engine> Controller<E> {
                 let Some(run) = &mut self.run else {
                     return self.notify(out, self.not_now(name));
                 };
-                let Some(intervention) = Intervention::decode(&content) else {
-                    return self.notify(out, control_invalid(name, "wrong-type", "content"));
-                };
-                let Intervention::Message { actor, .. } = &intervention;
-                if *actor != target {
-                    return self.notify(out, control_invalid(name, "wrong-type", "target"));
-                }
-                if !run.alive(target) {
-                    return self.notify(out, control_invalid(name, "out-of-range", "target"));
-                }
                 if let Some(t) = at
                     && (t < run.kernel().now().tick || t >= run.scenario().time.end)
                 {
                     return self.notify(out, control_invalid(name, "out-of-range", "at"));
                 }
-                run.intervene(at, &intervention);
+                // The core's `message` and the domains' kinds alike (RFC 008 rule 4).
+                if let Err(n) = run.intervene_map(at, target, &content) {
+                    return self.notify(out, *n);
+                }
                 out.push(Message::Answer(Answer::Done));
             }
             Command::Export { kind, confirmed } => self.export(kind, confirmed, out),
@@ -509,6 +509,20 @@ impl<E: Engine> Controller<E> {
                 )])),
             }
         };
+        // The domains' validation (RFC 008 rule 1) follows the core's, at load.
+        let loaded = loaded.and_then(|l| {
+            let refusals = match self.domains.instantiate(&l.manifest) {
+                Ok(d) => domain::validate(&d, &l.manifest),
+                Err(n) => vec![*n],
+            };
+            if refusals.is_empty() {
+                Ok(l)
+            } else {
+                self.state = RunState::Invalid;
+                out.extend(refusals.into_iter().map(Message::Notification));
+                Err(florn_model::Errors::default())
+            }
+        });
         match loaded {
             Ok(l) => {
                 self.scenario = Some(l);
@@ -586,6 +600,7 @@ impl<E: Engine> Controller<E> {
                 engine,
                 admission,
                 self.platform.as_mut(),
+                &self.domains,
                 manifest,
                 &modules,
                 &record,
@@ -600,6 +615,7 @@ impl<E: Engine> Controller<E> {
                     engine,
                     admission,
                     self.platform.as_mut(),
+                    &self.domains,
                     manifest,
                     &modules,
                     seed,

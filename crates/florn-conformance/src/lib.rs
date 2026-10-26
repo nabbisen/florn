@@ -15,3 +15,4 @@ pub mod guests;
 pub mod host;
 pub mod scenario;
 pub mod shipped;
+pub mod test_domain;

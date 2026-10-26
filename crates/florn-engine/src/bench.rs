@@ -5,7 +5,7 @@
 //! caller's (seconds as `f64`): the kit's is `std::time`, the worker's is `performance.now()`.
 
 use florn_abi::core_world;
-use florn_abi::{Flat, Memory, Ty, Val, lift_flat_params, lower_flat_params};
+use florn_abi::{Flat, Memory, Shape, Ty, Val, lift_flat_params, lower_flat_params};
 
 use crate::{Engine, GlobalValue, ImportHandler, ImportSpec, InstanceId, Refusal};
 
@@ -85,14 +85,14 @@ impl<E: Engine> Driver<E> {
             .instantiate(&module, spec)
             .map_err(|e| e.to_string())?;
         let mut funcs = Vec::with_capacity(3);
-        for name in [
-            core_world::EXPORT_INIT,
-            core_world::EXPORT_ON_MESSAGE,
-            core_world::EXPORT_ON_TIMER,
+        for (name, shape) in [
+            (core_world::EXPORT_INIT, Shape::INIT),
+            (core_world::EXPORT_ON_MESSAGE, Shape::MESSAGE),
+            (core_world::EXPORT_ON_TIMER, Shape::TIMER),
         ] {
             funcs.push(
                 engine
-                    .func(&inst, name)
+                    .func(&inst, name, shape)
                     .ok_or_else(|| format!("export {name}"))?,
             );
         }
@@ -331,13 +331,13 @@ pub fn core_import_spec() -> ImportSpec {
     let functions = core_world::host_functions()
         .into_iter()
         .map(|s| ImportFunction {
+            module: core_world::HOST_MODULE.to_string(),
             name: s.name.to_string(),
             params: s.param_types().iter().flat_map(Ty::flat_types).collect(),
             results: s.result.as_ref().map_or(Vec::new(), Ty::flat_types),
         })
         .collect();
     ImportSpec {
-        host_module: core_world::HOST_MODULE.to_string(),
         functions,
         globals: vec![HostGlobal {
             module: BUDGET_MODULE.into(),

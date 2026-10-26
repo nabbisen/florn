@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use florn_abi::core_world;
-use florn_abi::{Flat, Memory, Ty, Val, lift_flat_params, lower_flat_params};
+use florn_abi::{Flat, Memory, Shape, Ty, Val, lift_flat_params, lower_flat_params};
 
 use crate::{
     Engine, GlobalValue, HostGlobal, ImportFunction, ImportHandler, ImportSpec, InstanceId,
@@ -93,13 +93,13 @@ pub fn core_import_spec() -> ImportSpec {
     let functions = core_world::host_functions()
         .into_iter()
         .map(|s| ImportFunction {
+            module: core_world::HOST_MODULE.to_string(),
             name: s.name.to_string(),
             params: s.param_types().iter().flat_map(Ty::flat_types).collect(),
             results: s.result.as_ref().map_or(Vec::new(), Ty::flat_types),
         })
         .collect();
     ImportSpec {
-        host_module: core_world::HOST_MODULE.to_string(),
         functions,
         globals: vec![HostGlobal {
             module: BUDGET_MODULE.into(),
@@ -241,8 +241,10 @@ pub fn call_export<E: Engine>(
     vals: &[Val],
     handler: &mut dyn ImportHandler,
 ) -> Result<Vec<Flat>, crate::Trap> {
+    let params: Vec<florn_abi::FlatType> = tys.iter().flat_map(Ty::flat_types).collect();
+    let shape = Shape::of(&params, &[]).unwrap_or_else(|| panic!("a shape for {name}"));
     let func = e
-        .func(inst, name)
+        .func(inst, name, shape)
         .unwrap_or_else(|| panic!("export {name}"));
     let mut flats = Vec::new();
     let mut err = None;

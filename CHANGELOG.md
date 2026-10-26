@@ -6,8 +6,12 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 ### Added
 - RFC 008, the network domain, accepted on 2026-10-24; its Phase 2 handoff package under `rfcs/handoffs/008-network-domain/` (PR-15 to PR-22, release 0.2.0).
+- The domain interface (RFC 008 §2, PR-15): the `Domain` trait of `florn-host` with a composed world dispatching by port type, domain events, scheduled changes and interventions of a domain's kinds routed to the domain, built-in actors run by their domain with `metered = 0`, a domain's imports answered inside an activation, its units in the config, its state in checkpoints. `Run` and `Controller` take the Host's `Domains`. A table of flat call shapes in `florn-abi`, shared by admission and both engine adapters: a world function outside it is refused at admission (`module.export-unsupported`). The conformance kit's test domain and the RFC 008 interface tests.
+- A connection's `type` (RFC 004 rule 19 amended); the codes `connection.mixed-types`, `domain.unknown`, `module.export-unsupported`, `domain.event`.
 
 ### Changed
+- The engine adapter trait: an import carries its interface's module; an export is resolved with its flat shape. The browser worker binds a guest's imports from a binding text the adapter writes.
+- Admission reports a module manifest's own refusals beside stage 1's when the manifest cannot be read, instead of hiding them behind `module.import-refused`.
 - The thirteen public crates (the runner `florn`, the SDK `florn-guest`, and their library chain) are published on crates.io at 0.1.0 from the 0.1.0 release's code; the documentation names `cargo install florn` and `florn-guest = "0.1.0"` first.
 
 ## [0.1.0] - 2026-10-20

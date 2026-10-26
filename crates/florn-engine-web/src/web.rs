@@ -1,17 +1,21 @@
 //! The adapter on the guest target: the imports the worker provides, the exports it calls, and
 //! the [`Engine`] implementation over them.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use florn_abi::{AbiError, Flat, Memory};
+use florn_abi::{AbiError, Flat, Memory, Shape};
 use florn_engine::{
     Engine, EngineError, EngineInfo, GlobalValue, ImportHandler, ImportSpec, InstanceId, Trap,
     TrapKind,
 };
 
-use crate::sig::{self, MAX_SLOTS, Sig};
+use crate::sig::{self, MAX_SLOTS};
+
+/// The import bindings of the instance whose guest runs: (shape, slot) to the import's name,
+/// for the trampolines beyond the core's named ones (RFC 008 rule 6).
+type ImportMap = Rc<HashMap<(u32, u32), String>>;
 
 /// The call statuses the worker returns from `engine_call`.
 const OK: i32 = 0;
@@ -27,7 +31,8 @@ unsafe extern "C" {
     fn engine_compile(ptr: *const u8, len: u32) -> i32;
     /// Instantiate with the imports of the named host interface and the shared budget global;
     /// an instance number, or -1 with the kind in `engine_last_error_kind` and the text.
-    fn engine_instantiate(module: i32, host_module: *const u8, host_module_len: u32) -> i32;
+    /// Instantiate with the import bindings of `sig::binding_text` (one line per import).
+    fn engine_instantiate(module: i32, bindings: *const u8, bindings_len: u32) -> i32;
     fn engine_drop(inst: i32);
     /// Place the export in the Host's function table; its index, or -1.
     fn engine_func(inst: i32, name: *const u8, name_len: u32) -> i32;
@@ -65,6 +70,7 @@ thread_local! {
     /// guest runs and therefore the only time an import export can dereference it.
     static HANDLER: Cell<Option<*mut (dyn ImportHandler + 'static)>> = const { Cell::new(None) };
     static CURRENT: Cell<(i32, InstanceId)> = const { Cell::new((-1, 0)) };
+    static CURRENT_IMPORTS: RefCell<Option<ImportMap>> = const { RefCell::new(None) };
     static REFUSED: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -86,45 +92,58 @@ pub fn user_agent() -> String {
 }
 
 /// The trampoline the worker calls inside a `try`: a `call_indirect` into the guest through the
-/// Host's function table, with the arguments read from the slots at `args`.
+/// Host's function table, with the arguments read from the slots at `args`. One arm per shape of
+/// `florn_abi::Shape`'s table (RFC 008 rule 6); admission keeps every world's function in it.
 ///
 /// # Safety
 /// `args` and `results` point into this module's memory at [`MAX_SLOTS`] slots each, written by
-/// [`WebEngine::call`] just before; `func` is an index the worker placed an export of signature
-/// `sig` at. A mismatch traps at the call, which the worker's `try` catches.
+/// [`WebEngine::call`] just before; `func` is an index the worker placed an export of shape
+/// `shape` at. A mismatch traps at the call, which the worker's `try` catches.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn florn_call(sig: i32, func: u32, args: *const u64, results: *mut u64) {
+// The argument counter of the macro is unused by the shape without parameters.
+#[allow(unused_mut, unused_assignments, unused_variables)]
+pub unsafe extern "C" fn florn_call(shape: i32, func: u32, args: *const u64, results: *mut u64) {
     let a = |i: usize| unsafe { *args.add(i) };
     let i32_at = |i: usize| a(i) as i32;
+    let i64_at = |i: usize| a(i) as i64;
+    macro_rules! call {
+        (($($t:ident),*)) => {{
+            let f: unsafe extern "C" fn($(call!(@ty $t)),*) = core::mem::transmute(func as usize);
+            let mut i = 0usize;
+            f($({ let v = call!(@at $t, i); i += 1; v }),*);
+        }};
+        (($($t:ident),*) -> i32) => {{
+            let f: unsafe extern "C" fn($(call!(@ty $t)),*) -> i32 =
+                core::mem::transmute(func as usize);
+            let mut i = 0usize;
+            let r = f($({ let v = call!(@at $t, i); i += 1; v }),*);
+            *results = r as u32 as u64;
+        }};
+        (($($t:ident),*) -> i64) => {{
+            let f: unsafe extern "C" fn($(call!(@ty $t)),*) -> i64 =
+                core::mem::transmute(func as usize);
+            let mut i = 0usize;
+            let r = f($({ let v = call!(@at $t, i); i += 1; v }),*);
+            *results = r as u64;
+        }};
+        (@ty i32) => { i32 };
+        (@ty i64) => { i64 };
+        (@at i32, $i:ident) => { i32_at($i) };
+        (@at i64, $i:ident) => { i64_at($i) };
+    }
     unsafe {
-        match sig {
-            1 => {
-                let f: unsafe extern "C" fn(i64, i32, i32, i32, i32, i32) =
-                    core::mem::transmute(func as usize);
-                f(
-                    a(0) as i64,
-                    i32_at(1),
-                    i32_at(2),
-                    i32_at(3),
-                    i32_at(4),
-                    i32_at(5),
-                );
-            }
-            2 => {
-                let f: unsafe extern "C" fn(i64, i32, i32, i32) =
-                    core::mem::transmute(func as usize);
-                f(a(0) as i64, i32_at(1), i32_at(2), i32_at(3));
-            }
-            3 => {
-                let f: unsafe extern "C" fn(i64, i32) = core::mem::transmute(func as usize);
-                f(a(0) as i64, i32_at(1));
-            }
-            4 => {
-                let f: unsafe extern "C" fn(i32, i32, i32, i32) -> i32 =
-                    core::mem::transmute(func as usize);
-                let r = f(i32_at(0), i32_at(1), i32_at(2), i32_at(3));
-                *results = r as u32 as u64;
-            }
+        match shape {
+            1 => call!((i64, i32, i32, i32, i32, i32)),
+            2 => call!((i64, i32, i32, i32)),
+            3 => call!((i64, i32)),
+            4 => call!((i32, i32, i32, i32) -> i32),
+            5 => call!((i32, i32, i32)),
+            6 => call!((i32, i64)),
+            7 => call!((i32)),
+            8 => call!(() -> i64),
+            9 => call!((i64, i32, i32)),
+            10 => call!((i32, i32)),
+            11 => call!((i32) -> i32),
             _ => core::arch::wasm32::unreachable(),
         }
     }
@@ -189,6 +208,80 @@ pub extern "C" fn florn_import_report(channel: i32, ptr: i32, len: i32) {
     );
 }
 
+/// Dispatch an import bound by shape and slot (RFC 008 rule 6): the name comes from the
+/// bindings of the instance whose guest runs.
+fn dispatch_slot(shape: u32, slot: u32, args: &[Flat]) -> Vec<Flat> {
+    let name = CURRENT_IMPORTS.with(|m| {
+        m.borrow()
+            .as_ref()
+            .and_then(|m| m.get(&(shape, slot)).cloned())
+    });
+    match name {
+        Some(name) => dispatch(&name, args),
+        None => refuse(),
+    }
+}
+
+fn first_i32(out: Vec<Flat>) -> i32 {
+    match out.first() {
+        Some(Flat::I32(v)) => *v,
+        _ => refuse(),
+    }
+}
+
+fn first_i64(out: Vec<Flat>) -> i64 {
+    match out.first() {
+        Some(Flat::I64(v)) => *v,
+        _ => refuse(),
+    }
+}
+
+/// The trampolines beyond the core's named imports: `Shape::IMPORT_SLOTS` per shape of the
+/// table, named `florn_import_s<shape>_<slot>`, bound by the worker from `sig::binding_text`.
+macro_rules! import_slot {
+    ($f:ident, $shape:literal, $slot:literal, ($($a:ident: $t:ident),*)) => {
+        #[unsafe(no_mangle)]
+        pub extern "C" fn $f($($a: $t),*) {
+            dispatch_slot($shape, $slot, &[$(import_slot!(@flat $t, $a)),*]);
+        }
+    };
+    ($f:ident, $shape:literal, $slot:literal, ($($a:ident: $t:ident),*) -> i32) => {
+        #[unsafe(no_mangle)]
+        pub extern "C" fn $f($($a: $t),*) -> i32 {
+            first_i32(dispatch_slot($shape, $slot, &[$(import_slot!(@flat $t, $a)),*]))
+        }
+    };
+    ($f:ident, $shape:literal, $slot:literal, ($($a:ident: $t:ident),*) -> i64) => {
+        #[unsafe(no_mangle)]
+        pub extern "C" fn $f($($a: $t),*) -> i64 {
+            first_i64(dispatch_slot($shape, $slot, &[$(import_slot!(@flat $t, $a)),*]))
+        }
+    };
+    (@flat i32, $a:ident) => { Flat::I32($a) };
+    (@flat i64, $a:ident) => { Flat::I64($a) };
+}
+
+macro_rules! import_slots {
+    ($shape:literal, [$f0:ident, $f1:ident, $f2:ident, $f3:ident], $($sig:tt)*) => {
+        import_slot!($f0, $shape, 0, $($sig)*);
+        import_slot!($f1, $shape, 1, $($sig)*);
+        import_slot!($f2, $shape, 2, $($sig)*);
+        import_slot!($f3, $shape, 3, $($sig)*);
+    };
+}
+
+import_slots!(1, [florn_import_s1_0, florn_import_s1_1, florn_import_s1_2, florn_import_s1_3], (a: i64, b: i32, c: i32, d: i32, e: i32, f: i32));
+import_slots!(2, [florn_import_s2_0, florn_import_s2_1, florn_import_s2_2, florn_import_s2_3], (a: i64, b: i32, c: i32, d: i32));
+import_slots!(3, [florn_import_s3_0, florn_import_s3_1, florn_import_s3_2, florn_import_s3_3], (a: i64, b: i32));
+import_slots!(4, [florn_import_s4_0, florn_import_s4_1, florn_import_s4_2, florn_import_s4_3], (a: i32, b: i32, c: i32, d: i32) -> i32);
+import_slots!(5, [florn_import_s5_0, florn_import_s5_1, florn_import_s5_2, florn_import_s5_3], (a: i32, b: i32, c: i32));
+import_slots!(6, [florn_import_s6_0, florn_import_s6_1, florn_import_s6_2, florn_import_s6_3], (a: i32, b: i64));
+import_slots!(7, [florn_import_s7_0, florn_import_s7_1, florn_import_s7_2, florn_import_s7_3], (a: i32));
+import_slots!(8, [florn_import_s8_0, florn_import_s8_1, florn_import_s8_2, florn_import_s8_3], () -> i64);
+import_slots!(9, [florn_import_s9_0, florn_import_s9_1, florn_import_s9_2, florn_import_s9_3], (a: i64, b: i32, c: i32));
+import_slots!(10, [florn_import_s10_0, florn_import_s10_1, florn_import_s10_2, florn_import_s10_3], (a: i32, b: i32));
+import_slots!(11, [florn_import_s11_0, florn_import_s11_1, florn_import_s11_2, florn_import_s11_3], (a: i32) -> i32);
+
 /// A guest's memory as the worker exposes it: one copy per read or write, no object per crossing.
 struct JsMemory {
     inst: i32,
@@ -237,7 +330,7 @@ impl Memory for JsMemory {
         let mut args = [0u64; MAX_SLOTS];
         let mut results = [0u64; MAX_SLOTS];
         sig::encode(
-            Sig::Realloc,
+            Shape::REALLOC,
             &[
                 Flat::I32(old_ptr as i32),
                 Flat::I32(old_size as i32),
@@ -251,7 +344,7 @@ impl Memory for JsMemory {
         let status = unsafe {
             engine_call(
                 self.inst,
-                Sig::Realloc as i32,
+                Shape::REALLOC.number() as i32,
                 f.index as i32,
                 args.as_ptr(),
                 results.as_mut_ptr(),
@@ -363,13 +456,14 @@ pub struct Inst {
     id: InstanceId,
     realloc: Option<Func>,
     tags: GlobalTags,
+    imports: ImportMap,
 }
 
-/// A typed reference: an index of the Host's function table and the signature to call it with.
+/// A typed reference: an index of the Host's function table and the shape to call it with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Func {
     index: u32,
-    sig: Sig,
+    shape: Shape,
 }
 
 fn with_name<R>(name: &str, f: impl FnOnce(*const u8, u32) -> R) -> R {
@@ -410,14 +504,22 @@ impl Engine for WebEngine {
         module: &(i32, GlobalTags),
         spec: &ImportSpec,
     ) -> Result<Inst, EngineError> {
-        // SAFETY: the host module name is a live string.
-        let js = unsafe {
-            engine_instantiate(
-                module.0,
-                spec.host_module.as_ptr(),
-                spec.host_module.len() as u32,
-            )
-        };
+        // The bindings: admission keeps every import in the table (RFC 008 rule 6).
+        let bindings = sig::bindings(spec).ok_or_else(|| {
+            EngineError::Instantiate("an import outside the Host's shape table".into())
+        })?;
+        let text = sig::binding_text(&bindings);
+        let imports: ImportMap = Rc::new(
+            bindings
+                .iter()
+                .filter_map(|b| {
+                    b.slot
+                        .map(|slot| ((b.shape.number(), slot), b.name.clone()))
+                })
+                .collect(),
+        );
+        // SAFETY: the binding text is a live string.
+        let js = unsafe { engine_instantiate(module.0, text.as_ptr(), text.len() as u32) };
         if js < 0 {
             let text = last_error();
             // SAFETY: a plain query.
@@ -434,8 +536,9 @@ impl Engine for WebEngine {
             id,
             realloc: None,
             tags: module.1.clone(),
+            imports,
         };
-        inst.realloc = self.func(&inst, florn_abi::core_world::EXPORT_REALLOC);
+        inst.realloc = self.func(&inst, florn_abi::core_world::EXPORT_REALLOC, Shape::REALLOC);
         Ok(inst)
     }
 
@@ -448,13 +551,12 @@ impl Engine for WebEngine {
         unsafe { engine_drop(inst.js) }
     }
 
-    fn func(&mut self, inst: &Inst, name: &str) -> Option<Func> {
-        let sig = Sig::of_export(name)?;
+    fn func(&mut self, inst: &Inst, name: &str, shape: Shape) -> Option<Func> {
         // SAFETY: `name` is a live string.
         let index = with_name(name, |p, n| unsafe { engine_func(inst.js, p, n) });
         (index >= 0).then_some(Func {
             index: index as u32,
-            sig,
+            shape,
         })
     }
 
@@ -467,7 +569,7 @@ impl Engine for WebEngine {
     ) -> Result<Vec<Flat>, Trap> {
         let mut slots = [0u64; MAX_SLOTS];
         let mut results = [0u64; MAX_SLOTS];
-        if sig::encode(func.sig, args, &mut slots).is_none() {
+        if sig::encode(func.shape, args, &mut slots).is_none() {
             return Err(Trap {
                 kind: TrapKind::Other,
                 message: "arguments do not match the export's signature".into(),
@@ -479,12 +581,13 @@ impl Engine for WebEngine {
         let ptr: *mut (dyn ImportHandler + 'static) = unsafe { std::mem::transmute(ptr) };
         HANDLER.with(|h| h.set(Some(ptr)));
         CURRENT.with(|c| c.set((inst.js, inst.id)));
+        CURRENT_IMPORTS.with(|m| *m.borrow_mut() = Some(inst.imports.clone()));
         REFUSED.with(|r| r.set(false));
         // SAFETY: the slots live on this frame; the worker calls `florn_call` with them.
         let status = unsafe {
             engine_call(
                 inst.js,
-                func.sig as i32,
+                func.shape.number() as i32,
                 func.index as i32,
                 slots.as_ptr(),
                 results.as_mut_ptr(),
@@ -492,7 +595,7 @@ impl Engine for WebEngine {
         };
         HANDLER.with(|h| h.set(None));
         if status == OK {
-            return Ok(sig::decode(func.sig, &results));
+            return Ok(sig::decode(func.shape, &results));
         }
         let kind = if REFUSED.with(|r| r.get()) {
             TrapKind::HostRefused

@@ -81,17 +81,22 @@ function family() {
   return "browser";
 }
 
-// The import object of a world, built once and shared by every instance of it (rule 10).
-function importsFor(hostModule) {
-  let obj = importObjects.get(hostModule);
+// The import object of a world, built once per binding text and shared by every instance of it
+// (rule 10). Each line binds a guest import (module, name) to one of the Host's exports: a core
+// import to its named export, any other to the trampoline of its shape and slot (RFC 008 rule 6).
+function importsFor(bindings) {
+  let obj = importObjects.get(bindings);
   if (obj) return obj;
   obj = { env: { gas_counter: gasGlobal } };
-  obj[hostModule] = {};
-  for (const name of ["send", "set-timer", "cancel-timer", "random", "report"]) {
-    const f = host.exports["florn_import_" + name.replaceAll("-", "_")];
-    if (typeof f === "function") obj[hostModule][name] = f;
+  for (const line of bindings.split("\n")) {
+    if (line === "") continue;
+    const [module, name, exportName] = line.split("\t");
+    const f = host.exports[exportName];
+    if (typeof f !== "function") throw new Error("no Host export " + exportName + " for " + module + " " + name);
+    if (!obj[module]) obj[module] = {};
+    obj[module][name] = f;
   }
-  importObjects.set(hostModule, obj);
+  importObjects.set(bindings, obj);
   return obj;
 }
 
@@ -105,15 +110,15 @@ const florn = {
       return -1;
     }
   },
-  engine_instantiate(m, namePtr, nameLen) {
+  engine_instantiate(m, bindingsPtr, bindingsLen) {
     const module = modules[m];
     if (!module) {
       fail("no module " + m, 0);
       return -1;
     }
-    const hostModule = text(namePtr, nameLen);
+    const bindings = text(bindingsPtr, bindingsLen);
     try {
-      const instance = new WebAssembly.Instance(module, importsFor(hostModule));
+      const instance = new WebAssembly.Instance(module, importsFor(bindings));
       const memory = instance.exports.memory;
       if (!(memory instanceof WebAssembly.Memory)) {
         fail("no memory export", 0);

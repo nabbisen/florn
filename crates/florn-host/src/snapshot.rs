@@ -39,6 +39,9 @@ pub struct Checkpoint {
     pub identity: CheckpointIdentity,
     pub kernel: KernelSnapshot,
     pub actors: BTreeMap<Identity, ActorState>,
+    /// Each domain's own state (RFC 008 rule 1, `export`), by domain name: a trailing section,
+    /// absent when no domain has state, so that the checkpoints of 0.1 read unchanged.
+    pub domains: BTreeMap<String, Vec<u8>>,
 }
 
 pub const CHECKPOINT_VERSION: u8 = 1;
@@ -181,6 +184,13 @@ impl Checkpoint {
             e.u32(*id);
             encode_actor_state(&mut e, a);
         }
+        if !self.domains.is_empty() {
+            e.u32(self.domains.len() as u32);
+            for (name, state) in &self.domains {
+                e.text(name);
+                e.bytes(state);
+            }
+        }
         e.finish()
     }
 
@@ -223,6 +233,17 @@ impl Checkpoint {
             let id = d.u32()?;
             states.insert(id, d.actor_state()?);
         }
+        let mut domains = BTreeMap::new();
+        if !d.done() {
+            let n = d.u32()?;
+            if n == 0 {
+                return None;
+            }
+            for _ in 0..n {
+                let name = d.text()?;
+                domains.insert(name, d.bytes()?);
+            }
+        }
         if !d.done() {
             return None;
         }
@@ -252,6 +273,7 @@ impl Checkpoint {
                 },
             },
             actors: states,
+            domains,
         })
     }
 }

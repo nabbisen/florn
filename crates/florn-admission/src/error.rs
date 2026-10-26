@@ -29,6 +29,9 @@ pub enum Kind {
     ExportMissing { name: String },
     /// `module.export-reserved`: an export under `florn.` (RFC 003 rule 8).
     ExportReserved { name: String },
+    /// `module.export-unsupported`: a function of the world whose flat shape no Host can call or
+    /// bind (RFC 008 rule 6).
+    ExportUnsupported { name: String },
     /// `module.initial-memory-above-limit`.
     InitialMemoryAboveLimit { pages: u64, limit: u64 },
     /// `module.manifest-missing`: `section` is an `enum(manifest-section)`: contract-identity, florn-manifest.
@@ -117,6 +120,7 @@ impl Error {
             ImportRefused { .. } => "module.import-refused",
             ExportMissing { .. } => "module.export-missing",
             ExportReserved { .. } => "module.export-reserved",
+            ExportUnsupported { .. } => "module.export-unsupported",
             InitialMemoryAboveLimit { .. } => "module.initial-memory-above-limit",
             ManifestMissing { .. } => "module.manifest-missing",
             ManifestSchema { .. } => "module.manifest-schema",
@@ -159,7 +163,9 @@ impl Error {
                 ("module", Name(module.clone())),
                 ("name", Name(name.clone())),
             ],
-            ExportMissing { name } | ExportReserved { name } => vec![("name", Name(name.clone()))],
+            ExportMissing { name } | ExportReserved { name } | ExportUnsupported { name } => {
+                vec![("name", Name(name.clone()))]
+            }
             InitialMemoryAboveLimit { pages, limit } => {
                 vec![("pages", Count(*pages)), ("limit", Count(*limit))]
             }

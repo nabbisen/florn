@@ -96,6 +96,10 @@ pub enum Kind {
         connection: u32,
         ports: u64,
     },
+    /// `connection.mixed-types`: ports or a type of two domains on one connection (RFC 008 rule 2).
+    ConnectionMixedTypes {
+        connection: String,
+    },
     QuantityMissingUnit {
         field: String,
         dimension: &'static str,
@@ -180,6 +184,7 @@ impl Error {
             DomainUndeclared { .. } => "domain.undeclared",
             ModuleHashMismatch { .. } => "module.hash-mismatch",
             ConnectionTooFewPorts { .. } => "connection.too-few-ports",
+            ConnectionMixedTypes { .. } => "connection.mixed-types",
             QuantityMissingUnit { .. } => "quantity.missing-unit",
             QuantityNotWholeTicks { .. } => "quantity.not-whole-ticks",
             QuantityNotWholeUnit { .. } => "quantity.not-whole-unit",
@@ -252,6 +257,7 @@ impl Error {
                 ("connection", Identity(*connection)),
                 ("ports", Count(*ports)),
             ],
+            ConnectionMixedTypes { connection } => vec![("connection", Name(connection.clone()))],
             QuantityMissingUnit { field, dimension } => vec![
                 ("field", Text(field.clone())),
                 ("dimension", Enum(dimension)),

@@ -1,0 +1,26 @@
+// The conformance kit's test world (RFC 008 §12, "Interface"): one import and one export beyond
+// the core, enough to exercise every operation of the domain interface without a real domain.
+package test:kit@0.1.0;
+
+/// What a guest may ask about its pins, answered from the activation's starting state.
+interface probe {
+    use florn:core/types@0.1.0.{port-id};
+
+    /// The cost of one of this actor's pins, from the wire's per-port attributes.
+    probe: func(port: port-id) -> u32;
+}
+
+/// Events of the test domain beyond the core's.
+interface events {
+    use florn:core/types@0.1.0.{tick, port-id};
+
+    /// The wire of `port` went up or down.
+    on-wire: func(now: tick, port: port-id, up: bool);
+}
+
+/// A prober: the core world with the test domain's probe and events.
+world guest {
+    include florn:core/guest@0.1.0;
+    import probe;
+    export events;
+}

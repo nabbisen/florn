@@ -24,6 +24,7 @@ use std::process::ExitCode;
 
 use florn_control::{Answer, Command, Envelope, ExportKind, Message, Query, SeedChoice, Unit};
 use florn_engine_wasmtime::{Limits, WasmtimeEngine};
+use florn_host::Domains;
 use florn_host::{Controller, Options};
 use florn_platform_native::NativePlatform;
 
@@ -139,6 +140,7 @@ fn controller(args: &Args) -> Result<Controller<WasmtimeEngine>, String> {
         engine,
         florn_host::run::default_admission(),
         Box::new(platform),
+        Domains::core(),
         Options {
             keep_records: args.trace || args.keep_records,
             keep_payloads: args.payloads,

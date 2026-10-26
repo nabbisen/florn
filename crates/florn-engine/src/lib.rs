@@ -13,7 +13,7 @@ pub mod conformance;
 
 use std::fmt;
 
-pub use florn_abi::{Flat, FlatType, Memory};
+pub use florn_abi::{Flat, FlatType, Memory, Shape};
 
 /// Identifies an instance to the import handler.
 pub type InstanceId = u64;
@@ -22,14 +22,16 @@ pub type InstanceId = u64;
 /// mutable `i64` globals the Host owns (RFC 003 rule 8: the budget counter).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportSpec {
-    /// The import module name of the host interface, `florn:core/host@0.1.0` for the core world.
-    pub host_module: String,
+    /// The functions the guest may import, each under its interface's module name: the core's
+    /// `florn:core/host@0.1.0` and a domain's interfaces beyond it (RFC 008 rule 6).
     pub functions: Vec<ImportFunction>,
     pub globals: Vec<HostGlobal>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportFunction {
+    /// The import's module name (the interface id).
+    pub module: String,
     pub name: String,
     pub params: Vec<FlatType>,
     pub results: Vec<FlatType>,
@@ -167,7 +169,9 @@ pub trait Engine {
     fn drop_instance(&mut self, inst: Self::Instance);
 
     /// The reference to an exported function, or `None` if absent.
-    fn func(&mut self, inst: &Self::Instance, name: &str) -> Option<Self::Func>;
+    /// An export resolved once into a typed reference (RFC 005 rule 7), with the flat shape
+    /// admission established for it (RFC 008 rule 6); `None` when the instance lacks it.
+    fn func(&mut self, inst: &Self::Instance, name: &str, shape: Shape) -> Option<Self::Func>;
     /// Call an export. Imports the guest calls go to `handler` for the duration of the call.
     fn call(
         &mut self,

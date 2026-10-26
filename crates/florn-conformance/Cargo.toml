@@ -23,6 +23,8 @@ florn-platform = { workspace = true }
 florn-platform-native = { workspace = true }
 wat = { workspace = true }
 wasm-encoder = { workspace = true }
+wit-parser = { workspace = true }
+wit-component = { workspace = true }
 toml = { workspace = true }
 blake3 = { workspace = true }
 sha2 = { workspace = true }

@@ -6,6 +6,7 @@ use florn_admission::Admission;
 use florn_conformance::host::{self, faults, reports};
 use florn_conformance::scenario::{Scenario, actor};
 use florn_conformance::{bench, guests, shipped};
+use florn_host::Domains;
 use florn_host::{Advance, HostError, Run, Seed};
 use florn_kernel::FaultKind;
 use florn_platform::{Capacity, FixedPlatform};
@@ -119,6 +120,7 @@ fn an_estimate_above_capacity_is_refused_before_anything_is_instantiated() {
         host::engine(),
         Admission::default(),
         &mut platform,
+        &Domains::core(),
         manifest,
         &s.modules(),
         Seed::Given(1),
@@ -153,6 +155,7 @@ fn a_checkpoint_of_another_version_is_refused_naming_the_field() {
             host::engine(),
             Admission::default(),
             &mut FixedPlatform::default(),
+            &Domains::core(),
             s.manifest(),
             &s.modules(),
             &other,

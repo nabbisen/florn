@@ -7,7 +7,7 @@ use florn_model::{DomainValue, Quantity};
 use toml::Value;
 
 use crate::error::{Error, Errors, Kind};
-use crate::world::{WorldInterfaces, WorldSpec, supported_worlds};
+use crate::world::{WorldInterfaces, WorldSpec};
 
 /// The name of the florn manifest section; the contract identity's name starts with `component-type`.
 pub const MANIFEST_SECTION: &str = "florn.manifest";
@@ -240,9 +240,9 @@ pub fn read_sections(
 pub fn read_manifest(
     module: &str,
     sections: &Sections,
+    supported: &[WorldSpec],
 ) -> Result<(ModuleManifest, WorldSpec), Errors> {
     let manifest = parse_manifest(&sections.manifest_text)?;
-    let supported = supported_worlds();
     let Some(world) = supported.iter().find(|w| w.name == manifest.world) else {
         return Err(Error::at(
             Kind::ContractUnsupported {

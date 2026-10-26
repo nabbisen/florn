@@ -5,6 +5,7 @@ mod support;
 
 use florn_admission::Admission;
 use florn_control::*;
+use florn_host::Domains;
 use florn_host::controller::Controller;
 use florn_host::{Intervention, Options};
 use florn_platform::FixedPlatform;
@@ -17,6 +18,7 @@ fn controller() -> C {
         engine(),
         Admission::default(),
         Box::new(FixedPlatform::default()),
+        Domains::core(),
         Options {
             keep_records: true,
             ..Options::default()

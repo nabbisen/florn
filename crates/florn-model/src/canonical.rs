@@ -304,6 +304,21 @@ impl Manifest {
             e.text(d);
             domain_map(&mut e, m);
         }
+        // Connection types (RFC 008 rule 8), by identity, for the connections of a domain:
+        // a trailing section, absent when every connection is the core's, so that the hashes
+        // of the scenarios written before the amendment are unchanged.
+        let typed: Vec<(u32, &str)> = self
+            .connections
+            .iter()
+            .filter_map(|c| c.r#type.as_deref().map(|t| (c.id, t)))
+            .collect();
+        if !typed.is_empty() {
+            e.u32(typed.len() as u32);
+            for (id, t) in typed {
+                e.u32(id);
+                e.text(t);
+            }
+        }
         e.finish()
     }
 

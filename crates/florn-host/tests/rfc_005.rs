@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 use florn_admission::Admission;
 use florn_engine::Engine;
+use florn_host::Domains;
 use florn_host::record::{self, Contents};
 use florn_host::{Advance, Checkpoint, EndReason, Intervention, Options, Run, RunToml, Seed};
 use florn_kernel::trace::Comparison;
@@ -137,6 +138,7 @@ fn ac_003_replay_matches_and_an_altered_module_is_refused_by_hash() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         spec.manifest(),
         &spec.modules(),
         &read.run,
@@ -165,6 +167,7 @@ fn ac_003_replay_matches_and_an_altered_module_is_refused_by_hash() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         spec.manifest(),
         &modules,
         Seed::Given(42),
@@ -194,6 +197,7 @@ fn ac_003_replay_matches_and_an_altered_module_is_refused_by_hash() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         other.manifest(),
         &other.modules(),
         &read.run,
@@ -322,6 +326,7 @@ fn ac_006_export_and_restore_equal_the_uninterrupted_run() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         spec.manifest(),
         &spec.modules(),
         &decoded,
@@ -341,6 +346,7 @@ fn ac_006_export_and_restore_equal_the_uninterrupted_run() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         spec.manifest(),
         &spec.modules(),
         &checkpoint,
@@ -368,6 +374,7 @@ fn ac_006_export_and_restore_equal_the_uninterrupted_run() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         other.manifest(),
         &other.modules(),
         &checkpoint,
@@ -437,6 +444,7 @@ fn interventions_are_inputs_and_replay_applies_them_at_their_instants() {
         engine(),
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         spec.manifest(),
         &spec.modules(),
         &parsed,
@@ -499,6 +507,7 @@ fn the_estimate_refuses_before_anything_is_instantiated() {
         engine,
         Admission::default(),
         &mut platform,
+        &Domains::core(),
         spec.manifest(),
         &spec.modules(),
         Seed::Given(1),
@@ -523,6 +532,7 @@ fn the_estimate_refuses_before_anything_is_instantiated() {
         support::engine(),
         Admission::default(),
         &mut platform,
+        &Domains::core(),
         spec.manifest(),
         &spec.modules(),
         Seed::Given(1),
@@ -543,6 +553,7 @@ fn the_estimate_refuses_before_anything_is_instantiated() {
         support::engine(),
         Admission::default(),
         &mut platform,
+        &Domains::core(),
         spec.manifest(),
         &spec.modules(),
         Seed::Choose,

@@ -87,11 +87,24 @@ struct CacheKey {
 }
 
 /// The admission step with its cache. Stage 3 is [`estimate::estimate`], run once per scenario.
-#[derive(Default)]
+/// The worlds it admits are the core's and those the Host's domains add (RFC 008 rule 1,
+/// `exports` and `imports`), composed once by [`Admission::add_world`].
 pub struct Admission {
     pub maxima: ModuleMaxima,
+    worlds: Vec<WorldSpec>,
     cache: HashMap<CacheKey, Arc<Admitted>>,
     transformed: usize,
+}
+
+impl Default for Admission {
+    fn default() -> Self {
+        Self {
+            maxima: ModuleMaxima::default(),
+            worlds: world::supported_worlds(),
+            cache: HashMap::new(),
+            transformed: 0,
+        }
+    }
 }
 
 pub fn sha256(bytes: &[u8]) -> [u8; 32] {
@@ -104,6 +117,18 @@ impl Admission {
             maxima,
             ..Default::default()
         }
+    }
+
+    /// A world a domain adds (RFC 008 rule 6). A world already present is replaced by name, so
+    /// that composing the same domains twice gives one list.
+    pub fn add_world(&mut self, world: WorldSpec) {
+        self.worlds.retain(|w| w.name != world.name);
+        self.worlds.push(world);
+    }
+
+    /// The worlds this step admits (RFC 003 rule 2, stage 2).
+    pub fn worlds(&self) -> &[WorldSpec] {
+        &self.worlds
     }
 
     /// Stages 1, 2, and 4 for one source module under one class's limits, cached (rule 3).
@@ -130,13 +155,23 @@ impl Admission {
         let parsed = sections
             .as_ref()
             .ok()
-            .map(|s| manifest::read_manifest(name, s));
+            .map(|s| manifest::read_manifest(name, s, &self.worlds));
         let world = parsed
             .as_ref()
             .and_then(|p| p.as_ref().ok())
             .map(|(_, w)| w.clone())
             .unwrap_or_else(WorldSpec::core);
-        let info = validate::validate(source, &world, &self.maxima, limits.memory_pages())?;
+        let info = match validate::validate(source, &world, &self.maxima, limits.memory_pages()) {
+            Ok(info) => info,
+            Err(mut e) => {
+                // With the manifest unreadable, the world was the core's: the manifest's own
+                // refusals are reported with stage 1's, so that the cause is not hidden.
+                if let Some(Err(m)) = &parsed {
+                    e.0.extend(m.0.iter().cloned());
+                }
+                return Err(e);
+            }
+        };
         let (module_manifest, world) = match (sections, parsed) {
             (Err(e), _) | (Ok(_), Some(Err(e))) => return Err(e),
             (Ok(_), Some(Ok(p))) => p,

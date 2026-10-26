@@ -110,11 +110,20 @@ pub struct PortRef {
     pub port: u32,
 }
 
+/// The domain prefix of a type written `<domain>/<name>` (RFC 004 rule 5).
+pub fn domain_of(ty: &str) -> &str {
+    ty.split_once('/').map_or(ty, |(d, _)| d)
+}
+
 /// `[[connections]]` (RFC 004 §3.7).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Connection {
     pub id: u32,
     pub name: String,
+    /// `<domain>/<name>`, read by the core and routed to the domain (RFC 004 rule 19 as RFC
+    /// 008 rule 8 amends it); `None` when the manifest gives none. The connection's domain is
+    /// its ports' either way (rule 2 of RFC 008: one domain per connection).
+    pub r#type: Option<String>,
     /// In the order written; two or more.
     pub ports: Vec<PortRef>,
     /// `[connections.attrs]`, without `per-port`.
@@ -199,6 +208,21 @@ impl Manifest {
             .binary_search_by_key(&id, |c| c.id)
             .ok()
             .map(|i| &self.connections[i])
+    }
+    /// The port of an actor, by identities.
+    pub fn port(&self, actor: u32, port: u32) -> Option<&Port> {
+        self.actor(actor)?.ports.iter().find(|p| p.id == port)
+    }
+    /// The domain of a connection: its type's, or its ports' (validation keeps them one);
+    /// `core` for a connection of core ports.
+    pub fn connection_domain<'a>(&'a self, c: &'a Connection) -> &'a str {
+        if let Some(t) = &c.r#type {
+            return domain_of(t);
+        }
+        c.ports
+            .first()
+            .and_then(|pr| self.port(pr.actor, pr.port))
+            .map_or("core", |p| domain_of(&p.r#type))
     }
     pub fn actor_by_name(&self, name: &str) -> Option<&Actor> {
         self.actors.iter().find(|a| a.name == name)

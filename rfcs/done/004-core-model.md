@@ -1,6 +1,6 @@
 # RFC 004 — Core model: graph, scenario manifest, package
 
-**Status.** Implemented (0.1.0, 2026-10-20); accepted 2026-10-13.
+**Status.** Implemented (0.1.0, 2026-10-20); accepted 2026-10-13. Amended 2026-10-27 by PR-15 (RFC 008 rules 2 and 8): a connection may carry a `type` (`<domain>/<name>`), read by the core and routed to the domain, beside the fields rule 19 lists; a connection joins ports of one domain, else `connection.mixed-types`; a connection's domain is its type's or its ports'; whether a domain requires the type is the domain's rule. The canonical encoding (§5) gains a trailing list of the typed connections, absent when none is typed, so that the hashes of the scenarios written before the amendment are unchanged.
 **Tracks.** Requirements ARCH-006, ARCH-010, BUS-001, BUS-004, BUS-005, BUS-009, DES-010, DES-013, DES-014, DATA-001, DATA-002, DATA-003, DATA-007, DATA-009, DATA-010, DATA-011, DATA-012, SEC-005, SEC-007, PKG-007. Requirement IDs refer to `docs/src/requirements.md`.
 **Touches.** The core graph types, the scenario manifest, the package format, the canonical encoding used for hashing, and the validation errors the Host reports for a scenario.
 **Depends on.** [RFC 001 — Determinism contract](./001-determinism-contract.md), for identities, time, ordering, and run inputs.

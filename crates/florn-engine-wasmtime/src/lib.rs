@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use florn_abi::{AbiError, Flat, FlatType, Memory};
 use florn_engine::EngineInfo;
 use florn_engine::{
-    Engine, EngineError, GlobalValue, ImportHandler, ImportSpec, InstanceId, Trap, TrapKind,
+    Engine, EngineError, GlobalValue, ImportHandler, ImportSpec, InstanceId, Shape, Trap, TrapKind,
 };
 use wasmtime::{
     Caller, Config, Extern, Func, FuncType, Global, GlobalType, Instance, Linker, Module,
@@ -336,7 +336,7 @@ impl Engine for WasmtimeEngine {
             let name = f.name.clone();
             linker
                 .func_new(
-                    &spec.host_module,
+                    &f.module,
                     &f.name,
                     ty,
                     move |mut caller: Caller<'_, Data>,
@@ -410,7 +410,8 @@ impl Engine for WasmtimeEngine {
         drop(inst);
     }
 
-    fn func(&mut self, inst: &Inst, name: &str) -> Option<Func> {
+    fn func(&mut self, inst: &Inst, name: &str, _: Shape) -> Option<Func> {
+        // Wasmtime calls from the function's own type; the shape is the browser adapter's need.
         inst.instance.get_func(&mut self.store, name)
     }
 

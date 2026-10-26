@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use florn_admission::{Admission, ClassLimits};
 use florn_control::Value;
 use florn_engine_wasmtime::{Limits, WasmtimeEngine};
+use florn_host::Domains;
 use florn_host::{EndReason, HostError, Options, Run, Seed};
 use florn_kernel::trace::CommittedEffect;
 use florn_kernel::{EventKey, FaultKind, Identity, Instant, Record};
@@ -51,6 +52,7 @@ pub fn try_start_with(
         engine,
         Admission::default(),
         &mut FixedPlatform::default(),
+        &Domains::core(),
         s.manifest(),
         &s.modules(),
         Seed::Given(s.seed),

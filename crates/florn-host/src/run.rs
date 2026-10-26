@@ -7,7 +7,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 use florn_abi::core_world;
-use florn_abi::{AbiError, Flat, Memory, Ty, Val, lift_flat_params, lower_flat_params};
+use florn_abi::{
+    AbiError, Flat, Memory, Ty, Val, lift_flat_params, lower_flat_params, lower_result, store,
+};
 use florn_admission::config::{NoUnits, encode_config};
 use florn_admission::estimate::{Capacity as EstimateCapacity, ModuleFacts, estimate};
 use florn_admission::{
@@ -25,14 +27,17 @@ use florn_kernel::{
     Activation, Advance, Config, Digest, Event, EventKey, EventKind, FaultKind, Identity, Instant,
     Kernel, Quotas, Sink, SinkRefusal, TiePolicy,
 };
-use florn_model::manifest::ActorKind;
+use florn_model::manifest::{ActorKind, DomainMap};
 use florn_model::{HostMaxima, Manifest};
 use florn_platform::{Capacity, Platform};
 
+use crate::domain::{
+    self, Action, BuiltinEvent, Composite, DomainEvent, DomainUnits, Domains, WorldSigs,
+};
 use crate::identity::{EndReason, Environment, ModuleInput, RunInputs, RunToml};
 use crate::log::DiagnosticLog;
 use crate::snapshot::{ActorState, Checkpoint, CheckpointIdentity};
-use crate::world::{CLASS_TIMER, CoreWorld, Intervention};
+use crate::world::{CLASS_TIMER, Intervention};
 
 /// The SHA-256 of module bytes as hexadecimal: the module identity (RFC 004 rule 16).
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -138,6 +143,9 @@ pub struct Telemetry {
 pub enum HostError {
     /// Coded refusals: admission, the estimate, the config.
     Refused(Errors),
+    /// Coded refusals of the domains (RFC 008 rule 1, `validate`), and a declared domain this
+    /// Host does not provide (`domain.unknown`).
+    Domain(Vec<Notification>),
     Engine(EngineError),
     /// The actor is not module-backed, or has no instance.
     NoInstance(Identity),
@@ -172,6 +180,10 @@ impl std::fmt::Display for HostError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HostError::Refused(e) => write!(f, "{e}"),
+            HostError::Domain(ns) => {
+                let codes: Vec<&str> = ns.iter().map(|n| n.code.as_str()).collect();
+                write!(f, "{}", codes.join(", "))
+            }
             HostError::Engine(e) => write!(f, "{e}"),
             HostError::NoInstance(id) => write!(f, "actor {id} has no instance"),
             HostError::InstanceFailed { actor, text } => {
@@ -193,7 +205,7 @@ impl std::fmt::Display for HostError {
 
 impl std::error::Error for HostError {}
 
-/// The exports of the core world, by index.
+/// The exports of the core world, by index: every world's first three (RFC 002 rule 20).
 const INIT: usize = 0;
 const ON_MESSAGE: usize = 1;
 const ON_TIMER: usize = 2;
@@ -201,6 +213,7 @@ const ON_TIMER: usize = 2;
 /// A module-backed actor in the pool.
 struct Slot<E: Engine> {
     instance: Option<E::Instance>,
+    /// One reference per export of the world, in the world's order (RFC 005 rule 7).
     funcs: Vec<E::Func>,
     sink: Sink,
     admitted: Arc<Admitted>,
@@ -210,6 +223,15 @@ struct Slot<E: Engine> {
     ports: Val,
     config: Vec<u8>,
     spec: ImportSpec,
+    /// The signatures of the module's world: the core's and the domain's beyond it.
+    world: Arc<WorldSigs>,
+}
+
+/// A built-in actor (RFC 008 rule 19): run by its domain, with a sink of its own.
+struct Builtin {
+    sink: Sink,
+    ports: Vec<florn_model::manifest::Port>,
+    config: DomainMap,
 }
 
 /// What an activation ended with.
@@ -226,12 +248,14 @@ enum Outcome {
     HostFault { reason: &'static str, text: String },
 }
 
-/// The Host's side of the imports for one activation (RFC 003 rule 17; RFC 002 §5).
+/// The Host's side of the imports for one activation (RFC 003 rule 17; RFC 002 §5): the core's
+/// five, and a domain's answered from the activation's starting state (RFC 002 rule 47).
 struct Handler<'a> {
     kernel: &'a mut Kernel,
     sink: &'a mut Sink,
+    world: &'a mut Composite,
     actor: Identity,
-    sigs: &'a [(&'static str, Vec<Ty>)],
+    sigs: &'a WorldSigs,
     /// A lifting failure: the contract fault of RFC 002 rule 8, kept for classification.
     contract: Option<AbiError>,
 }
@@ -244,16 +268,49 @@ impl ImportHandler for Handler<'_> {
         args: &[Flat],
         memory: &mut dyn Memory,
     ) -> Result<Vec<Flat>, Refusal> {
-        let Some((_, tys)) = self.sigs.iter().find(|(n, _)| *n == function) else {
+        let Some((_, module, tys, result)) = self.sigs.imports.iter().find(|(n, ..)| n == function)
+        else {
             return Err(Refusal);
         };
-        let vals = match lift_flat_params(memory, tys, args) {
+        // A result beyond one flat value comes back through a return pointer the guest passes
+        // as the last argument (RFC 002 §2).
+        let retptr = result
+            .as_ref()
+            .is_some_and(|t| t.flat_count() > florn_abi::MAX_FLAT_RESULTS);
+        let (flats, ret) = match (retptr, args) {
+            (true, [rest @ .., Flat::I32(p)]) => (rest, Some(*p as u32)),
+            (true, _) => return Err(Refusal),
+            (false, _) => (args, None),
+        };
+        let vals = match lift_flat_params(memory, tys, flats) {
             Ok(v) => v,
             Err(e) => {
                 self.contract = Some(e);
                 return Err(Refusal);
             }
         };
+        if module != core_world::HOST_MODULE {
+            let Some(d) = self.world.of_module(module) else {
+                return Err(Refusal);
+            };
+            let answer = d.answer(self.actor, function, &vals);
+            return match (result, answer, ret) {
+                (None, None, None) => Ok(Vec::new()),
+                (Some(t), Some(v), Some(ptr)) => {
+                    store(memory, t, &v, ptr).map(|()| Vec::new()).map_err(|e| {
+                        self.contract = Some(e);
+                        Refusal
+                    })
+                }
+                (Some(t), Some(v), None) => lower_result(memory, Some(t), Some(&v))
+                    .map(|f| f.into_iter().collect())
+                    .map_err(|e| {
+                        self.contract = Some(e);
+                        Refusal
+                    }),
+                _ => Err(Refusal),
+            };
+        }
         let r = match (function, vals.as_slice()) {
             ("send", [Val::U32(port), payload]) => self
                 .sink
@@ -313,13 +370,46 @@ fn at(i: Instant) -> At {
     }
 }
 
+/// The kind and the fields of an intervention's canonical map (RFC 005 rule 26), for the kinds
+/// a domain decodes (RFC 008 rule 4). A recorded intervention of a domain kind carries its
+/// target under `target`, which the decoding leaves to the Host.
+pub fn decode_intervention(content: &[u8]) -> Option<(String, Option<Identity>, DomainMap)> {
+    let mut map = florn_model::canonical::Decoder::new(content).domain_map()?;
+    let kind = match map.remove("kind")? {
+        florn_model::manifest::DomainValue::Text(k) => k,
+        _ => return None,
+    };
+    let target = match map.remove("target") {
+        Some(florn_model::manifest::DomainValue::Integer(t)) => Some(u32::try_from(t).ok()?),
+        Some(_) => return None,
+        None => None,
+    };
+    Some((kind, target, map))
+}
+
+/// The recorded content of a domain intervention: the request's map with its `target`, so
+/// that a replay addresses it the same (RFC 001 rules 35 and 36).
+fn encode_targeted(target: Identity, content: &[u8]) -> Vec<u8> {
+    let Some(mut map) = florn_model::canonical::Decoder::new(content).domain_map() else {
+        return content.to_vec();
+    };
+    map.insert(
+        "target".into(),
+        florn_model::manifest::DomainValue::Integer(i64::from(target)),
+    );
+    let mut e = florn_model::canonical::Encoder::default();
+    florn_model::canonical::domain_map(&mut e, &map);
+    e.finish()
+}
+
 pub struct Run<E: Engine> {
     engine: E,
     admission: Admission,
     scenario: Manifest,
     kernel: Kernel,
-    world: CoreWorld,
+    world: Composite,
     actors: BTreeMap<Identity, Slot<E>>,
+    builtins: BTreeMap<Identity, Builtin>,
     inputs: RunInputs,
     environment: Environment,
     run_id: String,
@@ -333,26 +423,30 @@ pub struct Run<E: Engine> {
     ended: Option<EndReason>,
     reproducible: bool,
     replay_against: Option<Vec<(u64, Digest)>>,
-    sigs: Vec<(&'static str, Vec<Ty>)>,
-    export_tys: Vec<Vec<Ty>>,
+    /// The signatures of every world a module of the run uses, by world name.
+    worlds: BTreeMap<String, Arc<WorldSigs>>,
     capacity: Capacity,
 }
 
 impl<E: Engine> Run<E> {
-    /// A new run (RFC 005 rule 26, `new-run`): admit every module, estimate, instantiate the pool,
-    /// initialise every actor in ascending identity order (RFC 002 rule 36). Nothing is
+    /// A new run (RFC 005 rule 26, `new-run`): compose the domains the scenario declares and
+    /// validate through them (RFC 008 rule 1), admit every module, estimate, instantiate the
+    /// pool, initialise every actor in ascending identity order (RFC 002 rule 36). Nothing is
     /// instantiated before the estimate passes (RFC 003 rule 4).
+    // The Host's parts and the run's inputs, each named: a struct would only move the list.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         engine: E,
         admission: Admission,
         platform: &mut dyn Platform,
+        domains: &Domains,
         scenario: Manifest,
         modules: &BTreeMap<String, Vec<u8>>,
         seed: Seed,
         options: Options,
     ) -> Result<Self, HostError> {
         Self::try_new(
-            engine, admission, platform, scenario, modules, seed, options,
+            engine, admission, platform, domains, scenario, modules, seed, options,
         )
         .map_err(|parts| parts.0)
     }
@@ -360,10 +454,13 @@ impl<E: Engine> Run<E> {
     /// As [`Self::new`], but a failure gives the engine and the admission cache back (boxed, as
     /// the engine is large), so that a front end can start another run (RFC 005 rule 10: the
     /// run ends, the Host does not).
+    // The Host's parts and the run's inputs, each named: a struct would only move the list.
+    #[allow(clippy::too_many_arguments)]
     pub fn try_new(
         engine: E,
         admission: Admission,
         platform: &mut dyn Platform,
+        domains: &Domains,
         scenario: Manifest,
         modules: &BTreeMap<String, Vec<u8>>,
         seed: Seed,
@@ -374,7 +471,7 @@ impl<E: Engine> Run<E> {
             Seed::Choose => platform.new_seed(),
         };
         let mut run = Self::prepare(
-            engine, admission, platform, scenario, modules, seed, options,
+            engine, admission, platform, domains, scenario, modules, seed, options,
         )?;
         if let Err(e) = run.instantiate_all() {
             let (engine, admission) = run.into_parts();
@@ -386,10 +483,13 @@ impl<E: Engine> Run<E> {
 
     /// Everything before instances exist: admission, the estimate, the kernel, the log's first
     /// entries.
+    // The Host's parts and the run's inputs, each named: a struct would only move the list.
+    #[allow(clippy::too_many_arguments)]
     fn prepare(
         engine: E,
         mut admission: Admission,
         platform: &mut dyn Platform,
+        domains: &Domains,
         scenario: Manifest,
         modules: &BTreeMap<String, Vec<u8>>,
         seed: u64,
@@ -406,6 +506,27 @@ impl<E: Engine> Run<E> {
                 .with("memory", Value::Bytes(capacity.memory_bytes)),
         );
 
+        // The domains (RFC 008 rule 1): a declared one this Host lacks, then their validation,
+        // every refusal reported together.
+        let domain_values = match domains.instantiate(&scenario) {
+            Ok(d) => d,
+            Err(n) => {
+                push((*n).clone());
+                return Err(Box::new((HostError::Domain(vec![*n]), engine, admission)));
+            }
+        };
+        let refusals = domain::validate(&domain_values, &scenario);
+        if !refusals.is_empty() {
+            for n in &refusals {
+                push(n.clone());
+            }
+            return Err(Box::new((HostError::Domain(refusals), engine, admission)));
+        }
+        for d in &domain_values {
+            if let Some(w) = d.world() {
+                admission.add_world(w.spec());
+            }
+        }
         // Stages 1, 2, 4 per module and class; every refusal reported together.
         let mut errors = Errors::default();
         let mut admitted: BTreeMap<(String, ClassLimits), Arc<Admitted>> = BTreeMap::new();
@@ -552,7 +673,19 @@ impl<E: Engine> Run<E> {
             keep_records: options.keep_records,
         };
         let kernel = Kernel::new(config);
-        let world = CoreWorld::from_scenario(&scenario);
+        let world = match Composite::new(&scenario, domain_values, seed) {
+            Ok(w) => w,
+            Err(what) => return Err(Box::new((HostError::Malformed(what), engine, admission))),
+        };
+        let mut worlds: BTreeMap<String, Arc<WorldSigs>> = BTreeMap::new();
+        let core_sigs = WorldSigs::core();
+        worlds.insert(core_sigs.name.clone(), Arc::new(core_sigs));
+        for d in world.domains() {
+            if let Some(w) = d.world() {
+                let sigs = WorldSigs::of(&w);
+                worlds.insert(sigs.name.clone(), Arc::new(sigs));
+            }
+        }
         let info = engine.info();
         let environment = Environment {
             florn_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -574,14 +707,6 @@ impl<E: Engine> Run<E> {
             derivation: florn_kernel::DERIVATION_NAME.to_string(),
             digest: florn_kernel::DIGEST_NAME.to_string(),
         };
-        let sigs: Vec<(&'static str, Vec<Ty>)> = core_world::host_functions()
-            .iter()
-            .map(|s| (s.name, s.param_types()))
-            .collect();
-        let export_tys: Vec<Vec<Ty>> = core_world::actor_functions()
-            .iter()
-            .map(|s| s.param_types())
-            .collect();
         let mut run = Self {
             engine,
             admission,
@@ -589,6 +714,7 @@ impl<E: Engine> Run<E> {
             kernel,
             world,
             actors: BTreeMap::new(),
+            builtins: BTreeMap::new(),
             inputs,
             environment,
             run_id,
@@ -602,8 +728,7 @@ impl<E: Engine> Run<E> {
             ended: None,
             reproducible: true,
             replay_against: None,
-            sigs,
-            export_tys,
+            worlds,
             capacity,
         };
         // The slots, without instances yet.
@@ -615,12 +740,28 @@ impl<E: Engine> Run<E> {
                 .get(&(name.clone(), *limits))
                 .expect("admitted above")
                 .clone();
-            let config = match encode_config(*id, &a.manifest, &actor.config, tick, &NoUnits) {
+            let config = match encode_config(
+                *id,
+                &a.manifest,
+                &actor.config,
+                tick,
+                &DomainUnits(run.world.domains()),
+            ) {
                 Ok(c) => c,
                 Err(e) => {
                     errors.0.extend(e.0);
                     continue;
                 }
+            };
+            let Some(world) = run.worlds.get(&a.world.name).cloned() else {
+                errors.push(florn_admission::Error::at(
+                    florn_admission::Kind::ContractUnsupported {
+                        declared: a.world.name.clone(),
+                        supported: run.worlds.keys().cloned().collect::<Vec<_>>().join(", "),
+                    },
+                    format!("modules.{name}"),
+                ));
+                continue;
             };
             let ports = Val::List(
                 actor
@@ -649,13 +790,13 @@ impl<E: Engine> Run<E> {
                 a.manifest.telemetry.iter().map(|c| c.channel).collect(),
             );
             let spec = ImportSpec {
-                host_module: a.world.imports[0].module.clone(),
                 functions: a
                     .world
                     .imports
                     .iter()
-                    .flat_map(|i| i.functions.iter())
-                    .map(|f| ImportFunction {
+                    .flat_map(|i| i.functions.iter().map(move |f| (i.module.clone(), f)))
+                    .map(|(module, f)| ImportFunction {
+                        module,
                         name: f.name.clone(),
                         params: f.params.clone(),
                         results: f.results.clone(),
@@ -680,6 +821,32 @@ impl<E: Engine> Run<E> {
                     ports,
                     config,
                     spec,
+                    world,
+                },
+            );
+        }
+        // The built-in actors (RFC 008 rule 19): no instance, no limits; a sink of their own.
+        for actor in &run.scenario.actors {
+            let ActorKind::Builtin(kind) = &actor.kind else {
+                continue;
+            };
+            let channels = run
+                .world
+                .builtin(actor.id)
+                .map(|(d, kind)| d.builtin_channels(&kind))
+                .unwrap_or_default();
+            run.kernel.add_actor(actor.id);
+            let _ = kind;
+            run.builtins.insert(
+                actor.id,
+                Builtin {
+                    sink: Sink::new(
+                        Quotas::default(),
+                        actor.ports.iter().map(|p| p.id).collect(),
+                        channels,
+                    ),
+                    ports: actor.ports.clone(),
+                    config: actor.config.clone(),
                 },
             );
         }
@@ -752,16 +919,11 @@ impl<E: Engine> Run<E> {
                 return Err(e.into());
             }
         };
-        let names = [
-            core_world::EXPORT_INIT,
-            core_world::EXPORT_ON_MESSAGE,
-            core_world::EXPORT_ON_TIMER,
-        ];
-        let mut funcs = Vec::with_capacity(3);
-        for n in names {
+        let mut funcs = Vec::with_capacity(slot.world.exports.len());
+        for (n, _, shape) in &slot.world.exports {
             funcs.push(
                 self.engine
-                    .func(&inst, n)
+                    .func(&inst, n, *shape)
                     .ok_or_else(|| EngineError::Export(n.to_string()))?,
             );
         }
@@ -770,9 +932,12 @@ impl<E: Engine> Run<E> {
         Ok(())
     }
 
-    /// `init` for every actor, in ascending identity order (RFC 002 rule 36).
+    /// `init` for every actor, module-backed or built-in, in ascending identity order (RFC 002
+    /// rule 36).
     fn init_all(&mut self) {
-        let ids: Vec<Identity> = self.actors.keys().copied().collect();
+        let mut ids: Vec<Identity> = self.actors.keys().copied().collect();
+        ids.extend(self.builtins.keys().copied());
+        ids.sort_unstable();
         for id in ids {
             if self.ended.is_some() {
                 break;
@@ -791,6 +956,18 @@ impl<E: Engine> Run<E> {
                     payload: Vec::new(),
                 },
             };
+            if let Some(b) = self.builtins.get(&id) {
+                let (ports, config) = (b.ports.clone(), b.config.clone());
+                self.activate_builtin(
+                    id,
+                    event,
+                    &BuiltinEvent::Init {
+                        ports: &ports,
+                        config: &config,
+                    },
+                );
+                continue;
+            }
             let slot = &self.actors[&id];
             let vals = vec![
                 Val::U64(0),
@@ -813,6 +990,14 @@ impl<E: Engine> Run<E> {
 
     pub fn scenario(&self) -> &Manifest {
         &self.scenario
+    }
+    /// The composed domains (RFC 008 rule 1), in the scenario's order.
+    pub fn domains(&self) -> &[Box<dyn crate::domain::Domain>] {
+        self.world.domains()
+    }
+    /// The event classes of the run with their names (RFC 001 rule 15).
+    pub fn class_names(&self) -> &BTreeMap<u8, &'static str> {
+        self.world.class_names()
     }
     pub fn kernel(&self) -> &Kernel {
         &self.kernel
@@ -878,10 +1063,53 @@ impl<E: Engine> Run<E> {
         (self.engine, self.admission)
     }
 
-    /// Request an intervention (RFC 001 rules 33 to 38): applied at the next boundary, recorded
-    /// as an input.
+    /// Request a core intervention (RFC 001 rules 33 to 38): applied at the next boundary,
+    /// recorded as an input.
     pub fn intervene(&mut self, at_tick: Option<u64>, intervention: &Intervention) {
         self.kernel.intervene(at_tick, intervention.encode());
+    }
+
+    /// Request an intervention by its canonical map (RFC 005 rule 26): the core's `message` or
+    /// a kind of a composed domain (RFC 008 rule 4). A refusal names the field; nothing is
+    /// queued then.
+    pub fn intervene_map(
+        &mut self,
+        at_tick: Option<u64>,
+        target: Identity,
+        content: &[u8],
+    ) -> Result<(), Box<Notification>> {
+        let invalid = |field: &str| {
+            Box::new(
+                Notification::new(
+                    "control.invalid",
+                    Severity::Error,
+                    Scope::run(),
+                    Ends::Command,
+                )
+                .with("command", Value::Name("intervene".into()))
+                .with("reason", Value::Enum("wrong-type".into()))
+                .with("field", Value::Text(field.into())),
+            )
+        };
+        if let Some(i) = Intervention::decode(content) {
+            let Intervention::Message { actor, .. } = &i;
+            if *actor != target {
+                return Err(invalid("target"));
+            }
+            if !self.alive(*actor) {
+                return Err(invalid("target"));
+            }
+            self.kernel.intervene(at_tick, content.to_vec());
+            return Ok(());
+        }
+        let (kind, _, map) = decode_intervention(content).ok_or_else(|| invalid("content"))?;
+        let Some(d) = self.world.of_kind(&kind) else {
+            return Err(invalid("kind"));
+        };
+        d.check_intervention(target, &kind, &map)?;
+        self.kernel
+            .intervene(at_tick, encode_targeted(target, content));
+        Ok(())
     }
 
     /// Advance by one unit (RFC 001 §2.1; RFC 005 rule 15). Returns the events handled. Pacing is
@@ -1007,47 +1235,248 @@ impl<E: Engine> Run<E> {
 
     fn handle(&mut self, ev: Event) {
         let now = ev.key.tick;
+        let instant = ev.key.instant();
         match &ev.kind {
             EventKind::Timer { timer } => {
-                let vals = vec![Val::U64(now), Val::U32(*timer)];
-                self.activate(ev.target, ev.clone(), ON_TIMER, &vals);
+                if self.builtins.contains_key(&ev.target) {
+                    self.activate_builtin(
+                        ev.target,
+                        ev.clone(),
+                        &BuiltinEvent::Timer { timer: *timer },
+                    );
+                } else {
+                    let vals = vec![Val::U64(now), Val::U32(*timer)];
+                    self.activate(ev.target, ev.clone(), ON_TIMER, &vals);
+                }
             }
             EventKind::Message { port, payload } => {
-                let vals = vec![Val::U64(now), Val::U32(*port), Val::bytes(payload)];
-                self.activate(ev.target, ev.clone(), ON_MESSAGE, &vals);
+                // A message of a domain's class to an actor that faulted: dropped at delivery
+                // (RFC 008 rule 5), the domain told.
+                if !self.alive(ev.target)
+                    && let Some(d) = self.world.of_class(ev.key.class)
+                {
+                    let actions = d.undelivered(&DomainEvent {
+                        key: ev.key,
+                        target: ev.target,
+                        payload: payload.clone(),
+                    });
+                    self.apply(instant, &ev, actions);
+                } else if self.builtins.contains_key(&ev.target) {
+                    self.activate_builtin(
+                        ev.target,
+                        ev.clone(),
+                        &BuiltinEvent::Message {
+                            port: *port,
+                            payload,
+                        },
+                    );
+                } else {
+                    let vals = vec![Val::U64(now), Val::U32(*port), Val::bytes(payload)];
+                    self.activate(ev.target, ev.clone(), ON_MESSAGE, &vals);
+                }
             }
-            EventKind::Intervention { payload } => match Intervention::decode(payload) {
-                Some(Intervention::Message {
+            EventKind::Intervention { payload } => self.handle_intervention(&ev, payload),
+            EventKind::ScheduledChange { payload } => {
+                // The core gives a change no meaning for an actor; a domain's connection or
+                // world takes it (RFC 004 rule 20; RFC 008 rule 1, `change`).
+                let map = florn_model::canonical::Decoder::new(payload).domain_map();
+                if let Some(map) = map
+                    && let Some(d) = self.world.of_target(ev.target)
+                {
+                    let actions = d.change(instant, ev.target, &map);
+                    self.apply(instant, &ev, actions);
+                }
+            }
+            EventKind::Domain { payload } => {
+                let event = DomainEvent {
+                    key: ev.key,
+                    target: ev.target,
+                    payload: payload.clone(),
+                };
+                if self.builtins.contains_key(&ev.target) && self.alive(ev.target) {
+                    self.activate_builtin(ev.target, ev.clone(), &BuiltinEvent::Domain(&event));
+                    return;
+                }
+                let alive = self.alive(ev.target);
+                if let Some(d) = self.world.of_class(ev.key.class) {
+                    let actions = d.event(&event, alive);
+                    self.apply(instant, &ev, actions);
+                }
+            }
+        }
+    }
+
+    fn handle_intervention(&mut self, ev: &Event, payload: &[u8]) {
+        let now = ev.key.tick;
+        let instant = ev.key.instant();
+        let applied = |kind: &str, scope: Scope| {
+            Notification::new("intervention.applied", Severity::Info, scope, Ends::Nothing)
+                .with("at", Value::Instant(at(instant)))
+                .with("kind", Value::Name(kind.into()))
+        };
+        if let Some(Intervention::Message {
+            actor,
+            port,
+            payload,
+        }) = Intervention::decode(payload)
+        {
+            self.notify(applied("message", Scope::actor(actor)));
+            if self.builtins.contains_key(&actor) {
+                self.activate_builtin(
                     actor,
-                    port,
+                    ev.clone(),
+                    &BuiltinEvent::Message {
+                        port,
+                        payload: &payload,
+                    },
+                );
+            } else {
+                let vals = vec![Val::U64(now), Val::U32(port), Val::bytes(&payload)];
+                self.activate(actor, ev.clone(), ON_MESSAGE, &vals);
+            }
+            return;
+        }
+        // The kernel addresses every intervention event to the interventions' origin; a
+        // domain kind's target travels in the content (`encode_targeted`).
+        let decoded = decode_intervention(payload);
+        let Some((kind, Some(target), map)) = decoded else {
+            self.notify(applied("unknown", Scope::run()));
+            return;
+        };
+        let Some(d) = self.world.of_kind_mut(&kind) else {
+            self.notify(applied("unknown", Scope::run()));
+            return;
+        };
+        let actions = d.intervene(instant, target, &kind, &map);
+        self.notify(applied(&kind, Scope::run()));
+        self.apply(instant, ev, actions);
+    }
+
+    /// What a domain asked for (RFC 008 rule 1): calls into actors, events of its classes,
+    /// notes for the log.
+    fn apply(&mut self, instant: Instant, ev: &Event, actions: Vec<Action>) {
+        for a in actions {
+            match a {
+                Action::Call {
+                    actor,
+                    export,
+                    values,
+                } => {
+                    let which = self
+                        .actors
+                        .get(&actor)
+                        .and_then(|s| s.world.export_index(&export));
+                    if let Some(which) = which {
+                        self.activate(actor, ev.clone(), which, &values);
+                    }
+                }
+                Action::Schedule {
+                    origin,
+                    delay,
+                    class,
+                    target,
                     payload,
-                }) => {
-                    let n = Notification::new(
-                        "intervention.applied",
-                        Severity::Info,
-                        Scope::actor(actor),
-                        Ends::Nothing,
-                    )
-                    .with("at", Value::Instant(at(ev.key.instant())))
-                    .with("kind", Value::Name("message".into()));
-                    self.notify(n);
-                    let vals = vec![Val::U64(now), Val::U32(port), Val::bytes(&payload)];
-                    self.activate(actor, ev.clone(), ON_MESSAGE, &vals);
+                } => {
+                    if let Some(at) = instant.after(delay) {
+                        let seq = self.world.next_seq(origin);
+                        self.kernel
+                            .schedule_domain(at, class, origin, seq, target, payload);
+                    }
                 }
-                None => {
-                    let n = Notification::new(
-                        "intervention.applied",
-                        Severity::Info,
-                        Scope::run(),
-                        Ends::Nothing,
-                    )
-                    .with("at", Value::Instant(at(ev.key.instant())))
-                    .with("kind", Value::Name("unknown".into()));
-                    self.notify(n);
+                Action::Notify(n) => self.notify(n.at(at(instant))),
+            }
+        }
+    }
+
+    /// A built-in actor's activation (RFC 008 rule 19): the domain's code over a sink, committed
+    /// like a guest's with `metered = 0`.
+    fn activate_builtin(&mut self, id: Identity, event: Event, be: &BuiltinEvent<'_>) {
+        if !self.alive(id) {
+            return;
+        }
+        let instant = self.kernel.now();
+        let act = self.kernel.begin(id, event);
+        let Some(b) = self.builtins.get_mut(&id) else {
+            self.kernel.fault(act, FaultKind::Trap, 0, 0);
+            return;
+        };
+        b.sink.reset();
+        let Some((d, kind)) = self.world.builtin(id) else {
+            self.kernel.fault(act, FaultKind::Trap, 0, 0);
+            return;
+        };
+        d.builtin(id, &kind, be, &mut b.sink);
+        let reports: Vec<(u32, Vec<u8>)> = b
+            .sink
+            .effects()
+            .iter()
+            .filter_map(|e| match e {
+                florn_kernel::Effect::Report { channel, payload } => {
+                    Some((*channel, payload.clone()))
                 }
-            },
-            // The core gives scheduled changes and domain events no meaning for a module actor.
-            EventKind::ScheduledChange { .. } | EventKind::Domain { .. } => {}
+                _ => None,
+            })
+            .collect();
+        let kept: Vec<Vec<u8>> = if self.options.keep_payloads {
+            b.sink
+                .effects()
+                .iter()
+                .filter_map(|e| match e {
+                    florn_kernel::Effect::Send { payload, .. }
+                    | florn_kernel::Effect::Report { payload, .. } => Some(payload.clone()),
+                    _ => None,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        match self.kernel.commit(act, &mut b.sink, 0, &mut self.world) {
+            Ok(()) => {
+                for (channel, payload) in reports {
+                    if channel == 0 {
+                        let n = Notification::new(
+                            "actor.text",
+                            Severity::Info,
+                            Scope::actor(id),
+                            Ends::Nothing,
+                        )
+                        .with("actor", Value::Identity(id))
+                        .with(
+                            "text",
+                            Value::Text(String::from_utf8_lossy(&payload).into_owned()),
+                        )
+                        .at(at(instant));
+                        self.notify(n);
+                    }
+                    if self.telemetry.len() >= self.options.telemetry_capacity {
+                        self.telemetry.pop_front();
+                        self.telemetry_dropped += 1;
+                    }
+                    self.telemetry.push_back(Telemetry {
+                        at: instant,
+                        actor: id,
+                        channel,
+                        payload,
+                    });
+                }
+                for p in kept {
+                    self.payloads
+                        .entry(*blake3::hash(&p).as_bytes())
+                        .or_insert(p);
+                }
+            }
+            Err(refusal) => {
+                let (kind, parameter) = match &refusal {
+                    florn_kernel::CommitRefusal::DelayBeyondLargestTick { timer, .. } => {
+                        (FaultKind::Contract, *timer)
+                    }
+                    florn_kernel::CommitRefusal::PendingTimers { .. } => (FaultKind::Quota, 6),
+                    florn_kernel::CommitRefusal::Refused(r) => {
+                        (FaultKind::from_refusal(r), fault_parameter(r))
+                    }
+                };
+                self.faulted(id, kind, parameter, 0, instant);
+            }
         }
     }
 
@@ -1064,8 +1493,6 @@ impl<E: Engine> Run<E> {
                 kernel,
                 world,
                 actors,
-                sigs,
-                export_tys,
                 options,
                 payloads,
                 telemetry,
@@ -1080,9 +1507,7 @@ impl<E: Engine> Run<E> {
                 slot,
                 act,
                 which,
-                &export_tys[which],
                 vals,
-                sigs,
                 options.keep_payloads,
                 payloads,
                 telemetry,
@@ -1149,6 +1574,7 @@ impl<E: Engine> Run<E> {
     ) {
         // RFC 003 rule 13: the instance is discarded; the actor handles nothing further.
         self.drop_instance(id);
+        self.world.dead.insert(id);
         let policy = self.options.fault_policy;
         let n = Notification::new(
             "actor.faulted",
@@ -1294,15 +1720,19 @@ impl<E: Engine> Run<E> {
             },
             kernel: self.kernel.snapshot(),
             actors,
+            domains: self.world.export(),
         })
     }
 
     /// A run continuing from a checkpoint (RFC 001 rule 52; RFC 003 rule 22): the inputs are
     /// checked first (DATA-005), then every actor is restored and the kernel continues.
+    // The Host's parts and the run's inputs, each named: a struct would only move the list.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_checkpoint(
         engine: E,
         admission: Admission,
         platform: &mut dyn Platform,
+        domains: &Domains,
         scenario: Manifest,
         modules: &BTreeMap<String, Vec<u8>>,
         checkpoint: &Checkpoint,
@@ -1311,7 +1741,7 @@ impl<E: Engine> Run<E> {
         // The root seed is an input the checkpoint carries (RFC 001 rule 40, item 5).
         let seed = checkpoint.identity.root_seed;
         let mut run = Self::prepare(
-            engine, admission, platform, scenario, modules, seed, options,
+            engine, admission, platform, domains, scenario, modules, seed, options,
         )
         .map_err(|parts| parts.0)?;
         let id = &checkpoint.identity;
@@ -1349,8 +1779,17 @@ impl<E: Engine> Run<E> {
         }
         let config = run.kernel.config().clone();
         run.kernel = Kernel::restore(config, checkpoint.kernel.clone());
+        if !run.world.restore(&checkpoint.domains) {
+            return Err(HostError::Malformed("domain state"));
+        }
         for (id, state) in &checkpoint.actors {
             run.restore_actor(*id, state)?;
+        }
+        // The built-in actors' kernel state is in the kernel's snapshot; the dead ones too.
+        for (id, a) in &checkpoint.kernel.actors {
+            if !a.alive {
+                run.world.dead.insert(*id);
+            }
         }
         Ok(run)
     }
@@ -1376,10 +1815,13 @@ impl<E: Engine> Run<E> {
     /// A replay (RFC 001 rules 49 and 50; RFC 005 rule 26): a new run from the record's inputs,
     /// the recorded interventions applied at their instants, compared at the end with the stored
     /// chain. The scenario and modules must be the record's (`checkpoint.mismatch` otherwise).
+    // The Host's parts and the run's inputs, each named: a struct would only move the list.
+    #[allow(clippy::too_many_arguments)]
     pub fn replay(
         engine: E,
         admission: Admission,
         platform: &mut dyn Platform,
+        domains: &Domains,
         scenario: Manifest,
         modules: &BTreeMap<String, Vec<u8>>,
         record: &RunToml,
@@ -1388,7 +1830,7 @@ impl<E: Engine> Run<E> {
         options.chain_interval = record.chain_interval;
         let seed = record.inputs.root_seed;
         let mut run = Self::prepare(
-            engine, admission, platform, scenario, modules, seed, options,
+            engine, admission, platform, domains, scenario, modules, seed, options,
         )
         .map_err(|parts| parts.0)?;
         let hex = florn_model::canonical::hex;
@@ -1477,13 +1919,11 @@ impl<E: Engine> Run<E> {
 fn activate_slot<E: Engine>(
     engine: &mut E,
     kernel: &mut Kernel,
-    world: &mut CoreWorld,
+    world: &mut Composite,
     slot: &mut Slot<E>,
     act: Activation,
     which: usize,
-    tys: &[Ty],
     vals: &[Val],
-    sigs: &[(&'static str, Vec<Ty>)],
     keep_payloads: bool,
     payloads: &mut BTreeMap<Digest, Vec<u8>>,
     telemetry: &mut VecDeque<Telemetry>,
@@ -1494,6 +1934,8 @@ fn activate_slot<E: Engine>(
     let actor = act.actor;
     let budget = slot.limits.budget;
     let stack = slot.limits.stack;
+    let sigs = slot.world.clone();
+    let tys: &[Ty] = &sigs.exports[which].1;
     let inst = slot.instance.as_mut().expect("checked by the caller");
     slot.sink.reset();
     // RFC 003 rule 11: the budget is in place before any guest code, the lowering's realloc included.
@@ -1561,8 +2003,9 @@ fn activate_slot<E: Engine>(
         let mut handler = Handler {
             kernel,
             sink: &mut slot.sink,
+            world,
             actor,
-            sigs,
+            sigs: &sigs,
             contract: None,
         };
         let r = engine.call(inst, &func, &flats, &mut handler);
