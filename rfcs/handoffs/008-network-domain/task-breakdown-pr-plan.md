@@ -19,7 +19,7 @@ Independent of the order above: PR-18 may follow PR-15 directly; PR-19 may start
 
 | PR | State | Merged | Verifier record |
 |---|---|---|---|
-| PR-15 | not started | | |
+| PR-15 | merged | `e31cce4`, 2026-10-27 | C15 pending |
 | PR-16 | not started | | |
 | PR-17 | not started | | |
 | PR-18 | not started | | |
