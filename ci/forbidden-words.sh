@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# RFC 006 §6: the words below never appear in the user interface. The check runs over every
-# translation catalogue (locales/*.json under crates/); none exists before Phase 2, so the check
-# passes trivially until then and bites from the first catalogue on.
+# RFC 006 section 6: the words below never appear in the user interface. The check runs over
+# every translation catalogue: the shell's labels (locales/*.json under crates/) and the codes'
+# sentences (catalogue/*.json). None existed before Phase 2; the check bites from the first on.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 shopt -s nullglob globstar
-files=(crates/**/locales/*.json)
+files=(crates/**/locales/*.json crates/**/catalogue/*.json)
 if [ ${#files[@]} -eq 0 ]; then
   echo "no catalogues yet"; exit 0
 fi

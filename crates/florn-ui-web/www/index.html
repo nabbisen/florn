@@ -3,13 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>florn test page</title>
-<link rel="stylesheet" href="page.css">
+<title>florn</title>
+<link rel="stylesheet" href="shell.css">
 </head>
 <body>
-<h1>florn: the browser Host's test page</h1>
-<p>The Host runs in a worker. Open with <code>?scenario=echo-pair&amp;seed=42</code> to run a shipped scenario, or <code>?bench=crossing</code> or <code>?bench=cost</code> for the benchmarks; add <code>&amp;display=1</code> to read the display stream while it runs. The result appears below as JSON.</p>
-<pre id="out">starting…</pre>
-<script type="module" src="main.js"></script>
+<noscript>florn needs JavaScript and WebAssembly.</noscript>
+<script type="module" src="app.js"></script>
 </body>
 </html>

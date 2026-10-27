@@ -50,6 +50,8 @@ pub struct Field {
     pub errors: Vec<Notification>,
     /// The unit or dimension the field expects, as the manifest declares it, for the label.
     pub unit: Option<String>,
+    /// May be left empty: a parameter with a default, which the module applies.
+    pub optional: bool,
 }
 
 impl Field {
@@ -63,12 +65,19 @@ impl Field {
             problem: None,
             errors: Vec::new(),
             unit: None,
+            optional: false,
         };
         f.check();
         f
     }
     pub fn with_unit(mut self, unit: Option<String>) -> Self {
         self.unit = unit;
+        self
+    }
+    /// An empty value is no problem: the module's default applies.
+    pub fn optional(mut self) -> Self {
+        self.optional = true;
+        self.check();
         self
     }
     /// The person typed: the text is theirs, checked at once, committed on `commit`.
@@ -108,6 +117,10 @@ impl Field {
     }
     fn check(&mut self) {
         let t = self.text.trim();
+        if self.optional && t.is_empty() {
+            self.problem = None;
+            return;
+        }
         self.problem = match self.kind {
             Kind::Text => None,
             Kind::Name => t.is_empty().then_some(Problem::Empty),

@@ -131,8 +131,11 @@ impl Flight {
         }
         (instant.saturating_sub(self.sent) as f32 / self.delay).clamp(0.0, 1.0)
     }
+    /// Arrived once the instant is past its delivery: at `sent + delay` the delivery is the
+    /// next event, not yet handled (every event before the instant is), so the frame is still
+    /// shown, at its destination.
     pub fn arrived(&self, instant: u64) -> bool {
-        instant.saturating_sub(self.sent) as f32 >= self.delay
+        instant.saturating_sub(self.sent) as f32 > self.delay
     }
 }
 
@@ -327,8 +330,9 @@ mod tests {
         };
         assert_eq!(f.progress(100), 0.0);
         assert_eq!(f.progress(125), 0.5);
-        assert!(f.arrived(150));
-        assert!(!f.arrived(149));
+        assert_eq!(f.progress(150), 1.0);
+        assert!(f.arrived(151));
+        assert!(!f.arrived(150));
         assert_eq!(
             value_of("enabled=false delay=2 bandwidth=0", "enabled"),
             Some("false")

@@ -453,3 +453,131 @@ fn fields_keep_typed_text_across_refreshes_and_selection_sets_them() {
     pump(&mut c, &mut vm);
     assert_eq!(vm.run.pacing, Pacing::TicksPerSecond(1_000));
 }
+
+/// A run paced in slices ends between two commands: the view model fetches the run's state
+/// then, so that the digest and the end it shows are the run's own, not a stale answer's.
+#[test]
+fn a_paced_run_s_digest_is_fetched_when_it_ends() {
+    let mut c = controller();
+    let mut vm = ViewModel::new();
+    open_triangle(&mut c, &mut vm);
+    vm.new_run(Some(1));
+    pump(&mut c, &mut vm);
+    let stale = vm.run.chain.clone();
+    vm.set_speed(Pacing::TicksPerSecond(1_000));
+    vm.run();
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.run.state, RunState::Running);
+    while vm.run.state != RunState::Ended {
+        for reply in c.pump(500) {
+            vm.apply(&reply);
+        }
+        pump(&mut c, &mut vm);
+    }
+    let runner = host::run(&shipped::dv_triangle(100));
+    assert_ne!(vm.run.chain, stale);
+    assert_eq!(vm.run.chain.as_deref(), Some(runner.chain_hex().as_str()));
+    assert_eq!(vm.run.ended.as_deref(), Some("end-reached"));
+}
+
+/// J4's first half: the scenario saved from the draft is the same scenario (the hash the
+/// Host computes over its content), so that a run record of the original replays under it.
+#[test]
+fn a_saved_scenario_is_the_same_scenario() {
+    let mut c = controller();
+    let mut vm = ViewModel::new();
+    open_triangle(&mut c, &mut vm);
+    let original = vm.scenario.as_ref().unwrap().sha256.clone();
+    let text = vm.draft.to_toml();
+    let mut again = controller();
+    let mut vm2 = ViewModel::new();
+    vm2.connect();
+    pump(&mut again, &mut vm2);
+    vm2.open_scenario(text.into_bytes());
+    pump(&mut again, &mut vm2);
+    let saved = vm2
+        .scenario
+        .as_ref()
+        .expect("the saved scenario loads")
+        .sha256
+        .clone();
+    assert_eq!(saved, original, "{}", vm.draft.to_toml());
+    // With per-port attributes and limits beyond the default too.
+    let s = shipped::net_pair("saved-pair", 1_000, 50, 64, false)
+        .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")])
+        .per_port((1, 0), &[("cost", "3")])
+        .limit("budget", "1000000");
+    let mut c3 = controller();
+    let mut vm3 = ViewModel::new();
+    vm3.connect();
+    pump(&mut c3, &mut vm3);
+    vm3.open_scenario(s.text(&s.hashes()).into_bytes());
+    pump(&mut c3, &mut vm3);
+    let original = vm3.scenario.as_ref().unwrap().sha256.clone();
+    let text = vm3.draft.to_toml();
+    let mut c4 = controller();
+    let mut vm4 = ViewModel::new();
+    vm4.connect();
+    pump(&mut c4, &mut vm4);
+    vm4.open_scenario(text.clone().into_bytes());
+    pump(&mut c4, &mut vm4);
+    assert_eq!(
+        vm4.scenario.as_ref().map(|x| x.sha256.clone()),
+        Some(original),
+        "{text}"
+    );
+}
+
+/// J4 (AC-010): the scenario saved from the application reloads, and the run record of a
+/// run with an intervention replays under it to the same digest.
+#[test]
+fn j4_the_saved_scenario_reloads_and_replays_the_saved_run() {
+    let mut c = controller();
+    let mut vm = ViewModel::new();
+    open_triangle(&mut c, &mut vm);
+    vm.new_run(Some(1));
+    pump(&mut c, &mut vm);
+    advance_to(&mut c, &mut vm, 500, 50);
+    vm.set_link(1001, false);
+    pump(&mut c, &mut vm);
+    vm.run();
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.run.state, RunState::Ended);
+    let chain = vm.run.chain.clone();
+    vm.confirm_export(ExportKind::RunRecord {
+        trace: true,
+        payloads: false,
+    });
+    let mut record = None;
+    for m in vm.take_outbox() {
+        for reply in c.handle(Envelope::new(m)) {
+            if let Message::Answer(florn_control::Answer::Exported { bytes, .. }) = &reply {
+                record = Some(bytes.clone());
+            }
+            vm.apply(&reply);
+        }
+    }
+    let record = record.expect("exported");
+    let saved = vm.draft.to_toml();
+    // Reload the saved scenario, as a file, then replay the record under it.
+    vm.open_scenario(saved.into_bytes());
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.run.state, RunState::Ready, "{:?}", vm.notices);
+    vm.replay(record);
+    pump(&mut c, &mut vm);
+    assert_eq!(
+        vm.run.state,
+        RunState::Paused,
+        "{:?}",
+        vm.notices
+            .iter()
+            .map(|n| n.notification.code.clone())
+            .collect::<Vec<_>>()
+    );
+    vm.run();
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.run.state, RunState::Ended);
+    assert_eq!(vm.status.replay.as_deref(), Some("replay.matched"));
+    assert_eq!(vm.run.chain, chain);
+    assert_eq!(vm.interventions.len(), 1);
+}

@@ -4,8 +4,10 @@
 //! name; a scenario with errors cannot run, and the run control says why. The draft itself
 //! checks only what a field can tell on its own.
 use florn_control::Notification;
-use florn_control::message::{ModuleSummary, ScenarioSummary};
+use florn_control::message::{Fields, ModuleSummary, ScenarioSummary};
 
+#[cfg(test)]
+use crate::fields::Problem;
 use crate::fields::{self, Field, Kind};
 use crate::inspector::{kind_of, kind_of_text};
 
@@ -35,6 +37,8 @@ pub struct DraftConnection {
     pub ty: String,
     pub ports: Vec<(u32, u32)>,
     pub attrs: Vec<Field>,
+    /// `[connections.attrs.per-port]` as text, by (actor, port), kept as loaded.
+    pub per_port: Vec<((u32, u32), Fields)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -51,7 +55,8 @@ pub struct Draft {
     pub end: Field,
     pub tie: String,
     pub seed: Field,
-    pub memory: Field,
+    /// `[limits.<class>]` as text, by class; a new draft has the default class's memory.
+    pub limits: Vec<(String, Vec<(String, String)>)>,
     pub modules: Vec<DraftModule>,
     pub actors: Vec<DraftActor>,
     pub connections: Vec<DraftConnection>,
@@ -79,7 +84,7 @@ impl Draft {
             end: Field::new("end", Kind::Quantity, ""),
             tie: "by-identity".into(),
             seed: Field::new("root", Kind::Integer, "1"),
-            memory: Field::new("memory", Kind::Quantity, "2MiB"),
+            limits: vec![("default".into(), vec![("memory".into(), "2MiB".into())])],
             modules: Vec::new(),
             actors: Vec::new(),
             connections: Vec::new(),
@@ -101,6 +106,7 @@ impl Draft {
         );
         d.tie = s.tie.clone();
         d.seed = Field::new("root", Kind::Integer, &s.seed.to_string());
+        d.limits = s.limits.clone();
         for m in &s.modules {
             d.modules.push(DraftModule {
                 name: m.name.clone(),
@@ -112,6 +118,25 @@ impl Draft {
         for a in &s.actors {
             let Some(module) = &a.module else { continue };
             let summary = s.modules.iter().find(|m| m.name == *module);
+            // What the manifest sets, as set (the file round-trips to the same scenario);
+            // the declared parameters it leaves to the module, as empty optional fields.
+            let mut config: Vec<Field> = a
+                .config
+                .iter()
+                .map(|(k, v)| {
+                    let declared = summary.and_then(|m| m.params.iter().find(|p| p.name == *k));
+                    let kind = declared.map_or_else(|| kind_of_text(v), |p| kind_of(&p.ty));
+                    Field::new(k, kind, v).with_unit(declared.and_then(|p| p.unit.clone()))
+                })
+                .collect();
+            if let Some(m) = summary {
+                for p in &m.params {
+                    if !config.iter().any(|f| f.name == p.name) {
+                        let f = Field::new(&p.name, kind_of(&p.ty), "").with_unit(p.unit.clone());
+                        config.push(if p.required { f } else { f.optional() });
+                    }
+                }
+            }
             d.actors.push(DraftActor {
                 id: a.id,
                 name: Field::new("name", Kind::Name, &a.name),
@@ -121,7 +146,7 @@ impl Draft {
                     .iter()
                     .map(|p| (p.id, p.name.clone(), p.ty.clone()))
                     .collect(),
-                config: crate::inspector::config_fields(a, summary),
+                config,
             });
             d.next_actor = d.next_actor.max(a.id + 1);
         }
@@ -132,6 +157,7 @@ impl Draft {
                 ty: c.ty.clone().unwrap_or_default(),
                 ports: c.ports.clone(),
                 attrs: crate::inspector::attr_fields(c),
+                per_port: c.per_port.clone(),
             });
             d.next_connection = d.next_connection.max(c.id + 1);
         }
@@ -160,7 +186,8 @@ impl Draft {
 
     /// Place an actor of a module with `ports` ports of `port_type` (RFC 004 rule 7: the
     /// interface assigns the identity, and a name the person can change). The configuration
-    /// fields are the module's parameters with their defaults.
+    /// fields are the module's parameters: a required one empty and to be filled, an optional
+    /// one empty and left to the module's default unless the person sets it.
     pub fn place(&mut self, module: &str, port_type: &str, ports: u32) -> Option<u32> {
         let m = self.modules.iter().find(|m| m.name == module)?;
         let id = self.next_actor;
@@ -172,8 +199,8 @@ impl Draft {
                 s.params
                     .iter()
                     .map(|p| {
-                        Field::new(&p.name, kind_of(&p.ty), p.default.as_deref().unwrap_or(""))
-                            .with_unit(p.unit.clone())
+                        let f = Field::new(&p.name, kind_of(&p.ty), "").with_unit(p.unit.clone());
+                        if p.required { f } else { f.optional() }
                     })
                     .collect()
             })
@@ -211,6 +238,7 @@ impl Draft {
             ty: ty.into(),
             ports: ports.to_vec(),
             attrs: Vec::new(),
+            per_port: Vec::new(),
         });
         id
     }
@@ -272,8 +300,7 @@ impl Draft {
         let mut n = usize::from(!self.name.is_valid())
             + usize::from(!self.tick.is_valid())
             + usize::from(!self.end.is_valid())
-            + usize::from(!self.seed.is_valid())
-            + usize::from(!self.memory.is_valid());
+            + usize::from(!self.seed.is_valid());
         for a in &self.actors {
             n += usize::from(!a.name.is_valid());
             n += a.config.iter().filter(|f| !f.is_valid()).count();
@@ -306,7 +333,6 @@ impl Draft {
         n += top(&mut self.tick, "time.tick");
         n += top(&mut self.end, "time.end");
         n += top(&mut self.seed, "seed.root");
-        n += top(&mut self.memory, "limits.default.memory");
         for (i, a) in self.actors.iter_mut().enumerate() {
             n += top(&mut a.name, &format!("actors[{i}].name"));
             n += fields::attach(&mut a.config, &format!("actors[{i}].config"), errors);
@@ -330,7 +356,6 @@ impl Draft {
             &mut self.tick,
             &mut self.end,
             &mut self.seed,
-            &mut self.memory,
         ] {
             changed |= f.commit();
         }
@@ -359,7 +384,7 @@ impl Draft {
     pub fn to_toml(&self) -> String {
         let mut t = String::new();
         t.push_str(&format!(
-            "florn = 1\nname = {}\ndomains = [{}]\n\n[time]\ntick = {}\nend = {}\n\n[order]\ntie = {}\n\n[seed]\nroot = {}\n\n[limits.default]\nmemory = {}\n",
+            "florn = 1\nname = {}\ndomains = [{}]\n\n[time]\ntick = {}\nend = {}\n\n[order]\ntie = {}\n\n[seed]\nroot = {}\n",
             quote(&self.name.committed),
             self.domains()
                 .iter()
@@ -370,8 +395,13 @@ impl Draft {
             quote(&self.end.committed),
             quote(&self.tie),
             self.seed.committed,
-            quote(&self.memory.committed),
         ));
+        for (class, fields) in &self.limits {
+            t.push_str(&format!("\n[limits.{class}]\n"));
+            for (k, v) in fields {
+                t.push_str(&format!("{k} = {}\n", toml_value(v)));
+            }
+        }
         let used: Vec<&DraftModule> = self
             .modules
             .iter()
@@ -446,6 +476,26 @@ impl Draft {
                 t.push_str("[connections.attrs]\n");
                 for f in set {
                     t.push_str(&format!("{} = {}\n", f.name, toml_value(&f.committed)));
+                }
+            }
+            if !c.per_port.is_empty() {
+                t.push_str("[connections.attrs.per-port]\n");
+                for ((actor, port), fields) in &c.per_port {
+                    let a = self.actors.iter().find(|a| a.id == *actor);
+                    let an = a.map(|a| a.name.committed.clone()).unwrap_or_default();
+                    let pn = a
+                        .and_then(|a| a.ports.iter().find(|p| p.0 == *port))
+                        .map(|p| p.1.clone())
+                        .unwrap_or_default();
+                    let inner: Vec<String> = fields
+                        .iter()
+                        .map(|(k, v)| format!("{k} = {}", toml_value(v)))
+                        .collect();
+                    t.push_str(&format!(
+                        "{} = {{ {} }}\n",
+                        quote(&format!("{an}.{pn}")),
+                        inner.join(", ")
+                    ));
                 }
             }
         }
@@ -561,6 +611,51 @@ mod tests {
         d.set_attr(c, "delay", "5");
         assert_eq!(d.problems(), 1);
         assert!(d.to_toml().contains("delay = \"2ns\""), "not committed");
+    }
+
+    #[test]
+    fn placed_actors_leave_optional_parameters_to_the_module() {
+        use florn_control::message::{ModuleSummary, ParamSummary};
+        let param = |name: &str, required: bool| ParamSummary {
+            name: name.into(),
+            ty: "u64".into(),
+            required,
+            default: (!required).then(|| "7".to_string()),
+            unit: None,
+        };
+        let summary = ModuleSummary {
+            name: "m".into(),
+            source_sha256: String::new(),
+            contract: String::new(),
+            kind: "k".into(),
+            description: None,
+            port_kinds: Vec::new(),
+            params: vec![param("size", true), param("period", false)],
+            channels: Vec::new(),
+            needs: Vec::new(),
+            tables: Vec::new(),
+        };
+        let mut d = Draft::new("x");
+        d.add_module(DraftModule {
+            name: "m".into(),
+            sha256: String::new(),
+            contract: String::new(),
+            summary: Some(summary),
+        });
+        let a = d.place("m", "network/interface", 1).unwrap();
+        let actor = &d.actors[0];
+        assert_eq!(
+            actor.config[0].problem,
+            Some(Problem::Empty),
+            "required, to be filled"
+        );
+        assert!(actor.config[1].optional && actor.config[1].is_valid());
+        assert!(
+            !d.to_toml().contains("period"),
+            "left to the module's default"
+        );
+        d.set_config(a, "size", "3");
+        assert!(d.to_toml().contains("[actors.config]\nsize = 3\n"));
     }
 
     #[test]

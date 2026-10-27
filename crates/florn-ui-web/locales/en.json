@@ -1,0 +1,142 @@
+{
+ "title": "florn",
+ "language": "Language",
+ "lang_en": "English",
+ "lang_ja": "日本語",
+ "yes": "yes",
+ "no": "no",
+ "cancel": "Cancel",
+ "dismiss": "Dismiss",
+ "emulation_note": "Actors run their real code under florn's rules: an activation takes no logical time, there is no operating system, clock or network stack beneath the actor, and the world around it is simulated by florn. What you see proves how the actor's logic behaves under those rules, not its speed on real hardware or how a real network would behave.",
+ "run": {
+  "controls": "Run controls",
+  "run": "Run",
+  "pause": "Pause",
+  "step": "Step",
+  "step_unit": "Step unit",
+  "unit_event": "one event",
+  "unit_instant": "one instant",
+  "unit_tick": "one tick",
+  "speed": "Speed",
+  "speed_fastest": "as fast as possible",
+  "reset": "Reset",
+  "goto": "Go to tick",
+  "goto_button": "Go to…"
+ },
+ "status": {
+  "instant": "t =",
+  "messages": "Telemetry uses messages on this page; shared memory is unavailable."
+ },
+ "offline": {
+  "ready": "Available offline.",
+  "not_ready": "Caching for offline use…",
+  "unsupported": "Offline use is not available in this browser."
+ },
+ "labs": {
+  "title": "Learning labs",
+  "help": "A scenario shipped with florn, with a story of what to watch. Choose one to open it."
+ },
+ "files": {
+  "title": "Files",
+  "cache_note": "Nothing is kept in this browser: the file is the durable form.",
+  "open_scenario": "Open scenario…",
+  "save_scenario": "Save scenario",
+  "import_module": "Import module…",
+  "export_record": "Export run record…",
+  "replay_record": "Replay a run record…",
+  "replay_note": "Replay executes the run again from its inputs and applies the recorded interventions at their instants; playback would only display a trace.",
+  "preview_title": "Export preview",
+  "confirm": "Write the file"
+ },
+ "actors": {
+  "title": "Actors",
+  "help": "Use Tab or the arrow keys, then Enter to select.",
+  "faulted": "faulted",
+  "down": "down"
+ },
+ "canvas": {},
+ "field": {
+  "empty": "This field needs a value.",
+  "not_a_number": "This is not a number.",
+  "needs_unit": "A quantity needs a unit: write 5ms, not 5.",
+  "not_a_boolean": "Write true or false."
+ },
+ "inspector": {
+  "title": "Inspector",
+  "help": "The selected element. Fields are set when the selection changes; editing before a run changes the scenario.",
+  "none": "Nothing selected.",
+  "actor": "Actor",
+  "connection": "Connection",
+  "message": "Message",
+  "world": "World",
+  "name": "Name",
+  "identity": "Identity",
+  "module": "Module and hash",
+  "class": "Class",
+  "status": "Status",
+  "running": "running",
+  "ports": "Ports",
+  "faults": "Faults of this run",
+  "reports": "Latest telemetry",
+  "kind": "Type",
+  "in_flight": "Messages in flight",
+  "origin": "Origin",
+  "sequence": "Sequence",
+  "at": "Instant sent",
+  "port": "Port",
+  "length": "Length",
+  "digest": "Digest",
+  "protocol": "Protocol",
+  "bytes": "Raw bytes",
+  "decoded": "Decoded fields",
+  "no_payload": "The run keeps no payload bytes.",
+  "domains": "Domains",
+  "classes": "Event classes",
+  "events": "Domain events",
+  "open_in_timeline": "Open in timeline",
+  "take_node_down": "Take this actor down at the next instant",
+  "bring_node_up": "Bring this actor up at the next instant",
+  "take_link_down": "Take this link down at the next instant",
+  "bring_link_up": "Bring this link up at the next instant"
+ },
+ "timeline": {
+  "title": "Timeline",
+  "filters": "Filters",
+  "by_actor": "Actor",
+  "every_actor": "every actor",
+  "activation": "activation",
+  "fault": "fault",
+  "intervention": "intervention",
+  "change": "scheduled change",
+  "event": "domain event",
+  "report": "report",
+  "notice": "notice",
+  "step_to": "Step to here"
+ },
+ "interventions": {
+  "title": "Interventions",
+  "help": "Changes made to the running world, each applied at the next instant boundary and recorded as a run input.",
+  "pending": "not yet applied",
+  "kept": "From the ended run",
+  "keep_as_changes": "Keep as scheduled changes of the scenario"
+ },
+ "authoring": {
+  "title": "Scenario",
+  "help": "Place actors from the palette, connect their ports, set attributes, schedule changes, then apply. Every error is shown at its field.",
+  "new": "New scenario",
+  "apply": "Apply scenario",
+  "palette": "Palette",
+  "actors": "Actors of the draft",
+  "remove": "Remove",
+  "connect": "Connect two ports",
+  "connect_button": "Connect",
+  "attribute": "Set an attribute or a parameter",
+  "set": "Set",
+  "schedule": "Schedule a change",
+  "schedule_button": "Schedule",
+  "ports": "Ports per actor"
+ },
+ "notices": {
+  "title": "States"
+ }
+}

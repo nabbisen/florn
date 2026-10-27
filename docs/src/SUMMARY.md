@@ -6,6 +6,7 @@
 
 - [For module authors](./module-authors.md)
 - [For automation users](./automation.md)
+- [The browser interface](./interface.md)
 - [Compatibility and versions](./compatibility.md)
 - [Release notes](./releases/0.1.0.md)
 

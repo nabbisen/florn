@@ -445,6 +445,8 @@ pub struct ScenarioSummary {
     /// The event classes of a run of this scenario with their names (RFC 001 rule 15): the
     /// core's three, then each domain's (0.2).
     pub classes: Vec<(u8, String)>,
+    /// `[limits.<class>]` as text, by class (0.2): counts bare, bytes with the unit `B`.
+    pub limits: Vec<(String, Fields)>,
 }
 
 /// A value of an intervention's content or a scheduled change, as a front end states it.
@@ -1097,6 +1099,10 @@ fn scenario_w(e: &mut Encoder, s: &ScenarioSummary) {
         e.u8(*c);
         e.text(n);
     });
+    e.list(&s.limits, |e, (class, fields)| {
+        e.text(class);
+        pairs_w(e, fields);
+    });
 }
 fn scenario_r(d: &mut Decoder) -> Option<ScenarioSummary> {
     Some(ScenarioSummary {
@@ -1128,6 +1134,7 @@ fn scenario_r(d: &mut Decoder) -> Option<ScenarioSummary> {
             })
         })?,
         classes: d.list(|d| Some((d.u8()?, d.text()?)))?,
+        limits: d.list(|d| Some((d.text()?, pairs_r(d)?)))?,
     })
 }
 fn trace_entry_w(e: &mut Encoder, t: &TraceEntry) {

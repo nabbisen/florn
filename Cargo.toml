@@ -56,6 +56,13 @@ libm = { version = "=0.2.16", default-features = false }
 dlmalloc = { version = "=0.2.14", features = ["global"] }
 # test-only: the reference ChaCha8 the kernel's own implementation is checked against
 rand_chacha = "=0.10.0"
+# The browser shell (RFC 005 rule 38; PR-20): the framework, its catalogue, and the bindings
+leptos = { version = "=0.8.20", features = ["csr"] }
+leptos_i18n = { version = "=0.6.2", features = ["csr"] }
+wasm-bindgen = "=0.2.126"
+js-sys = "=0.3.103"
+web-sys = "=0.3.103"
+console_error_panic_hook = "=0.1.7"
 
 [profile.release]
 opt-level = 3

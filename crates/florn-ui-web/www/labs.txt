@@ -1,0 +1,8 @@
+dv-triangle
+dv-chain
+net-delay
+net-loss
+net-jitter
+net-link-down
+net-lan
+net-blackhole

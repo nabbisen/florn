@@ -93,7 +93,7 @@ for (const name of browsers) {
     });
     page.on("pageerror", (e) => consoleErrors.push(String(e)));
     try {
-      await page.goto(`${at}/index.html?${query}`);
+      await page.goto(`${at}/kit.html?${query}`);
       await page.waitForSelector("#out[data-done='1']", { timeout });
       return JSON.parse(await page.textContent("#out"));
     } finally {

@@ -27,7 +27,7 @@ cargo install florn
 florn run scenarios/echo-pair.toml --modules scenarios/modules --seed 42
 ```
 
-The `chain` line is the digest of the run; `scenarios/digests.toml` records what it must be. `cargo test -p florn-conformance` runs the whole kit. To write a guest of your own, start with the [module author's chapter](./docs/src/module-authors.md) and the SDK's template in [`crates/florn-guest`](./crates/florn-guest/README.md); to script runs, the [automation chapter](./docs/src/automation.md). The browser Host's test page is described in [`crates/florn-ui-web`](./crates/florn-ui-web/README.md).
+The `chain` line is the digest of the run; `scenarios/digests.toml` records what it must be. `cargo test -p florn-conformance` runs the whole kit. To write a guest of your own, start with the [module author's chapter](./docs/src/module-authors.md) and the SDK's template in [`crates/florn-guest`](./crates/florn-guest/README.md); to script runs, the [automation chapter](./docs/src/automation.md). The browser application and the kit's page are described in [`crates/florn-ui-web`](./crates/florn-ui-web/README.md) and the [interface chapter](./docs/src/interface.md).
 
 ## Design notes
 

@@ -52,11 +52,13 @@ pub extern "C" fn florn_out_len() -> u32 {
     OUT.with(|o| o.borrow().len() as u32)
 }
 
-/// The Host over this worker, with the capacity the page gives (RFC 003 rule 20) and the
-/// display transport the page reads from (RFC 005 rule 14): 1 the ring in shared memory, 2
-/// messages, 0 none (a page that draws nothing).
+/// The Host over this worker, with the capacity the page gives (RFC 003 rule 20), the
+/// display transport the page reads from (RFC 005 rule 14: 1 the ring in shared memory, 2
+/// messages, 0 none, for a page that draws nothing), and whether the trace's records and
+/// the payloads are kept (1: the application's timeline and inspectors read them; 0: the
+/// kit's page, which reads the digest).
 #[unsafe(no_mangle)]
-pub extern "C" fn florn_start(instances: u32, memory_bytes: f64, transport: u32) -> i32 {
+pub extern "C" fn florn_start(instances: u32, memory_bytes: f64, transport: u32, keep: u32) -> i32 {
     let platform = WebPlatform::with_capacity(u64::from(instances), memory_bytes.max(0.0) as u64);
     let mut c = Controller::new(
         WebEngine::new(),
@@ -64,8 +66,8 @@ pub extern "C" fn florn_start(instances: u32, memory_bytes: f64, transport: u32)
         Box::new(platform),
         Domains::core().with(NetworkDomain::new),
         Options {
-            keep_records: false,
-            keep_payloads: false,
+            keep_records: keep != 0,
+            keep_payloads: keep != 0,
             ..Options::browser()
         },
     );
@@ -391,6 +393,75 @@ pub unsafe extern "C" fn florn_handle(ptr: *mut u8, len: u32) -> i32 {
         set_out(replies_json(&replies).into_bytes());
         n
     })
+}
+
+/// The transport's form for the shell (RFC 005 rule 25): one encoded control message in, the
+/// encoded replies in `OUT`, each as a 4-byte little-endian length then its bytes; their
+/// count, or -1 before `florn_start`. The shell decodes them itself.
+///
+/// # Safety
+/// As `florn_load_scenario`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn florn_handle_bytes(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: the worker's script passes back a buffer of `florn_alloc` with its length, once.
+    let bytes = unsafe { take(ptr, len) };
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        let encoded = c.handle_bytes(&bytes);
+        let n = encoded.len() as i32;
+        set_out(frame_all(&encoded));
+        n
+    })
+}
+
+/// A slice of a paced advance for the shell: as `florn_pump`, the replies encoded and framed.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_pump_bytes(max_ticks: u32) -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        let replies = c.pump(u64::from(max_ticks));
+        let encoded: Vec<Vec<u8>> = replies
+            .iter()
+            .map(|m| florn_control::encode(&Envelope::new(m.clone())))
+            .collect();
+        let n = encoded.len() as i32;
+        set_out(frame_all(&encoded));
+        n
+    })
+}
+
+/// The log's lines since the last reply, encoded and framed (as `florn_drain`).
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_drain_bytes() -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        let encoded: Vec<Vec<u8>> = c
+            .drain()
+            .iter()
+            .map(|m| florn_control::encode(&Envelope::new(m.clone())))
+            .collect();
+        let n = encoded.len() as i32;
+        set_out(frame_all(&encoded));
+        n
+    })
+}
+
+fn frame_all(messages: &[Vec<u8>]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(messages.iter().map(|m| m.len() + 4).sum());
+    for m in messages {
+        out.extend_from_slice(&(m.len() as u32).to_le_bytes());
+        out.extend_from_slice(m);
+    }
+    out
 }
 
 /// The run record of the current run (`export`, confirmed): the bytes in `OUT`, or -1.

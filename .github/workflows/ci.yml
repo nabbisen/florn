@@ -70,6 +70,10 @@ jobs:
         run: cargo run --locked --release -p florn-conformance -- figures
       - name: Dependency direction (RFC 005 rules 1 and 43)
         run: python3 -I ci/check-deps.py
+      - name: The shell reaches the Host through the control interface only (RFC 005 rule 25)
+        run: ci/check-shell-exports.sh
+      - name: Lint, the shell (wasm32, feature shell)
+        run: cargo clippy --locked --target wasm32-unknown-unknown -p florn-ui-web --features shell --bin florn-ui-web -- -D warnings
 
   browser:
     name: browser (${{ matrix.browsers }} on ${{ matrix.os }})
@@ -93,10 +97,14 @@ jobs:
             ~/.cargo/git
             target
           key: cargo-browser-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml') }}
-      - name: The Host's worker module (RFC 005 rule 32)
-        run: |
-          cargo build --locked --release --target wasm32-unknown-unknown -p florn-ui-web
-          cp target/wasm32-unknown-unknown/release/florn_ui_web.wasm crates/florn-ui-web/www/florn_host.wasm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: wasm-bindgen-cli-0.2.126-${{ matrix.os }}
+      - name: wasm-bindgen (the shell's bindings; the version the crate pins)
+        run: command -v wasm-bindgen && wasm-bindgen --version | grep -q "0.2.126" || cargo install --locked wasm-bindgen-cli --version 0.2.126
+      - name: The Host's worker module and the shell (RFC 005 rules 32 and 38)
+        run: ci/build-shell.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -114,6 +122,9 @@ jobs:
       - name: The conformance kit under the browser Host (AC-001, AC-002, AC-007; RFC 005 section 11)
         working-directory: ci/browser
         run: node run.js --browsers ${{ matrix.browsers }}
+      - name: The journeys through the application (AC-008 to AC-011; RFC 005 rules 38 to 41)
+        working-directory: ci/browser
+        run: node journeys.js --browsers ${{ matrix.browsers }}
 
   fuzz:
     name: fuzz (RFC 006 rule 7; weekly, on dispatch, and on a tag)

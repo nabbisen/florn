@@ -1,9 +1,11 @@
-// The service worker (RFC 005 rules 33 and 35): after one visit the page, its scripts, the Host
-// module and whatever it fetched are served from the cache, with the isolation headers and the
-// policy on every cached response. florn's own code, nothing from another origin.
+// The service worker (RFC 005 rules 33 and 35): after one visit the application, its scripts,
+// the Host module, the shell and whatever it fetched (the labs' scenarios and modules) are
+// served from the cache, with the isolation headers and the policy on every cached response.
+// florn's own code, nothing from another origin. The cache is named by the version: a released
+// version lives at its own path and never updates itself under a person.
 "use strict";
-const CACHE = "florn-test-page-0.2";
-const FILES = ["./", "./index.html", "./page.css", "./main.js", "./worker.js", "./display.js", "./florn_host.wasm"];
+const CACHE = "florn-0.2";
+const FILES = ["./", "./index.html", "./shell.css", "./app.js", "./florn_shell.js", "./florn_shell_bg.wasm", "./worker.js", "./display.js", "./florn_host.wasm", "./labs.txt", "./palette.txt", "./kit.html", "./page.css", "./main.js"];
 const HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",

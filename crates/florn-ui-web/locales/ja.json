@@ -1,0 +1,142 @@
+{
+ "title": "florn",
+ "language": "言語",
+ "lang_en": "English",
+ "lang_ja": "日本語",
+ "yes": "はい",
+ "no": "いいえ",
+ "cancel": "キャンセル",
+ "dismiss": "閉じる",
+ "emulation_note": "アクターは本物のコードを、flornの規則のもとで実行します。アクティベーションは論理時間を消費せず、アクターの下にはOSもクロックもネットワークスタックもなく、周囲の世界はflornがシミュレートします。ここで見えるのは、その規則のもとでアクターの論理がどう振る舞うかであって、実機での速度や実際のネットワークの挙動ではありません。",
+ "run": {
+  "controls": "実行コントロール",
+  "run": "実行",
+  "pause": "一時停止",
+  "step": "ステップ",
+  "step_unit": "ステップ単位",
+  "unit_event": "イベント1つ",
+  "unit_instant": "時点1つ",
+  "unit_tick": "ティック1つ",
+  "speed": "速度",
+  "speed_fastest": "できるだけ速く",
+  "reset": "リセット",
+  "goto": "ティックへ移動",
+  "goto_button": "時刻へ移動…"
+ },
+ "status": {
+  "instant": "t =",
+  "messages": "このページではテレメトリにメッセージを使います。共有メモリは利用できません。"
+ },
+ "offline": {
+  "ready": "オフラインで利用できます。",
+  "not_ready": "オフライン用にキャッシュしています…",
+  "unsupported": "このブラウザーではオフライン利用はできません。"
+ },
+ "labs": {
+  "title": "学習ラボ",
+  "help": "flornに同梱されたシナリオと、見どころの説明です。選ぶと開きます。"
+ },
+ "files": {
+  "title": "ファイル",
+  "cache_note": "このブラウザーには何も保存されません。ファイルが永続的な形です。",
+  "open_scenario": "シナリオを開く…",
+  "save_scenario": "シナリオを保存",
+  "import_module": "モジュールをインポート…",
+  "export_record": "実行記録ファイルをエクスポート…",
+  "replay_record": "実行記録ファイルを再実行…",
+  "replay_note": "再実行は入力から実行をやり直し、記録された介入をその時点で適用します。再生はトレースを表示するだけです。",
+  "preview_title": "エクスポートのプレビュー",
+  "confirm": "ファイルを書き出す"
+ },
+ "actors": {
+  "title": "アクター",
+  "help": "Tab または矢印キーで移動し、Enter で選択します。",
+  "faulted": "フォールト",
+  "down": "ダウン"
+ },
+ "canvas": {},
+ "field": {
+  "empty": "このフィールドには値が必要です。",
+  "not_a_number": "数ではありません。",
+  "needs_unit": "量には単位が必要です。5 ではなく 5ms と書いてください。",
+  "not_a_boolean": "true または false と書いてください。"
+ },
+ "inspector": {
+  "title": "インスペクター",
+  "help": "選択中の要素です。フィールドは選択が変わったときに設定されます。実行前の編集はシナリオを変えます。",
+  "none": "何も選択されていません。",
+  "actor": "アクター",
+  "connection": "接続",
+  "message": "メッセージ",
+  "world": "ワールド",
+  "name": "名前",
+  "identity": "識別子",
+  "module": "モジュールとハッシュ",
+  "class": "クラス",
+  "status": "状態",
+  "running": "動作中",
+  "ports": "ポート",
+  "faults": "この実行のフォールト",
+  "reports": "最新のテレメトリ",
+  "kind": "型",
+  "in_flight": "飛行中のメッセージ",
+  "origin": "発生元",
+  "sequence": "シーケンス",
+  "at": "送信時点",
+  "port": "ポート",
+  "length": "長さ",
+  "digest": "ダイジェスト",
+  "protocol": "プロトコル",
+  "bytes": "生のバイト列",
+  "decoded": "デコードされたフィールド",
+  "no_payload": "この実行はペイロードのバイト列を保持していません。",
+  "domains": "ドメイン",
+  "classes": "イベントクラス",
+  "events": "ドメインイベント",
+  "open_in_timeline": "タイムラインで開く",
+  "take_node_down": "次の時点でこのアクターをダウンさせる",
+  "bring_node_up": "次の時点でこのアクターをアップさせる",
+  "take_link_down": "次の時点でこのリンクをダウンさせる",
+  "bring_link_up": "次の時点でこのリンクをアップさせる"
+ },
+ "timeline": {
+  "title": "タイムライン",
+  "filters": "フィルター",
+  "by_actor": "アクター",
+  "every_actor": "すべてのアクター",
+  "activation": "アクティベーション",
+  "fault": "フォールト",
+  "intervention": "介入",
+  "change": "予定変更",
+  "event": "ドメインイベント",
+  "report": "レポート",
+  "notice": "通知",
+  "step_to": "ここまで進める"
+ },
+ "interventions": {
+  "title": "介入",
+  "help": "実行中の世界に加えた変更です。それぞれ次の時点境界で適用され、実行の入力として記録されます。",
+  "pending": "未適用",
+  "kept": "終了した実行から",
+  "keep_as_changes": "シナリオの予定変更として残す"
+ },
+ "authoring": {
+  "title": "シナリオ",
+  "help": "パレットからアクターを置き、ポートをつなぎ、属性を設定し、変更を予定してから適用します。エラーはそのフィールドに表示されます。",
+  "new": "新しいシナリオ",
+  "apply": "シナリオを適用",
+  "palette": "パレット",
+  "actors": "下書きのアクター",
+  "remove": "削除",
+  "connect": "ポートを二つつなぐ",
+  "connect_button": "接続",
+  "attribute": "属性またはパラメーターを設定",
+  "set": "設定",
+  "schedule": "変更を予定",
+  "schedule_button": "予定",
+  "ports": "アクターあたりのポート数"
+ },
+ "notices": {
+  "title": "状態"
+ }
+}

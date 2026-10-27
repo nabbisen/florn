@@ -6,4 +6,6 @@ fn main() {
         println!("cargo::rustc-link-arg-cdylib=--export-table");
         println!("cargo::rustc-link-arg-cdylib=--growable-table");
     }
+    println!("cargo::rerun-if-changed=locales/en.json");
+    println!("cargo::rerun-if-changed=locales/ja.json");
 }

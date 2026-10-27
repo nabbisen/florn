@@ -266,7 +266,9 @@ impl<E: Engine> Controller<E> {
             return out;
         };
         if let Some(run) = &mut self.run {
-            let now = run.kernel().now().tick;
+            // From the tick reached, not the last event's: a slice advances by its ticks even
+            // where no event lies (the kernel's clock stays at the last event handled).
+            let now = run.reached().max(run.kernel().now().tick);
             let to = now.saturating_add(max_ticks.max(1)).min(target);
             run.advance(Advance::ToTick(to));
             // The unit is complete when every event before the target is handled.
@@ -380,7 +382,9 @@ impl<E: Engine> Controller<E> {
                 };
                 match admission.admit("module", &bytes, &limits) {
                     Ok(a) => {
-                        let summary = module_summary("module", &a.manifest, &a.source_sha256);
+                        // A module from a file has no `[modules]` name yet: its kind names it.
+                        let summary =
+                            module_summary(&a.manifest.kind, &a.manifest, &a.source_sha256);
                         out.push(Message::Answer(Answer::Admitted {
                             module: summary,
                             admitted_sha256: a.admitted_hex(),
@@ -525,7 +529,12 @@ impl<E: Engine> Controller<E> {
     }
 
     fn load_scenario(&mut self, bytes: &[u8], out: &mut Vec<Message>) {
-        self.run = None;
+        // The ended run gives its engine and admission cache back: the next run needs them.
+        if let Some(run) = self.run.take() {
+            let (e, a) = run.into_parts();
+            self.engine = Some(e);
+            self.admission = Some(a);
+        }
         self.scenario = None;
         self.state = RunState::NoScenario;
         let host = self.options.host;
@@ -958,6 +967,11 @@ impl<E: Engine> Controller<E> {
                         })
                         .collect(),
                     classes,
+                    limits: manifest
+                        .limits
+                        .iter()
+                        .map(|(class, l)| (class.clone(), limit_fields(l)))
+                        .collect(),
                 }))
             }
             Query::Decode { protocol, payload } => {
@@ -1190,6 +1204,33 @@ fn hex_digest(text: &str) -> Option<[u8; 32]> {
         *b = u8::from_str_radix(&text[2 * i..2 * i + 2], 16).ok()?;
     }
     Some(out)
+}
+
+/// `[limits.<class>]` as text: counts bare, bytes with the unit `B`.
+fn limit_fields(l: &florn_model::manifest::Limits) -> Vec<(String, String)> {
+    let mut f = Vec::new();
+    let count = |f: &mut Vec<(String, String)>, k: &str, v: Option<u64>| {
+        if let Some(v) = v {
+            f.push((k.to_string(), v.to_string()));
+        }
+    };
+    let bytes = |f: &mut Vec<(String, String)>, k: &str, v: Option<u64>| {
+        if let Some(v) = v {
+            f.push((k.to_string(), format!("{v}B")));
+        }
+    };
+    count(&mut f, "budget", l.budget);
+    count(&mut f, "stack", l.stack);
+    bytes(&mut f, "memory", l.memory_bytes);
+    count(&mut f, "effects-per-activation", l.effects_per_activation);
+    bytes(&mut f, "payload", l.payload_bytes);
+    count(&mut f, "pending-timers", l.pending_timers);
+    bytes(
+        &mut f,
+        "telemetry-per-activation",
+        l.telemetry_per_activation_bytes,
+    );
+    f
 }
 
 fn domain_map_text(m: &florn_model::manifest::DomainMap) -> Vec<(String, String)> {

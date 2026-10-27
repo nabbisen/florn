@@ -418,6 +418,7 @@ mod tests {
             domains: vec!["core".into(), "network".into()],
             changes: Vec::new(),
             classes: Vec::new(),
+            limits: Vec::new(),
         };
         let mut vm = ViewModel::new();
         vm.apply(&Message::Answer(Answer::Scenario(Some(s))));
@@ -469,9 +470,14 @@ mod tests {
         let p5 = at(&vm, 25)[0];
         assert!((p0.x - r1.x).abs() < 1e-3 && (p0.y - r1.y).abs() < 1e-3);
         assert!(((p5.x - (r1.x + r2.x) / 2.0).abs()) < 1e-3);
-        vm.display(&[Record::Instant { tick: 30 }]);
-        assert!(at(&vm, 30).is_empty());
-        assert_eq!(build(&vm, 30).description.flights, 0);
+        assert_eq!(
+            at(&vm, 30).len(),
+            1,
+            "at its destination, the delivery not yet handled"
+        );
+        vm.display(&[Record::Instant { tick: 31 }]);
+        assert!(at(&vm, 31).is_empty());
+        assert_eq!(build(&vm, 31).description.flights, 0);
     }
 
     #[test]

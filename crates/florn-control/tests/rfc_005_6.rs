@@ -211,6 +211,7 @@ fn every_message_round_trips() {
                 payload: vec![("enabled".into(), "false".into())],
             }],
             classes: vec![(2, "message".into()), (4, "frame".into())],
+            limits: vec![("default".into(), vec![("memory".into(), "2097152B".into())])],
         })),
         Answer::RunState(RunStateInfo {
             state: RunState::Paused,

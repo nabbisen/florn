@@ -335,3 +335,57 @@ fn through_the_control_interface_with_the_transport_s_notice_and_its_drops() {
     );
     assert!(c.take_display().is_empty());
 }
+
+/// A paced slice advances by its ticks from the tick reached, not from the last event (the
+/// kernel's clock stays there): a scenario whose events are sparse still progresses slice by
+/// slice, and each batch's instant is the slice's end.
+#[test]
+fn a_paced_slice_advances_from_the_tick_reached() {
+    use florn_control::Pacing;
+    let mut c: Controller<florn_engine_wasmtime::WasmtimeEngine> = Controller::new(
+        host::engine(),
+        Admission::default(),
+        Box::new(FixedPlatform::default()),
+        host::domains(),
+        host::options(),
+    );
+    let send = |c: &mut Controller<_>, m: Message| c.handle(Envelope::new(m));
+    let s = shipped::dv_triangle(100);
+    send(
+        &mut c,
+        Message::Command(Command::LoadScenario {
+            bytes: s.text(&s.hashes()).into_bytes(),
+        }),
+    );
+    for bytes in s.modules().into_values() {
+        send(&mut c, Message::Command(Command::LoadModule { bytes }));
+    }
+    send(&mut c, Message::Subscribe(Subscription::Display));
+    send(
+        &mut c,
+        Message::Command(Command::NewRun {
+            seed: SeedChoice::Given(1),
+        }),
+    );
+    send(
+        &mut c,
+        Message::Command(Command::SetPacing {
+            pacing: Pacing::TicksPerSecond(1_000),
+        }),
+    );
+    send(
+        &mut c,
+        Message::Command(Command::Advance {
+            unit: Unit::ToTick(3_000),
+        }),
+    );
+    c.take_display();
+    let mut instants = Vec::new();
+    for _ in 0..10 {
+        c.pump(30);
+        if let Some(Record::Instant { tick }) = c.take_display().last() {
+            instants.push(*tick);
+        }
+    }
+    assert_eq!(instants, (1..=10).map(|i| i * 30).collect::<Vec<_>>());
+}

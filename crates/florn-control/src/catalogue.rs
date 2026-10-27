@@ -1068,8 +1068,11 @@ pub const ENUMERATIONS: &[(&str, &[&str])] = &[
             "actor-kind",
             "domain/name",
             "sha256-hex",
+            "boolean",
         ],
     ),
+    ("drop-reason", &["down", "too-large", "loss", "faulted"]),
+    ("link-state", &["up", "down"]),
 ];
 
 pub fn enumeration(set: &str) -> Option<&'static [&'static str]> {

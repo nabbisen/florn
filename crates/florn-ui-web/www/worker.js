@@ -296,7 +296,7 @@ function writeDisplay() {
   }
   display.batches += 1;
   display.produced += bytes.length / RECORD;
-  display.chunks.push(bytes);
+  if (!shellTimer) display.chunks.push(bytes);
   const dropped = display.writer.write(bytes);
   if (dropped > 0) {
     display.dropped += dropped;
@@ -307,7 +307,7 @@ function writeDisplay() {
 
 async function runScenario(m) {
   const d = m.display;
-  host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, d ? (d.ring ? 1 : 2) : 0);
+  host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, d ? (d.ring ? 1 : 2) : 0, 0);
   if (d) {
     display = { writer: createWriter(d.ring, (msg, transfer) => self.postMessage(msg, transfer)), pad: d.pad || 0, batches: 0, produced: 0, dropped: 0, chunks: [] };
   }
@@ -436,7 +436,7 @@ function runBench(m) {
   }
   if (m.kind === "handle") {
     // The transport's form with bytes that are no control message: the coded refusal.
-    host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, 0);
+    host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, 0, 0);
     const junk = new Uint8Array([1, 2, 3]);
     host.exports.florn_handle(give(junk), junk.length);
     return { kind: "handle", replies: out() };
@@ -444,8 +444,51 @@ function runBench(m) {
   throw new Error("unknown benchmark " + m.kind);
 }
 
+// The shell's mode (RFC 005 rule 38): the Host started once with the page's transport, every
+// control message answered with its encoded replies, and a paced slice every tick of the
+// worker's clock while the run is running, its display batch written after each.
+let shellPace = 1;
+let shellTimer = null;
+
+function postReplies() {
+  const bytes = hostBytes().subarray(host.exports.florn_out_ptr(), host.exports.florn_out_ptr() + host.exports.florn_out_len());
+  let at = 0;
+  while (at + 4 <= bytes.length) {
+    const len = new DataView(bytes.buffer, bytes.byteOffset + at, 4).getUint32(0, true);
+    const copy = bytes.slice(at + 4, at + 4 + len);
+    self.postMessage({ type: "reply", buffer: copy.buffer }, [copy.buffer]);
+    at += 4 + len;
+  }
+}
+
+function startShell(m) {
+  host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, m.ring ? 1 : 2, 1);
+  display = { writer: createWriter(m.ring, (msg, transfer) => self.postMessage(msg, transfer)), pad: 0, batches: 0, produced: 0, dropped: 0, chunks: [] };
+  shellPace = Math.max(1, Math.min(4294967295, Math.floor(m.pace)));
+  shellTimer = setInterval(() => {
+    const n = host.exports.florn_pump_bytes(shellPace);
+    if (n > 0) postReplies();
+    if (n !== 0) writeDisplay();
+  }, 16);
+}
+
 self.onmessage = async (e) => {
   const m = e.data;
+  if (m.type === "shell") {
+    startShell(m);
+    return;
+  }
+  if (m.type === "control") {
+    const bytes = new Uint8Array(m.buffer);
+    host.exports.florn_handle_bytes(give(bytes), bytes.length);
+    postReplies();
+    writeDisplay();
+    return;
+  }
+  if (m.type === "pace") {
+    shellPace = Math.max(1, Math.min(4294967295, Math.floor(m.ticks)));
+    return;
+  }
   if (m.type === "display-dropped") {
     // The page's queue let records go (rule 14): the run's log records it.
     const [lo, hi] = words(m.records);

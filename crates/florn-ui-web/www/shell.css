@@ -1,0 +1,62 @@
+/* The application's style: one window, one scenario, one run (external design section 3.2).
+   Status is never colour alone; the focused element is always visible. */
+:root { --ink: #1e2126; --muted: #5a6270; --line: #d7dbe2; --panel: #f7f8fa; --accent: #2a5fa8; --error: #b3261e; --focus: #ff8c00; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; font: 14px/1.4 system-ui, sans-serif; color: var(--ink); background: #fff; }
+body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+header { padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header .row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+header h1 { font-size: 18px; margin: 0; }
+.scenario-name { font-weight: 600; }
+.controls, .lang { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.status-line { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; color: var(--muted); font-size: 13px; }
+.status-line .about { margin-left: auto; }
+main.layout { display: grid; grid-template-columns: 300px 1fr 340px; grid-template-rows: minmax(0, 1fr); gap: 0; flex: 1 1 auto; min-height: 0; }
+.column { min-height: 0; overflow: auto; padding: 8px 12px; border-right: 1px solid var(--line); }
+.column.right { border-right: none; border-left: 1px solid var(--line); }
+section, nav, aside { margin-bottom: 12px; }
+h2, summary { font-size: 15px; margin: 8px 0 4px; font-weight: 600; cursor: default; }
+summary { cursor: pointer; }
+h3 { font-size: 13px; margin: 8px 0 4px; color: var(--muted); }
+.help { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
+ol.list, ul { list-style: none; margin: 0; padding: 0; }
+ol.list li, ul li { margin: 0; }
+ol.list button { display: block; width: 100%; text-align: left; padding: 3px 6px; border: 1px solid transparent; background: none; font: inherit; cursor: pointer; }
+ol.list button[aria-pressed="true"] { border-color: var(--accent); background: #e8f0fb; }
+.status-word { margin-left: 8px; color: var(--error); font-weight: 600; }
+.canvas-area { display: flex; flex-direction: column; min-width: 0; }
+canvas#topology { width: 100%; flex: 1 1 auto; min-height: 0; background: #fff; outline: none; touch-action: none; }
+canvas#topology:focus-visible { box-shadow: inset 0 0 0 3px var(--focus); }
+.canvas-description { font-size: 12px; color: var(--muted); margin: 4px 8px; }
+button, select, input { font: inherit; }
+button { padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; background: #fff; cursor: pointer; }
+button:disabled { color: #999; cursor: default; }
+button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.field { margin: 4px 0; }
+.field label { display: block; font-size: 12px; color: var(--muted); }
+.field input { width: 100%; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; }
+.messages { margin: 2px 0 0; padding: 0; }
+.messages .error { color: var(--error); font-size: 12px; }
+.messages .error::before { content: "⚠ "; }
+dl { margin: 0; }
+dt { font-size: 12px; color: var(--muted); margin-top: 6px; }
+dd { margin: 0; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, monospace; font-size: 12px; }
+.timeline { flex: 0 0 30vh; border-top: 1px solid var(--line); padding: 8px 12px; height: 30vh; overflow: auto; background: var(--panel); }
+.timeline .filters { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.rows .row { display: flex; align-items: center; gap: 4px; }
+.rows .row > button:first-child { flex: 1 1 auto; display: grid; grid-template-columns: 90px 160px 160px 140px 1fr; gap: 8px; font-family: ui-monospace, monospace; font-size: 12px; }
+.rows .row[aria-selected="true"] > button:first-child { background: #e8f0fb; }
+.rows .step-to { font-size: 11px; }
+.notices { border-top: 1px solid var(--line); padding: 8px 12px; }
+.notice { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
+.notice .code { font-family: ui-monospace, monospace; color: var(--muted); }
+.notice .text { flex: 1 1 auto; }
+.preview { border: 1px solid var(--accent); padding: 8px; margin: 6px 0; background: #fff; }
+.connect, .attr, .schedule { display: flex; flex-wrap: wrap; gap: 4px; }
+.connect select, .attr input, .attr select, .schedule input, .schedule select { max-width: 140px; }
+.problems { white-space: pre-wrap; color: var(--error); font-size: 12px; }
+.draft-actor, .draft-connection { border-top: 1px solid var(--line); padding: 4px 0; }
+@media (max-width: 900px) { body { height: auto; overflow: auto; } main.layout { grid-template-columns: 1fr; grid-template-rows: auto; } .column { border: none; } canvas#topology { min-height: 240px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

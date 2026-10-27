@@ -22,7 +22,35 @@ florn-platform-web = { workspace = true }
 florn-domain-network = { workspace = true }
 blake3 = { workspace = true }
 sha2 = { workspace = true }
+# The shell (RFC 005 rule 38), behind a feature so that the worker module builds without it.
+florn-ui-model = { workspace = true, optional = true }
+florn-ui-scene = { workspace = true, optional = true }
+leptos = { workspace = true, optional = true }
+leptos_i18n = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true, features = [
+  "Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "CanvasRenderingContext2d",
+  "DomRect", "PointerEvent", "WheelEvent", "KeyboardEvent", "CompositionEvent", "Performance",
+  "HtmlInputElement", "HtmlTextAreaElement", "HtmlSelectElement", "MediaQueryList",
+] }
+console_error_panic_hook = { workspace = true, optional = true }
+
+[features]
+shell = [
+  "dep:florn-ui-model", "dep:florn-ui-scene", "dep:leptos", "dep:leptos_i18n", "dep:wasm-bindgen",
+  "dep:js-sys", "dep:web-sys", "dep:console_error_panic_hook",
+]
+
+# The shell's catalogue (RFC 007 rules 14 to 17): `locales/en.json` and `locales/ja.json`,
+# read by `leptos_i18n::load_locales!` at compile time; a key missing in one language fails
+# the build.
+[package.metadata.leptos-i18n]
+default = "en"
+locales = ["en", "ja"]
+locales-dir = "locales"
 
 [[bin]]
 name = "florn-ui-web"
 path = "src/main.rs"
+required-features = ["shell"]

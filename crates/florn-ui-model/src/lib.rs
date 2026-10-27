@@ -22,12 +22,12 @@ use std::collections::BTreeMap;
 
 use florn_control::display::Record;
 use florn_control::message::{
-    ActorInfo, CapacityInfo, ModuleSummary, RunStateInfo, ScenarioSummary, SupportInfo,
-    TelemetryRecord,
+    ActorInfo, CapacityInfo, ExportPreview, ModuleSummary, RunStateInfo, ScenarioSummary,
+    SupportInfo, TelemetryRecord,
 };
 use florn_control::{
-    Answer, At, Command, ExportKind, FieldValue, Message, Notification, Pacing, Progress, Query,
-    RunState, SeedChoice, Subscription, Unit, Value, intervention_content,
+    Answer, At, Command, ExportKind, FieldValue, FileKind, Message, Notification, Pacing, Progress,
+    Query, RunState, SeedChoice, Subscription, Unit, Value, intervention_content,
 };
 
 pub use draft::Draft;
@@ -129,6 +129,13 @@ pub struct ViewModel {
     pub selection: Selection,
     pub inspector: Inspector,
     pub draft: Draft,
+    /// The modules admitted from files or the palette (§3.9): shown before they can be
+    /// placed, and placeable in the draft.
+    pub admitted: Vec<ModuleSummary>,
+    /// The last export's preview (§3.9: explicit and previewed), until confirmed or dismissed.
+    pub preview: Option<ExportPreview>,
+    /// The last confirmed export: the file to hand to the person, taken by the shell.
+    pub exported: Option<(FileKind, String, Vec<u8>)>,
     /// The latest report on each actor's channels: (at, payload).
     reports: BTreeMap<u32, BTreeMap<u32, (At, Vec<u8>)>>,
     /// The world's events so far: (at, target, event, detail).
@@ -334,6 +341,13 @@ impl ViewModel {
         }
         self.command(Command::Replay { record });
         self.query(Query::RunState);
+    }
+    /// The exported file, once; the shell writes it out.
+    pub fn take_exported(&mut self) -> Option<(FileKind, String, Vec<u8>)> {
+        self.exported.take()
+    }
+    pub fn dismiss_preview(&mut self) {
+        self.preview = None;
     }
     pub fn dismiss(&mut self, notice: usize) {
         if notice < self.notices.len() {
@@ -589,10 +603,26 @@ impl ViewModel {
                     self.message_pending = None;
                 }
             }
-            Answer::Admitted { .. }
-            | Answer::Preview(_)
-            | Answer::Exported { .. }
-            | Answer::Done => {}
+            Answer::Admitted {
+                module,
+                admitted_sha256: _,
+            } => {
+                self.admitted
+                    .retain(|m| m.source_sha256 != module.source_sha256);
+                self.admitted.push(module.clone());
+                self.draft.add_module(draft::DraftModule {
+                    name: module.name.clone(),
+                    sha256: module.source_sha256.clone(),
+                    contract: module.contract.clone(),
+                    summary: Some(module.clone()),
+                });
+            }
+            Answer::Preview(p) => self.preview = Some(p.clone()),
+            Answer::Exported { kind, name, bytes } => {
+                self.preview = None;
+                self.exported = Some((*kind, name.clone(), bytes.clone()));
+            }
+            Answer::Done => {}
         }
     }
 
@@ -654,6 +684,10 @@ impl ViewModel {
     fn progress(&mut self, p: &Progress) {
         if p.records < self.run.records || p.handled < self.run.handled {
             self.forget_run();
+        }
+        // The run ended under pacing: its digest and end are in the state answer.
+        if p.state == RunState::Ended && self.run.state != RunState::Ended {
+            self.query(Query::RunState);
         }
         self.run.state = p.state;
         self.run.now = Some(p.now);
@@ -769,6 +803,9 @@ impl ViewModel {
             "run.ended" => {
                 if let Some(Value::Enum(r)) = get("reason") {
                     self.run.ended = Some(r.clone());
+                }
+                if self.run.state != RunState::Ended {
+                    self.query(Query::RunState);
                 }
                 self.run.state = RunState::Ended;
             }
