@@ -123,6 +123,7 @@ jobs:
         working-directory: ci/browser
         run: node run.js --browsers ${{ matrix.browsers }}
       - name: The journeys through the application (AC-008 to AC-011; RFC 005 rules 38 to 41)
+        if: ${{ !cancelled() }}
         working-directory: ci/browser
         run: node journeys.js --browsers ${{ matrix.browsers }}
 

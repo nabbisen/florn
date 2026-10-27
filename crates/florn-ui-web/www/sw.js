@@ -56,13 +56,8 @@ self.addEventListener("fetch", (e) => {
         console.warn("cache:", err);
       }
       const response = await fetch(e.request);
-      if (cache && response.ok) {
-        try {
-          await cache.put(e.request, response.clone());
-        } catch (err) {
-          console.warn("cache:", err);
-        }
-      }
+      // Stored as it streams to the page, not awaited: WebKit answers the page first.
+      if (cache && response.ok) cache.put(e.request, response.clone()).catch((err) => console.warn("cache:", err));
       return response;
     })()
   );
