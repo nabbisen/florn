@@ -22,3 +22,7 @@ no-std = ["florn-guest/no-std"]
 [[example]]
 name = "net_echo"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "distance_vector"
+crate-type = ["cdylib"]

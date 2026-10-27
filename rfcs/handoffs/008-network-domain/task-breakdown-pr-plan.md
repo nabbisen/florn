@@ -21,7 +21,7 @@ Independent of the order above: PR-18 may follow PR-15 directly; PR-19 may start
 |---|---|---|---|
 | PR-15 | merged | `e31cce4`, 2026-10-27 | C15 pending |
 | PR-16 | merged | `3750229`, 2026-10-27 | C16 pending |
-| PR-17 | not started | | |
+| PR-17 | merged | see the progress commit | C17 pending |
 | PR-18 | not started | | |
 | PR-19 | not started | | |
 | PR-20 | not started | | |

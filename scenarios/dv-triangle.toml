@@ -1,0 +1,89 @@
+# dv-triangle: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "dv-triangle"
+domains = ["core", "network"]
+
+[time]
+tick = "1ns"
+end = "3000ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 1
+
+[limits.default]
+memory = "2MiB"
+
+[modules.distance_vector]
+sha256 = "207f1d9d2915bd6fe4c3685cd57edd703f9e9a76931c6840e009a57547944e2b"
+contract = "florn:network/router@0.1.0"
+
+[[actors]]
+id = 1
+name = "a1"
+kind = "module"
+module = "distance_vector"
+ports = [{ id = 0, name = "p0", type = "network/interface" }, { id = 1, name = "p1", type = "network/interface" }]
+[actors.config]
+period = "100ns"
+infinity = 16
+
+[[actors]]
+id = 2
+name = "a2"
+kind = "module"
+module = "distance_vector"
+ports = [{ id = 0, name = "p0", type = "network/interface" }, { id = 1, name = "p1", type = "network/interface" }]
+[actors.config]
+period = "100ns"
+infinity = 16
+
+[[actors]]
+id = 3
+name = "a3"
+kind = "module"
+module = "distance_vector"
+ports = [{ id = 0, name = "p0", type = "network/interface" }, { id = 1, name = "p1", type = "network/interface" }]
+[actors.config]
+period = "100ns"
+infinity = 16
+
+[[connections]]
+id = 1000
+name = "c0"
+type = "network/link"
+ports = ["a1.p0", "a2.p0"]
+[connections.attrs]
+delay = "2ns"
+
+[[connections]]
+id = 1001
+name = "c1"
+type = "network/link"
+ports = ["a2.p1", "a3.p0"]
+[connections.attrs]
+delay = "2ns"
+
+[[connections]]
+id = 1002
+name = "c2"
+type = "network/link"
+ports = ["a3.p1", "a1.p1"]
+[connections.attrs]
+delay = "2ns"
+
+[[changes]]
+at = "1000ns"
+target = "c0"
+[changes.payload]
+enabled = false
+
+[[changes]]
+at = "2000ns"
+target = "c0"
+[changes.payload]
+enabled = true

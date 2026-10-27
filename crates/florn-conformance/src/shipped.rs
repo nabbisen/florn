@@ -71,6 +71,28 @@ fn net_pair(name: &str, end: u64, period: u64, payload: u64, echo: bool) -> Scen
         .actor(router(2, "net_echo", 1).with("echo", if echo { "true" } else { "false" }))
 }
 
+/// Distance-vector routers with two interfaces each, `period` ticks between advertisements.
+fn dv(id: u32, period: u64, infinity: u64) -> crate::scenario::Actor {
+    router(id, "distance_vector", 2)
+        .with("period", format!("\"{period}ns\""))
+        .with("infinity", infinity.to_string())
+}
+
+/// The triangle of RFC 008 §12 (NET-012): three routers, the link r1-r2 down at 1000 and up at
+/// 2000, so that the routes converge, reroute through r3 and converge back.
+pub fn dv_triangle(period: u64) -> Scenario {
+    Scenario::new("dv-triangle", 3_000)
+        .domain("network")
+        .actor(dv(1, period, 16))
+        .actor(dv(2, period, 16))
+        .actor(dv(3, period, 16))
+        .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")])
+        .change(1_000, &[("enabled", "false")])
+        .change(2_000, &[("enabled", "true")])
+        .link("network/link", &[(2, 1), (3, 0)], &[("delay", "\"2ns\"")])
+        .link("network/link", &[(3, 1), (1, 1)], &[("delay", "\"2ns\"")])
+}
+
 fn hostile(name: &str, guest: &'static str) -> Scenario {
     Scenario::new(name, 1_000)
         .actor(actor(1, guest, 1))
@@ -191,6 +213,20 @@ fn definitions() -> Vec<Shipped> {
                     &[(1, 0), (2, 0), (3, 0)],
                     &[("delay", "\"2ns\""), ("loss", "0.2")],
                 ),
+        ),
+        // The ladder's second rung (RFC 008 rule 20): the triangle, and a chain of four whose
+        // far ends are beyond `infinity = 3`.
+        normal(dv_triangle(100)),
+        normal(
+            Scenario::new("dv-chain", 1_500)
+                .domain("network")
+                .actor(dv(1, 100, 3))
+                .actor(dv(2, 100, 3))
+                .actor(dv(3, 100, 3))
+                .actor(dv(4, 100, 3))
+                .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")])
+                .link("network/link", &[(2, 1), (3, 0)], &[("delay", "\"2ns\"")])
+                .link("network/link", &[(3, 1), (4, 0)], &[("delay", "\"2ns\"")]),
         ),
         // The blackhole built-in drops every frame and reports the count.
         normal(

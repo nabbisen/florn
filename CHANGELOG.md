@@ -12,6 +12,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - The contract of record `contracts/florn-network/wit/network.wit` (`florn:network@0.1.0`) with its equality test, and the SDK crate `florn-guest-network`: the router world's bindings, the `Router` trait, `link_info`, `router!`; the example guest `net_echo`, the first rung of the ladder.
 - The module manifest's domain tables (`[network] protocol = "..."`), carried opaquely to the domain; `Domain::validate_module`.
 - Six shipped network scenarios with recorded digests (`net-delay`, `net-loss`, `net-jitter`, `net-link-down`, `net-lan`, `net-blackhole`), run natively and in the three browsers; the RFC 008 §12 tests.
+- The ladder's second rung (RFC 008 rule 20, PR-17): the `distance_vector` example of `florn-guest-network`, with periodic and triggered advertisements, split horizon, count to infinity, expiry after three periods, the metric from `link-info`, and the `neighbour` and `route` reports; its decoder in the network domain; the shipped scenarios `dv-triangle` and `dv-chain` with recorded digests; the convergence, reconvergence, J3 replay, infinity, expiry and decoder tests.
 
 ### Changed
 - The engine adapter trait: an import carries its interface's module; an export is resolved with its flat shape. The browser worker binds a guest's imports from a binding text the adapter writes.

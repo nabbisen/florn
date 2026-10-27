@@ -44,4 +44,6 @@ The `zero-delay` scenario ends with the run fault of RFC 001 rule 13 by design; 
 | `net-link-down` | RFC 008 §12: the link goes down at 300 and up at 600; `on-link` at both ends, frames in flight arrive, sends while down are dropped |
 | `net-lan` | RFC 008 §12: a lan of three; a frame reaches the two others, each with its own loss draw |
 | `net-blackhole` | RFC 008 §12: the `network/blackhole` built-in drops every frame and reports the count, with `metered = 0` |
+| `dv-triangle` | RFC 008 rule 20 (NET-012): three distance-vector routers; the link r1-r2 down at 1000 and up at 2000; the routes converge, reroute through r3 and converge back within three periods |
+| `dv-chain` | RFC 008 rule 20: four distance-vector routers in a line with `infinity = 3`; the far ends never install each other |
 | `bench-protocol`, `bench-compute` | The kernel-path benchmarks of RFC 005 section 11 |

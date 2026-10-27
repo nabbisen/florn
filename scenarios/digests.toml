@@ -9,6 +9,7 @@ bench_compute = "6d65cdc146dd40c5631060b9792ee1fa3e53f5efad2660efbea020d7e5291bb
 bench_protocol = "f053e9d010c2ad7d6b1a65693f4b95532e4f5b845d7f7130087a65db3ad01913"
 chatter = "f873f253e22bd46f4a4efd70b56e073d0fd50c29c0fe487b4300c1dec90d705b"
 clock = "3dadcc4eb26a81cb02002fd485246f63fc9b06b7b557c22ed7dcad7e1b326ebf"
+distance_vector = "207f1d9d2915bd6fe4c3685cd57edd703f9e9a76931c6840e009a57547944e2b"
 echo = "aff413a942daab154e1b99eb136156768513ca205f6658c402f62b655464c457"
 heap = "83eb6a8203a2f05e646d0c852ea3fb38447516ef213e437dccf937f3fb2b7878"
 hostile_bad_pointer = "10ffdd4c3775cdd4e5ca782584b31e0298242c39c1d41c816745379ab0ca5669"
@@ -27,6 +28,7 @@ bench_compute = "848bc056f02fa3f410ca7fc67e8e4707afb83b94ad553266af0244af65c0051
 bench_protocol = "a3fe63d67e8225cdb008db4648d77bd84ed4520caf2ee688df71a57ad78554c0"
 chatter = "25ecf7e85f0b1924765b50e0bd1efcdc730bb67ae552ab509f0eb0067ced7fed"
 clock = "01414800d5eee3a17fc1a106c1f9eb00cfb89018f30ce011616fb356e44edb5a"
+distance_vector = "4fedec8713be4158818143038440f75bed8271e869a4eb3e9b7576ef41384210"
 echo = "bbda36231bb3710174a1a7764779064ef3b9c984f8d1f5c17de9c012f29e18f4"
 heap = "9be3dd833d76129d244051f47a59e39a55f5a534e52e9e6552df2d45b3a056c7"
 hostile_bad_pointer = "c70763a79e6befc9eaf7cd39d0566939c918e6fc5acc68d815d9176e41a4e57c"
@@ -49,6 +51,18 @@ ended = "end-reached"
 seed = 1
 chain = "e950007db42de361bbf88cce7dbaebccb0921e92677d99562532d7314f3fa7af"
 records = 29999
+ended = "end-reached"
+
+[runs."dv-chain"]
+seed = 1
+chain = "09975093cfcfc833129fbfb079d6a535335b6cc9e90e724ed56952d2b7ce756b"
+records = 166
+ended = "end-reached"
+
+[runs."dv-triangle"]
+seed = 1
+chain = "138f5e141403fee4de1256029c2430c1bf808f48864fd29ac10c2d6623ef6d41"
+records = 278
 ended = "end-reached"
 
 [runs."echo-pair"]

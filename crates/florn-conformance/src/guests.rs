@@ -27,6 +27,7 @@ pub const SDK: &[&str] = &[
     "heap",
     "clock",
     "net_echo",
+    "distance_vector",
 ];
 
 /// The workspace root.
