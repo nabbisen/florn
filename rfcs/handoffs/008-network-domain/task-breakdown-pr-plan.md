@@ -24,6 +24,6 @@ Independent of the order above: PR-18 may follow PR-15 directly; PR-19 may start
 | PR-17 | merged | `c2868dd`, 2026-10-27 | C17 pending |
 | PR-18 | merged | `271c837` + `5966ba1`, 2026-10-27 | C18 pending |
 | PR-19 | merged | `503adae`, 2026-10-27 | C19 pending |
-| PR-20 | not started | | |
+| PR-20 | merged | `ffab1d0`, 2026-10-27 | C20 pending |
 | PR-21 | not started | | |
 | PR-22 | not started | | |

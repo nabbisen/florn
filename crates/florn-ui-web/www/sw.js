@@ -5,7 +5,10 @@
 // version lives at its own path and never updates itself under a person.
 "use strict";
 const CACHE = "florn-0.2";
-const FILES = ["./", "./index.html", "./shell.css", "./app.js", "./florn_shell.js", "./florn_shell_bg.wasm", "./worker.js", "./display.js", "./florn_host.wasm", "./labs.txt", "./palette.txt", "./kit.html", "./page.css", "./main.js"];
+// The small files are cached on install; the modules and whatever a page fetches (the labs'
+// scenarios and modules, the shell's and the Host's WebAssembly) are cached as they are
+// fetched, so that the first visit is light and a page that ran once starts offline.
+const FILES = ["./", "./index.html", "./shell.css", "./app.js", "./florn_shell.js", "./worker.js", "./display.js", "./labs.txt", "./palette.txt", "./kit.html", "./page.css", "./main.js"];
 const HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -20,7 +23,20 @@ function withHeaders(response) {
 }
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      .then(async (c) => {
+        for (const f of FILES) {
+          try {
+            await c.add(f);
+          } catch (err) {
+            console.warn("cache:", f, err);
+          }
+        }
+      })
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
@@ -31,11 +47,22 @@ self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET" || new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     (async () => {
-      const cache = await caches.open(CACHE);
-      const cached = await cache.match(e.request, { ignoreSearch: true });
-      if (cached) return withHeaders(cached);
+      let cache = null;
+      try {
+        cache = await caches.open(CACHE);
+        const cached = await cache.match(e.request, { ignoreSearch: true });
+        if (cached) return withHeaders(cached);
+      } catch (err) {
+        console.warn("cache:", err);
+      }
       const response = await fetch(e.request);
-      if (response.ok) cache.put(e.request, response.clone());
+      if (cache && response.ok) {
+        try {
+          await cache.put(e.request, response.clone());
+        } catch (err) {
+          console.warn("cache:", err);
+        }
+      }
       return response;
     })()
   );
