@@ -33,3 +33,7 @@ sha2 = { workspace = true }
 [[bin]]
 name = "florn-conformance"
 path = "src/main.rs"
+
+[dev-dependencies]
+florn-ui-model = { workspace = true }
+florn-ui-scene = { workspace = true }

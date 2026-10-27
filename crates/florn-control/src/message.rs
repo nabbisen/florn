@@ -225,6 +225,17 @@ pub enum Query {
     },
     Capacity,
     Support,
+    /// A payload's fields by a domain's decoder for the protocol a module declares (OBS-006;
+    /// 0.2). The answer is `None` when no domain of the scenario decodes the protocol.
+    Decode {
+        protocol: String,
+        payload: Vec<u8>,
+    },
+    /// The bytes of a payload the run kept, by its BLAKE3 digest in hex (0.2): `None` when the
+    /// run keeps no payloads or holds none with that digest.
+    Payload {
+        digest: String,
+    },
 }
 
 impl Query {
@@ -236,6 +247,8 @@ impl Query {
             Self::TraceWindow { .. } => "trace-window",
             Self::Capacity => "capacity",
             Self::Support => "support",
+            Self::Decode { .. } => "decode",
+            Self::Payload { .. } => "payload",
         }
     }
     /// The largest trace window one answer carries.
@@ -329,6 +342,37 @@ pub struct PortSummary {
     pub ty: String,
 }
 
+/// Fields as text: (name, value), in the manifest's order.
+pub type Fields = Vec<(String, String)>;
+
+/// A telemetry channel a module declares (RFC 002 rule 15): its fields as (name, type name),
+/// so that a front end decodes the reports it shows (0.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChannelSummary {
+    pub channel: u32,
+    pub name: String,
+    pub fields: Vec<(String, String)>,
+}
+
+/// A scheduled change of the scenario (RFC 004 rule 20), for the timeline before a run (0.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChangeSummary {
+    pub at: u64,
+    pub target: u32,
+    /// The payload's fields as text.
+    pub payload: Vec<(String, String)>,
+}
+
+/// A committed `send` of a handled event (0.2): the payload by digest, for the inspector.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SendSummary {
+    pub seq: u64,
+    pub port: u32,
+    pub len: u32,
+    /// BLAKE3 of the payload, hex.
+    pub digest: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActorSummary {
     pub id: u32,
@@ -337,6 +381,8 @@ pub struct ActorSummary {
     pub module: Option<String>,
     pub class: String,
     pub ports: Vec<PortSummary>,
+    /// `[actors.config]` as text, in the manifest's order (0.2).
+    pub config: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -358,9 +404,11 @@ pub struct ModuleSummary {
     /// (kind, type, min, max)
     pub port_kinds: Vec<(String, String, u64, u64)>,
     pub params: Vec<ParamSummary>,
-    pub channels: Vec<(u32, String)>,
+    pub channels: Vec<ChannelSummary>,
     /// (limit name, need)
     pub needs: Vec<(String, u64)>,
+    /// The module manifest's domain tables (RFC 008 rule 16), each as text fields (0.2).
+    pub tables: Vec<(String, Vec<(String, String)>)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -368,6 +416,12 @@ pub struct ConnectionSummary {
     pub id: u32,
     pub name: String,
     pub ports: Vec<(u32, u32)>,
+    /// `<domain>/<name>` as written, `None` for the core's (0.2).
+    pub ty: Option<String>,
+    /// `[connections.attrs]` as text (0.2).
+    pub attrs: Vec<(String, String)>,
+    /// `[connections.attrs.per-port]` as text, by (actor, port) (0.2).
+    pub per_port: Vec<((u32, u32), Fields)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -384,6 +438,42 @@ pub struct ScenarioSummary {
     pub modules: Vec<ModuleSummary>,
     /// Hashes the manifest references and the Host does not hold.
     pub missing_modules: Vec<String>,
+    /// The domains the scenario declares, in order (0.2).
+    pub domains: Vec<String>,
+    /// The scheduled changes (0.2).
+    pub changes: Vec<ChangeSummary>,
+    /// The event classes of a run of this scenario with their names (RFC 001 rule 15): the
+    /// core's three, then each domain's (0.2).
+    pub classes: Vec<(u8, String)>,
+}
+
+/// A value of an intervention's content or a scheduled change, as a front end states it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FieldValue {
+    Boolean(bool),
+    Integer(i64),
+    /// A quantity or any other text the domain reads.
+    Text(String),
+}
+
+/// The content of `intervene` for a domain's kind (RFC 008 rule 1; RFC 005 rule 26): the
+/// kind and the fields as the canonical map the Host decodes. A front end builds it from what
+/// the person asked, with no encoder of its own.
+pub fn intervention_content(kind: &str, fields: &[(String, FieldValue)]) -> Vec<u8> {
+    use florn_model::manifest::{DomainMap, DomainValue};
+    let mut m = DomainMap::new();
+    m.insert("kind".into(), DomainValue::Text(kind.into()));
+    for (k, v) in fields {
+        let v = match v {
+            FieldValue::Boolean(b) => DomainValue::Boolean(*b),
+            FieldValue::Integer(i) => DomainValue::Integer(*i),
+            FieldValue::Text(t) => DomainValue::Text(t.clone()),
+        };
+        m.insert(k.clone(), v);
+    }
+    let mut e = florn_model::canonical::Encoder::default();
+    florn_model::canonical::domain_map(&mut e, &m);
+    e.finish()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -436,6 +526,8 @@ pub enum TraceEntry {
         metered: u64,
         draws: u32,
         effects: u32,
+        /// The committed sends among the effects (0.2).
+        sends: Vec<SendSummary>,
     },
     Fault {
         at: At,
@@ -502,6 +594,10 @@ pub enum Answer {
     },
     /// A command applied with nothing else to say.
     Done,
+    /// `decode` (0.2): the fields, or `None` when no domain decodes the protocol.
+    Decoded(Option<Vec<(String, String)>>),
+    /// `payload` (0.2): the bytes, or `None`.
+    Payload(Option<Vec<u8>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -774,6 +870,15 @@ fn query_w(e: &mut Encoder, q: &Query) {
         }
         Query::Capacity => e.u8(4),
         Query::Support => e.u8(5),
+        Query::Decode { protocol, payload } => {
+            e.u8(6);
+            e.text(protocol);
+            e.bytes(payload);
+        }
+        Query::Payload { digest } => {
+            e.u8(7);
+            e.text(digest);
+        }
     }
 }
 fn query_r(d: &mut Decoder) -> Option<Query> {
@@ -787,6 +892,11 @@ fn query_r(d: &mut Decoder) -> Option<Query> {
         },
         4 => Query::Capacity,
         5 => Query::Support,
+        6 => Query::Decode {
+            protocol: d.text()?,
+            payload: d.bytes()?,
+        },
+        7 => Query::Payload { digest: d.text()? },
         _ => return None,
     })
 }
@@ -854,6 +964,15 @@ fn opt_text_w(e: &mut Encoder, t: &Option<String>) {
 fn opt_text_r(d: &mut Decoder) -> Option<Option<String>> {
     d.option(Decoder::text)
 }
+fn pairs_w(e: &mut Encoder, pairs: &[(String, String)]) {
+    e.list(pairs, |e, (k, v)| {
+        e.text(k);
+        e.text(v);
+    });
+}
+fn pairs_r(d: &mut Decoder) -> Option<Vec<(String, String)>> {
+    d.list(|d| Some((d.text()?, d.text()?)))
+}
 fn actor_summary_w(e: &mut Encoder, a: &ActorSummary) {
     e.u32(a.id);
     e.text(&a.name);
@@ -864,6 +983,7 @@ fn actor_summary_w(e: &mut Encoder, a: &ActorSummary) {
         e.text(&p.name);
         e.text(&p.ty);
     });
+    pairs_w(e, &a.config);
 }
 fn actor_summary_r(d: &mut Decoder) -> Option<ActorSummary> {
     Some(ActorSummary {
@@ -878,6 +998,7 @@ fn actor_summary_r(d: &mut Decoder) -> Option<ActorSummary> {
                 ty: d.text()?,
             })
         })?,
+        config: pairs_r(d)?,
     })
 }
 fn module_summary_w(e: &mut Encoder, m: &ModuleSummary) {
@@ -899,13 +1020,18 @@ fn module_summary_w(e: &mut Encoder, m: &ModuleSummary) {
         opt_text_w(e, &p.default);
         opt_text_w(e, &p.unit);
     });
-    e.list(&m.channels, |e, (c, n)| {
-        e.u32(*c);
-        e.text(n);
+    e.list(&m.channels, |e, c| {
+        e.u32(c.channel);
+        e.text(&c.name);
+        pairs_w(e, &c.fields);
     });
     e.list(&m.needs, |e, (n, v)| {
         e.text(n);
         e.u64(*v);
+    });
+    e.list(&m.tables, |e, (n, fields)| {
+        e.text(n);
+        pairs_w(e, fields);
     });
 }
 fn module_summary_r(d: &mut Decoder) -> Option<ModuleSummary> {
@@ -925,8 +1051,15 @@ fn module_summary_r(d: &mut Decoder) -> Option<ModuleSummary> {
                 unit: opt_text_r(d)?,
             })
         })?,
-        channels: d.list(|d| Some((d.u32()?, d.text()?)))?,
+        channels: d.list(|d| {
+            Some(ChannelSummary {
+                channel: d.u32()?,
+                name: d.text()?,
+                fields: pairs_r(d)?,
+            })
+        })?,
         needs: d.list(|d| Some((d.text()?, d.u64()?)))?,
+        tables: d.list(|d| Some((d.text()?, pairs_r(d)?)))?,
     })
 }
 fn scenario_w(e: &mut Encoder, s: &ScenarioSummary) {
@@ -944,9 +1077,26 @@ fn scenario_w(e: &mut Encoder, s: &ScenarioSummary) {
             e.u32(*a);
             e.u32(*p);
         });
+        opt_text_w(e, &c.ty);
+        pairs_w(e, &c.attrs);
+        e.list(&c.per_port, |e, ((a, p), fields)| {
+            e.u32(*a);
+            e.u32(*p);
+            pairs_w(e, fields);
+        });
     });
     e.list(&s.modules, module_summary_w);
     e.list(&s.missing_modules, |e, m| e.text(m));
+    e.list(&s.domains, |e, m| e.text(m));
+    e.list(&s.changes, |e, c| {
+        e.u64(c.at);
+        e.u32(c.target);
+        pairs_w(e, &c.payload);
+    });
+    e.list(&s.classes, |e, (c, n)| {
+        e.u8(*c);
+        e.text(n);
+    });
 }
 fn scenario_r(d: &mut Decoder) -> Option<ScenarioSummary> {
     Some(ScenarioSummary {
@@ -962,10 +1112,22 @@ fn scenario_r(d: &mut Decoder) -> Option<ScenarioSummary> {
                 id: d.u32()?,
                 name: d.text()?,
                 ports: d.list(|d| Some((d.u32()?, d.u32()?)))?,
+                ty: opt_text_r(d)?,
+                attrs: pairs_r(d)?,
+                per_port: d.list(|d| Some(((d.u32()?, d.u32()?), pairs_r(d)?)))?,
             })
         })?,
         modules: d.list(module_summary_r)?,
         missing_modules: d.list(Decoder::text)?,
+        domains: d.list(Decoder::text)?,
+        changes: d.list(|d| {
+            Some(ChangeSummary {
+                at: d.u64()?,
+                target: d.u32()?,
+                payload: pairs_r(d)?,
+            })
+        })?,
+        classes: d.list(|d| Some((d.u8()?, d.text()?)))?,
     })
 }
 fn trace_entry_w(e: &mut Encoder, t: &TraceEntry) {
@@ -979,6 +1141,7 @@ fn trace_entry_w(e: &mut Encoder, t: &TraceEntry) {
             metered,
             draws,
             effects,
+            sends,
         } => {
             e.u8(1);
             at_w(e, *at);
@@ -989,6 +1152,12 @@ fn trace_entry_w(e: &mut Encoder, t: &TraceEntry) {
             e.u64(*metered);
             e.u32(*draws);
             e.u32(*effects);
+            e.list(sends, |e, s| {
+                e.u64(s.seq);
+                e.u32(s.port);
+                e.u32(s.len);
+                e.text(&s.digest);
+            });
         }
         TraceEntry::Fault {
             at,
@@ -1029,6 +1198,14 @@ fn trace_entry_r(d: &mut Decoder) -> Option<TraceEntry> {
             metered: d.u64()?,
             draws: d.u32()?,
             effects: d.u32()?,
+            sends: d.list(|d| {
+                Some(SendSummary {
+                    seq: d.u64()?,
+                    port: d.u32()?,
+                    len: d.u32()?,
+                    digest: d.text()?,
+                })
+            })?,
         },
         2 => TraceEntry::Fault {
             at: at_r(d)?,
@@ -1126,6 +1303,14 @@ fn answer_w(e: &mut Encoder, a: &Answer) {
             e.bytes(bytes);
         }
         Answer::Done => e.u8(9),
+        Answer::Decoded(fields) => {
+            e.u8(10);
+            e.option(fields.as_deref(), pairs_w);
+        }
+        Answer::Payload(bytes) => {
+            e.u8(11);
+            e.option(bytes.as_deref(), Encoder::bytes);
+        }
     }
 }
 fn answer_r(d: &mut Decoder) -> Option<Answer> {
@@ -1189,6 +1374,8 @@ fn answer_r(d: &mut Decoder) -> Option<Answer> {
             bytes: d.bytes()?,
         },
         9 => Answer::Done,
+        10 => Answer::Decoded(d.option(pairs_r)?),
+        11 => Answer::Payload(d.option(Decoder::bytes)?),
         _ => return None,
     })
 }

@@ -8,9 +8,10 @@ use std::collections::BTreeMap;
 use florn_admission::{Admission, ClassLimits, ModuleManifest};
 use florn_control::display::{DisplayPath, Record as DisplayRecord, Transport};
 use florn_control::message::{
-    ActorInfo, ActorSummary, CapacityInfo, ConnectionSummary, ExportPreview, FaultInfo,
-    ModuleSummary, ParamSummary, PortSummary, RunStateInfo, ScenarioSummary, SupportInfo,
-    TelemetryRecord, TraceEntry, control_invalid, control_not_now,
+    ActorInfo, ActorSummary, CapacityInfo, ChangeSummary, ChannelSummary, ConnectionSummary,
+    ExportPreview, FaultInfo, ModuleSummary, ParamSummary, PortSummary, RunStateInfo,
+    ScenarioSummary, SendSummary, SupportInfo, TelemetryRecord, TraceEntry, control_invalid,
+    control_not_now,
 };
 use florn_control::{
     Answer, At, CONTROL_VERSION, Code, Command, Envelope, ExportKind, FileKind, Message, Pacing,
@@ -880,6 +881,17 @@ impl<E: Engine> Controller<E> {
                 };
                 let manifest = l.manifest.clone();
                 let (found, missing) = self.modules_for(&manifest);
+                let mut classes: Vec<(u8, String)> = vec![
+                    (0, "control".into()),
+                    (crate::world::CLASS_TIMER, "timer".into()),
+                    (crate::world::CLASS_MESSAGE, "message".into()),
+                ];
+                if let Ok(domains) = self.domains.instantiate(&manifest) {
+                    for d in &domains {
+                        classes.extend(d.classes().into_iter().map(|(c, n)| (c, n.to_string())));
+                    }
+                }
+                classes.sort();
                 let had_admission = self.admission.is_some();
                 let mut admission = self.admission.take().unwrap_or_default();
                 let modules = manifest
@@ -901,6 +913,7 @@ impl<E: Engine> Controller<E> {
                                 params: Vec::new(),
                                 channels: Vec::new(),
                                 needs: Vec::new(),
+                                tables: Vec::new(),
                             },
                         }
                     })
@@ -923,11 +936,46 @@ impl<E: Engine> Controller<E> {
                             id: c.id,
                             name: c.name.clone(),
                             ports: c.ports.iter().map(|p| (p.actor, p.port)).collect(),
+                            ty: c.r#type.clone(),
+                            attrs: domain_map_text(&c.attrs),
+                            per_port: c
+                                .per_port
+                                .iter()
+                                .map(|(p, m)| ((p.actor, p.port), domain_map_text(m)))
+                                .collect(),
                         })
                         .collect(),
                     modules,
                     missing_modules: missing,
+                    domains: manifest.domains.clone(),
+                    changes: manifest
+                        .changes
+                        .iter()
+                        .map(|c| ChangeSummary {
+                            at: c.at,
+                            target: c.target.identity(),
+                            payload: domain_map_text(&c.payload),
+                        })
+                        .collect(),
+                    classes,
                 }))
+            }
+            Query::Decode { protocol, payload } => {
+                // The scenario's domains, as composed for a run would be (RFC 008 rule 1).
+                let domains = self
+                    .scenario
+                    .as_ref()
+                    .and_then(|l| self.domains.instantiate(&l.manifest).ok())
+                    .unwrap_or_default();
+                Answer::Decoded(domains.iter().find_map(|d| d.decode(protocol, payload)))
+            }
+            Query::Payload { digest } => {
+                let bytes = hex_digest(digest).and_then(|d| {
+                    self.run
+                        .as_ref()
+                        .and_then(|r| r.payload(&d).map(<[u8]>::to_vec))
+                });
+                Answer::Payload(bytes)
             }
             Query::RunState => Answer::RunState(RunStateInfo {
                 state: self.state,
@@ -1068,6 +1116,7 @@ fn actor_summary(a: &florn_model::Actor) -> ActorSummary {
                 ty: p.r#type.clone(),
             })
             .collect(),
+        config: domain_map_text(&a.config),
     }
 }
 
@@ -1112,10 +1161,41 @@ fn module_summary(name: &str, m: &ModuleManifest, source: &[u8; 32]) -> ModuleSu
         channels: m
             .telemetry
             .iter()
-            .map(|c| (c.channel, c.name.clone()))
+            .map(|c| ChannelSummary {
+                channel: c.channel,
+                name: c.name.clone(),
+                fields: c
+                    .fields
+                    .iter()
+                    .map(|(n, t)| (n.clone(), t.name().to_string()))
+                    .collect(),
+            })
             .collect(),
         needs,
+        tables: m
+            .domain_tables
+            .iter()
+            .map(|(n, t)| (n.clone(), domain_map_text(t)))
+            .collect(),
     }
+}
+
+/// A 64-hex digest's bytes.
+fn hex_digest(text: &str) -> Option<[u8; 32]> {
+    if text.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&text[2 * i..2 * i + 2], 16).ok()?;
+    }
+    Some(out)
+}
+
+fn domain_map_text(m: &florn_model::manifest::DomainMap) -> Vec<(String, String)> {
+    m.iter()
+        .map(|(k, v)| (k.clone(), domain_value_text(v)))
+        .collect()
 }
 
 fn domain_value_text(v: &florn_model::DomainValue) -> String {
@@ -1144,6 +1224,23 @@ fn trace_entry(r: &Record) -> TraceEntry {
             metered: *metered,
             draws: *draws,
             effects: effects.len() as u32,
+            sends: effects
+                .iter()
+                .filter_map(|e| match e {
+                    florn_kernel::trace::CommittedEffect::Send {
+                        seq,
+                        port,
+                        len,
+                        digest,
+                    } => Some(SendSummary {
+                        seq: *seq,
+                        port: *port,
+                        len: *len,
+                        digest: hex(digest),
+                    }),
+                    _ => None,
+                })
+                .collect(),
         },
         Record::Fault {
             key,

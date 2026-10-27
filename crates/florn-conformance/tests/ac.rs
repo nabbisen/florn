@@ -352,7 +352,11 @@ fn ac_005_admit_prints_the_refusal_or_the_manifest() {
             ("label".into(), "text".into(), false, Some("echo".into())),
         ]
     );
-    assert_eq!(module.channels, vec![(1, "draw".to_string())]);
+    assert_eq!(module.channels.len(), 1);
+    assert_eq!(
+        (module.channels[0].channel, module.channels[0].name.as_str()),
+        (1, "draw")
+    );
     assert_eq!(
         module.needs,
         vec![

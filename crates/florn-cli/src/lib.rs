@@ -365,8 +365,8 @@ fn cmd_admit(args: &Args) -> Result<ExitCode, String> {
                 }
                 println!("{line}");
             }
-            for (ch, name) in &m.channels {
-                println!("channel {ch}: {name}");
+            for c in &m.channels {
+                println!("channel {}: {}", c.channel, c.name);
             }
             for (limit, need) in &m.needs {
                 println!("needs {limit} = {need}");

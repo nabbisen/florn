@@ -117,6 +117,13 @@ fn every_message_round_trips() {
         Query::TraceWindow { from: 5, count: 10 },
         Query::Capacity,
         Query::Support,
+        Query::Decode {
+            protocol: "net-echo".into(),
+            payload: vec![1, 2],
+        },
+        Query::Payload {
+            digest: "ab".into(),
+        },
     ] {
         roundtrip(Message::Query(q));
     }
@@ -154,8 +161,16 @@ fn every_message_round_trips() {
             default: Some("10".into()),
             unit: None,
         }],
-        channels: vec![(1, "r".into())],
+        channels: vec![ChannelSummary {
+            channel: 1,
+            name: "r".into(),
+            fields: vec![("count".into(), "u64".into())],
+        }],
         needs: vec![("memory".into(), 131_072)],
+        tables: vec![(
+            "network".into(),
+            vec![("protocol".into(), "net-echo".into())],
+        )],
     };
     let actor = ActorSummary {
         id: 1,
@@ -167,6 +182,7 @@ fn every_message_round_trips() {
             name: "p0".into(),
             ty: "core/port".into(),
         }],
+        config: vec![("period".into(), "7".into())],
     };
     let answers = vec![
         Answer::Scenario(None),
@@ -182,9 +198,19 @@ fn every_message_round_trips() {
                 id: 100,
                 name: "c".into(),
                 ports: vec![(1, 0), (2, 0)],
+                ty: Some("network/link".into()),
+                attrs: vec![("delay".into(), "2ns".into())],
+                per_port: vec![((1, 0), vec![("cost".into(), "3".into())])],
             }],
             modules: vec![module.clone()],
             missing_modules: vec!["ff".into()],
+            domains: vec!["core".into(), "network".into()],
+            changes: vec![ChangeSummary {
+                at: 1000,
+                target: 100,
+                payload: vec![("enabled".into(), "false".into())],
+            }],
+            classes: vec![(2, "message".into()), (4, "frame".into())],
         })),
         Answer::RunState(RunStateInfo {
             state: RunState::Paused,
@@ -234,6 +260,12 @@ fn every_message_round_trips() {
                 metered: 100,
                 draws: 1,
                 effects: 2,
+                sends: vec![SendSummary {
+                    seq: 0,
+                    port: 0,
+                    len: 3,
+                    digest: "cc".into(),
+                }],
             },
             TraceEntry::Fault {
                 at: At {
@@ -287,6 +319,10 @@ fn every_message_round_trips() {
             bytes: vec![80, 75],
         },
         Answer::Done,
+        Answer::Decoded(None),
+        Answer::Decoded(Some(vec![("kind".into(), "echo".into())])),
+        Answer::Payload(None),
+        Answer::Payload(Some(vec![9, 8])),
     ];
     for a in answers {
         roundtrip(Message::Answer(a));

@@ -16,6 +16,7 @@ One Host core compiled for the browser and for native targets; an engine adapter
 | `florn-guest`, `florn-guest-network` | The guest SDK and the example guests; the router world's bindings and `router!` | 002 §8, 008 §6 |
 | `florn-domain-network` | The network domain: links and lans over interfaces, frames with delay, serialisation, jitter and loss, the `link` and `node` interventions, the blackhole built-in, the codes, the decoders | 008 |
 | `florn-cli`, `florn` | The headless runner as a library, and the binary | 005 rule 31 |
+| `florn-ui-model`, `florn-ui-scene` | The view model (what is shown, over the control interface only: topology, timeline, inspectors, interventions, the authoring draft, the outbox) and the scene (what to draw: layout, items, flights in motion, hit testing); native, framework-free, tested over the real Host | 005 §8 |
 | `florn-ui-web` | The Host's worker module, the display transport (the ring or messages) and the test page; the shell of 0.2 | 005 §7, §8 |
 | `florn-conformance` | The kit: scenarios with digests, the RFC verification rows, the benchmarks | AUTO-007 |
 | `florn-ui-model`, `florn-ui-scene` | Empty until 0.2 | 005 §8 |

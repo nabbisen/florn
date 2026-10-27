@@ -337,6 +337,9 @@ pub struct Trace {
     interval: u64,
     /// (record count at which it was stored, chain value) — at every multiple of `interval` and at the end.
     stored: Vec<(u64, Digest)>,
+    /// Record counts a replay stores the chain at besides the interval's: the record's points
+    /// (RFC 001 rule 50), so that a record exported before its run ended compares too.
+    watched: Vec<u64>,
     recording: Option<Vec<Record>>,
 }
 
@@ -352,8 +355,16 @@ impl Trace {
             records: 0,
             interval: interval.max(1),
             stored: Vec::new(),
+            watched: Vec::new(),
             recording: if record { Some(Vec::new()) } else { None },
         }
+    }
+
+    /// Store the chain at these record counts as well (a replay's reference points).
+    pub fn watch(&mut self, mut counts: Vec<u64>) {
+        counts.sort_unstable();
+        counts.dedup();
+        self.watched = counts;
     }
 
     /// Append a record: hash it into the chain (RFC 001 rule 48), store the chain at the interval.
@@ -364,7 +375,9 @@ impl Trace {
         h.update(&bytes);
         self.chain = *h.finalize().as_bytes();
         self.records += 1;
-        if self.records.is_multiple_of(self.interval) {
+        if self.records.is_multiple_of(self.interval)
+            || self.watched.binary_search(&self.records).is_ok()
+        {
             self.stored.push((self.records, self.chain));
         }
         if let Some(v) = &mut self.recording {
@@ -388,6 +401,7 @@ impl Trace {
             records: s.records,
             interval: interval.max(1),
             stored: s.stored,
+            watched: Vec::new(),
             recording: if record { Some(Vec::new()) } else { None },
         }
     }
@@ -447,6 +461,28 @@ pub enum Comparison {
     Incomparable,
 }
 
+/// Compare a run's stored points with a record's: at every point the record holds, the run
+/// must hold the same chain (it stored them: `watch`); a point the run never reached makes
+/// the two incomparable.
+pub fn compare_reference(mine: &[(u64, Digest)], reference: &[(u64, Digest)]) -> Comparison {
+    let mut last_equal = 0u64;
+    let mut points = 0u64;
+    for (k, d) in reference {
+        let Some((_, own)) = mine.iter().find(|(n, _)| n == k) else {
+            return Comparison::Incomparable;
+        };
+        if own != d {
+            return Comparison::Diverged {
+                from: last_equal,
+                to: *k,
+            };
+        }
+        last_equal = *k;
+        points += 1;
+    }
+    Comparison::Matched { points }
+}
+
 pub fn compare(a: &[(u64, Digest)], b: &[(u64, Digest)]) -> Comparison {
     let mut last_equal = 0u64;
     let mut points = 0u64;
@@ -477,6 +513,74 @@ pub fn hex(d: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_replay_stores_the_records_points_and_compares_there() {
+        let key = EventKey {
+            tick: 1,
+            microstep: 0,
+            class: 0,
+            tie: 0,
+            origin: 0,
+            seq: 0,
+        };
+        let r = Record::Intervention {
+            key,
+            content_digest: [1; 32],
+            content_len: 1,
+        };
+        // A record exported after 7 records with an interval of 5: points at 5 and 7.
+        let mut recorded = Trace::new(5, false);
+        for _ in 0..7 {
+            recorded.push(r.clone());
+        }
+        let reference = recorded.stored();
+        assert_eq!(
+            reference.iter().map(|p| p.0).collect::<Vec<_>>(),
+            vec![5, 7]
+        );
+        // The replay runs on to 12 records; it stored the chain at 7 as asked.
+        let mut replay = Trace::new(5, false);
+        replay.watch(reference.iter().map(|p| p.0).collect());
+        for _ in 0..12 {
+            replay.push(r.clone());
+        }
+        assert_eq!(
+            compare_reference(&replay.stored(), &reference),
+            Comparison::Matched { points: 2 }
+        );
+        assert!(matches!(
+            compare(&replay.stored(), &reference),
+            Comparison::Incomparable
+        ));
+        // A replay that differs at 7 diverges after 5; one that stops short is incomparable.
+        let mut other = Trace::new(5, false);
+        other.watch(vec![5, 7]);
+        for i in 0..7 {
+            other.push(if i == 6 {
+                Record::Intervention {
+                    key,
+                    content_digest: [2; 32],
+                    content_len: 1,
+                }
+            } else {
+                r.clone()
+            });
+        }
+        assert_eq!(
+            compare_reference(&other.stored(), &reference),
+            Comparison::Diverged { from: 5, to: 7 }
+        );
+        let mut short = Trace::new(5, false);
+        short.watch(vec![5, 7]);
+        for _ in 0..6 {
+            short.push(r.clone());
+        }
+        assert_eq!(
+            compare_reference(&short.stored(), &reference),
+            Comparison::Incomparable
+        );
+    }
 
     fn rec(seq: u64) -> Record {
         Record::Handled {

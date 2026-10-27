@@ -487,6 +487,8 @@ dependencies = [
  "florn-platform",
  "florn-platform-native",
  "florn-test-guests",
+ "florn-ui-model",
+ "florn-ui-scene",
  "sha2 0.11.1",
  "toml",
  "wasm-encoder 0.261.0",
@@ -630,10 +632,16 @@ dependencies = [
 [[package]]
 name = "florn-ui-model"
 version = "0.1.0"
+dependencies = [
+ "florn-control",
+]
 
 [[package]]
 name = "florn-ui-scene"
 version = "0.1.0"
+dependencies = [
+ "florn-ui-model",
+]
 
 [[package]]
 name = "florn-ui-web"

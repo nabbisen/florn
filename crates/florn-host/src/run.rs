@@ -1279,7 +1279,7 @@ impl<E: Engine> Run<E> {
             .at(at(self.kernel.now()));
         self.notify(n);
         if let Some(stored) = self.replay_against.take() {
-            let c = self.kernel.trace.compare(&stored);
+            let c = florn_kernel::trace::compare_reference(&self.kernel.trace.stored(), &stored);
             let n = match c {
                 Comparison::Matched { points } => Notification::new(
                     "replay.matched",
@@ -1960,6 +1960,11 @@ impl<E: Engine> Run<E> {
             ));
         }
         run.kernel.set_replay(i.interventions.clone());
+        // The record's points are stored by this run too, so that a record exported before
+        // its run ended compares at every point it holds (RFC 001 rule 50).
+        run.kernel
+            .trace
+            .watch(record.chain.iter().map(|(n, _)| *n).collect());
         run.replay_against = Some(record.chain.clone());
         run.instantiate_all()?;
         run.init_all();
