@@ -266,6 +266,15 @@ async function sha256Hex(chunks) {
 // batch with `pad` synthetic flights so that the transport is measured at a chosen rate; the
 // Host's own records are untouched and come first.
 let display = null;
+// The page's answer to "flush": every message it sent before (its drop reports) has arrived.
+let flushed = null;
+
+function flush() {
+  return new Promise((resolve) => {
+    flushed = resolve;
+    self.postMessage({ type: "flush" });
+  });
+}
 
 function writeDisplay() {
   if (!display) return;
@@ -338,6 +347,11 @@ async function runScenario(m) {
       if (replies.some((x) => x.code === "run.ended")) break;
       await sleep(d.period_ms);
     }
+    // The page's drop reports for the last batches, then what the log holds since the last
+    // advance (rule 14: every drop is in the log).
+    await flush();
+    host.exports.florn_drain();
+    collect(out());
   } else {
     host.exports.florn_advance(0xffffffff, 0xffffffff);
     collect(out());
@@ -436,6 +450,11 @@ self.onmessage = async (e) => {
     // The page's queue let records go (rule 14): the run's log records it.
     const [lo, hi] = words(m.records);
     host.exports.florn_display_dropped(lo, hi, 1);
+    return;
+  }
+  if (m.type === "flushed") {
+    if (flushed) flushed();
+    flushed = null;
     return;
   }
   try {

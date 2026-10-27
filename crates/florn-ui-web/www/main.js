@@ -248,6 +248,9 @@ worker.onmessage = async (e) => {
     }
   } else if (m.type === "display") {
     if (reader) reader.push(m.buffer);
+  } else if (m.type === "flush") {
+    // Every batch before this one is pushed and its drops reported: say so.
+    worker.postMessage({ type: "flushed" });
   } else if (m.type === "done") {
     const result = m.result;
     if (reader) {

@@ -184,8 +184,9 @@ for (const name of browsers) {
   check(received.ring && received.ring === received.messages, `${name}: the ring and the messages deliver identical records`, received);
   // The transport's cell: each batch padded to 2,000 records at the display's cadence for the
   // run's length, on both paths; every record read, the read cost a figure. Then the same
-  // with the page not reading for a second: the transport drops, counts, and the run's log
-  // has `telemetry.dropped` with the path and the count.
+  // with the page not reading for two seconds (batches every 8 ms, so that the queue's bound
+  // of 64 is passed even where the worker's timers run slow, as WebKit's do): the transport
+  // drops, counts, and the run's log has `telemetry.dropped` with the path and the count.
   for (const [path, at, sw] of paths) {
     const s = "dv-triangle";
     try {
@@ -194,7 +195,7 @@ for (const name of browsers) {
       check(d.received_digest === d.produced_digest && d.records === d.produced && d.records >= 2000 * 100 && d.dropped === 0, `${name}: 2,000 records per frame over the ${path}, none dropped`, { records: d.records, produced: d.produced, batches: d.batches, frames: d.frames, dropped: d.dropped });
       check(d.read_p95_ms !== null && d.read_p95_ms <= 2, `${name}: reading the ${path} costs at most 2 ms per frame at the 95th percentile`, { read_p95_ms: d.read_p95_ms, read_max_ms: d.read_max_ms });
       console.log(JSON.stringify({ figure: "display-cell", browser: name, path, records_per_batch: 2000, records: d.records, frames: d.frames, interval_p95_ms: d.interval_p95_ms, interval_max_ms: d.interval_max_ms, read_p95_ms: d.read_p95_ms, read_max_ms: d.read_max_ms }));
-      const stalled = await open(`scenario=${s}&seed=${digests_of(s).seed}&display=1&slice=20&period=16&pad=2000&stall=1200&${sw}`, 600000, at);
+      const stalled = await open(`scenario=${s}&seed=${digests_of(s).seed}&display=1&slice=20&period=8&pad=2000&stall=2000&${sw}`, 600000, at);
       const sd = displayOf(stalled);
       const reported = droppedOf(stalled).reduce((n, x) => n + x.records, 0);
       check(sd.dropped > 0 && reported === sd.dropped && droppedOf(stalled).every((x) => x.path === path), `${name}: a stalled page's drops on the ${path} are counted and in the log`, { dropped: sd.dropped, reported: droppedOf(stalled) });

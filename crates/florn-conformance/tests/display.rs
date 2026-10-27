@@ -278,16 +278,17 @@ fn through_the_control_interface_with_the_transport_s_notice_and_its_drops() {
         if i == 2 {
             assert!(!codes(&out).contains(&"telemetry.dropped".to_string()));
             c.display_dropped(0, DisplayPath::Messages);
+            assert!(c.drain().is_empty(), "nothing dropped, nothing logged");
             c.display_dropped(7, DisplayPath::Messages);
-        }
-        if i == 3 {
-            let dropped = out
+            // Logged at once and delivered on demand, without waiting for an advance.
+            let drained = c.drain();
+            let dropped = drained
                 .iter()
                 .find_map(|m| match m {
                     Message::Notification(n) if n.code == "telemetry.dropped" => Some(n.clone()),
                     _ => None,
                 })
-                .expect("telemetry.dropped in the replies after the drop");
+                .expect("telemetry.dropped drained after the drop");
             let get = |name: &str| {
                 dropped
                     .params
@@ -299,6 +300,12 @@ fn through_the_control_interface_with_the_transport_s_notice_and_its_drops() {
             assert_eq!(
                 get("path"),
                 Some(florn_control::Value::Enum("messages".into()))
+            );
+        }
+        if i == 3 {
+            assert!(
+                !codes(&out).contains(&"telemetry.dropped".to_string()),
+                "drained once"
             );
         }
         let batch = c.take_display();

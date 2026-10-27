@@ -298,6 +298,19 @@ impl<E: Engine> Controller<E> {
         self.run.as_mut().map(Run::take_display).unwrap_or_default()
     }
 
+    /// What the `events` subscription has not delivered yet: the notifications logged since the
+    /// last reply, such as the display path's drops reported after the run's last advance.
+    /// Empty without the subscription (the log keeps them either way).
+    pub fn drain(&mut self) -> Vec<Message> {
+        let mut out = Vec::new();
+        if self.subs.events {
+            self.drain_log(&mut out);
+        } else if let Some(run) = &self.run {
+            self.log_seen = run.log().entries().len();
+        }
+        out
+    }
+
     /// Records the display path dropped (rule 14): the transport counted them, the run's log
     /// records them as `telemetry.dropped`, and the trace is untouched.
     pub fn display_dropped(&mut self, records: u64, path: DisplayPath) {

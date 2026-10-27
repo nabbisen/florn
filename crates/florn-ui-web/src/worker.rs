@@ -301,6 +301,22 @@ pub extern "C" fn florn_take_display() -> i32 {
     })
 }
 
+/// The notifications logged since the last reply (the display path's drops reported after the
+/// run's last advance): as JSON, their count.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_drain() -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        let replies = c.drain();
+        let n = replies.len() as i32;
+        set_out(replies_json(&replies).into_bytes());
+        n
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn florn_display_ptr() -> *const u8 {
     DISPLAY.with(|d| d.borrow().as_ptr())
