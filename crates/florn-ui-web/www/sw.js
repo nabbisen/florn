@@ -23,18 +23,23 @@ function withHeaders(response) {
 }
 
 self.addEventListener("install", (e) => {
+  // All at once and atomically; should one file be missing, the rest one by one, so that a
+  // host with a file missing still serves what it has.
   e.waitUntil(
     caches
       .open(CACHE)
-      .then(async (c) => {
-        for (const f of FILES) {
-          try {
-            await c.add(f);
-          } catch (err) {
-            console.warn("cache:", f, err);
+      .then((c) =>
+        c.addAll(FILES).catch(async (err) => {
+          console.warn("cache:", err);
+          for (const f of FILES) {
+            try {
+              await c.add(f);
+            } catch (e2) {
+              console.warn("cache:", f, e2);
+            }
           }
-        }
-      })
+        })
+      )
       .then(() => self.skipWaiting())
   );
 });

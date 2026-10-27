@@ -45,7 +45,9 @@ export function startServer({ www, scenarios, port = 0, isolated = true }) {
       const data = await readFile(file);
       res.writeHead(200, {
         "Content-Type": TYPES[extname(file)] || "application/octet-stream",
-        "Cache-Control": "no-store",
+        // Revalidated on every request, as a host would serve a versioned path, and storable
+        // by the service worker's cache (a response marked no-store is not, in every browser).
+        "Cache-Control": "no-cache",
         ...headers,
       });
       res.end(data);
