@@ -17,6 +17,7 @@ use florn_admission::{
     COST_MODEL_V1_TABLE, COST_MODEL_VERSION, ClassLimits, Errors, FaultClass, STACK_EXPORT,
     classify,
 };
+use florn_control::display::Record as DisplayRecord;
 use florn_control::{At, Ends, Notification, Scope, Severity, Value};
 use florn_engine::{
     Engine, EngineError, GlobalValue, HostGlobal, ImportFunction, ImportHandler, ImportSpec,
@@ -101,6 +102,9 @@ pub struct Options {
     pub host_build: String,
     /// Telemetry records kept for the display path before the oldest are dropped.
     pub telemetry_capacity: usize,
+    /// Write the display stream of RFC 005 rule 14 from the start (the `display`
+    /// subscription); `Run::set_display` changes it later.
+    pub display: bool,
 }
 
 impl Default for Options {
@@ -114,6 +118,7 @@ impl Default for Options {
             host: HostMaxima::native(),
             host_build: "native".into(),
             telemetry_capacity: 65_536,
+            display: false,
         }
     }
 }
@@ -418,6 +423,12 @@ pub struct Run<E: Engine> {
     log: DiagnosticLog,
     telemetry: VecDeque<Telemetry>,
     telemetry_dropped: u64,
+    /// Each actor's activations in the display batch in progress (count, faulted, last), when
+    /// a front end subscribed to the display stream (RFC 005 rule 14).
+    activity: Option<BTreeMap<Identity, (u16, bool, u64)>>,
+    /// The tick the last advance reached: every event before it is handled (the kernel's clock
+    /// stays at the last event handled). The display batch's instant.
+    reached: u64,
     payloads: BTreeMap<Digest, Vec<u8>>,
     options: Options,
     ended: Option<EndReason>,
@@ -688,10 +699,11 @@ impl<E: Engine> Run<E> {
             keep_records: options.keep_records,
         };
         let kernel = Kernel::new(config);
-        let world = match Composite::new(&scenario, domain_values, seed) {
+        let mut world = match Composite::new(&scenario, domain_values, seed) {
             Ok(w) => w,
             Err(what) => return Err(Box::new((HostError::Malformed(what), engine, admission))),
         };
+        world.set_display(options.display);
         let mut worlds: BTreeMap<String, Arc<WorldSigs>> = BTreeMap::new();
         let core_sigs = WorldSigs::core();
         worlds.insert(core_sigs.name.clone(), Arc::new(core_sigs));
@@ -738,6 +750,8 @@ impl<E: Engine> Run<E> {
             log,
             telemetry: VecDeque::new(),
             telemetry_dropped: 0,
+            activity: options.display.then(BTreeMap::new),
+            reached: 0,
             payloads: BTreeMap::new(),
             options,
             ended: None,
@@ -1066,6 +1080,49 @@ impl<E: Engine> Run<E> {
     pub fn telemetry_dropped(&self) -> u64 {
         self.telemetry_dropped
     }
+    /// The tick the last advance reached: every event before it is handled.
+    pub fn reached(&self) -> u64 {
+        self.reached
+    }
+
+    /// Write the display stream (RFC 005 rule 14) from now on, or stop; off until asked, so
+    /// that a run nobody draws pays nothing for it.
+    pub fn set_display(&mut self, on: bool) {
+        self.world.set_display(on);
+        self.activity = on.then(BTreeMap::new);
+    }
+    /// The display batch since the last take: the flights in order, then each actor's
+    /// activity, then the tick reached (every event before it is handled); empty when the
+    /// display is off.
+    pub fn take_display(&mut self) -> Vec<DisplayRecord> {
+        let Some(activity) = &mut self.activity else {
+            return Vec::new();
+        };
+        let mut records = self.world.take_display();
+        records.extend(std::mem::take(activity).into_iter().map(
+            |(actor, (count, faulted, last))| DisplayRecord::Activity {
+                actor,
+                count,
+                faulted,
+                last,
+            },
+        ));
+        records.push(DisplayRecord::Instant { tick: self.reached });
+        records
+    }
+    /// Count an activation for the display batch.
+    fn note_activity(&mut self, id: Identity, faulted: bool, instant: Instant) {
+        if let Some(activity) = &mut self.activity {
+            let a = activity.entry(id).or_insert((0, false, 0));
+            a.0 = a.0.saturating_add(1);
+            a.1 |= faulted;
+            a.2 = instant.tick;
+        }
+    }
+    /// A notification into the run's log (a front end's own, such as the display path's).
+    pub fn notify_now(&mut self, n: Notification) {
+        self.notify(n);
+    }
 
     /// Take the engine and the admission cache back when the run is over, for the next run.
     pub fn into_parts(mut self) -> (E, Admission) {
@@ -1190,6 +1247,16 @@ impl<E: Engine> Run<E> {
             handled += 1;
             self.handle(ev);
         }
+        let now = self.kernel.now().tick;
+        let end = self.scenario.time.end;
+        self.reached = match (self.ended, unit) {
+            (Some(EndReason::EndReached), _) => end,
+            (Some(_), _) => now,
+            (None, Advance::ToTick(t)) => t.min(end).max(now),
+            (None, Advance::OneTick) => now.saturating_add(1).min(end),
+            (None, _) => now,
+        }
+        .max(self.reached);
         handled
     }
 
@@ -1413,11 +1480,13 @@ impl<E: Engine> Run<E> {
         let act = self.kernel.begin(id, event);
         let Some(b) = self.builtins.get_mut(&id) else {
             self.kernel.fault(act, FaultKind::Trap, 0, 0);
+            self.note_activity(id, true, instant);
             return;
         };
         b.sink.reset();
         let Some((d, kind)) = self.world.builtin(id) else {
             self.kernel.fault(act, FaultKind::Trap, 0, 0);
+            self.note_activity(id, true, instant);
             return;
         };
         d.builtin(id, &kind, be, &mut b.sink);
@@ -1447,6 +1516,7 @@ impl<E: Engine> Run<E> {
         };
         match self.kernel.commit(act, &mut b.sink, 0, &mut self.world) {
             Ok(()) => {
+                self.note_activity(id, false, instant);
                 for (channel, payload) in reports {
                     if channel == 0 {
                         let n = Notification::new(
@@ -1490,6 +1560,7 @@ impl<E: Engine> Run<E> {
                         (FaultKind::from_refusal(r), fault_parameter(r))
                     }
                 };
+                self.note_activity(id, true, instant);
                 self.faulted(id, kind, parameter, 0, instant);
             }
         }
@@ -1531,6 +1602,7 @@ impl<E: Engine> Run<E> {
                 instant,
             )
         };
+        self.note_activity(id, !matches!(outcome, Outcome::Committed { .. }), instant);
         match outcome {
             Outcome::Committed { texts } => {
                 // Channel 0 is text for the author; it reaches the diagnostic log (RFC 002 §10).

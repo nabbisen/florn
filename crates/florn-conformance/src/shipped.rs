@@ -59,7 +59,7 @@ fn race(tie: &'static str, reversed: bool) -> Scenario {
 
 /// Two routers over one link (RFC 008 §12): `a1` sends a frame every `period` ticks through
 /// its interface, `a2` echoes it back when `echo` is on.
-fn net_pair(name: &str, end: u64, period: u64, payload: u64, echo: bool) -> Scenario {
+pub fn net_pair(name: &str, end: u64, period: u64, payload: u64, echo: bool) -> Scenario {
     Scenario::new(name, end)
         .domain("network")
         .actor(

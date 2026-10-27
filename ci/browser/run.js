@@ -2,7 +2,9 @@
 // every shipped scenario through the test page in each browser, compared with the recorded
 // digests; the hostile scenarios' faults; the isolation headers, the policy and the network log
 // (rules 33 and 34); the start from the service worker's cache (rules 32 and 35); the transport's
-// refusal of bytes that are no message; the crossing and cost benchmarks' figures.
+// refusal of bytes that are no message; the display stream over the ring and over messages
+// (rule 14; checklist C18): identical records, the transport's cell at 2,000 records per frame,
+// the drops reported; the crossing and cost benchmarks' figures.
 //
 // Usage: node run.js --browsers chromium,firefox[,webkit] [--quick] [--port N]
 import { dirname, join, resolve } from "node:path";
@@ -42,10 +44,19 @@ function parseDigests(text) {
 
 const digests = parseDigests(await readFile(join(root, "scenarios/digests.toml"), "utf8"));
 const scenarios = Object.keys(digests.runs);
+const digests_of = (s) => digests.runs[s];
 const { server, origin } = await startServer({
   www: join(root, "crates/florn-ui-web/www"),
   scenarios: join(root, "scenarios"),
   port: parseInt(arg("--port", "0"), 10),
+});
+// A second origin without the isolation headers, as a host that cannot set them: the page
+// there reads the display stream from messages (rule 14).
+const plain = await startServer({
+  www: join(root, "crates/florn-ui-web/www"),
+  scenarios: join(root, "scenarios"),
+  port: 0,
+  isolated: false,
 });
 
 let failures = 0;
@@ -72,17 +83,17 @@ for (const name of browsers) {
   const foreign = new Set();
   context.on("request", (r) => {
     const u = new URL(r.url());
-    if (u.origin !== origin) foreign.add(u.origin);
+    if (u.origin !== origin && u.origin !== plain.origin) foreign.add(u.origin);
   });
   const consoleErrors = [];
-  const open = async (query, timeout = 900000) => {
+  const open = async (query, timeout = 900000, at = origin) => {
     const page = await context.newPage();
     page.on("console", (m) => {
       if (m.type() === "error") consoleErrors.push(m.text());
     });
     page.on("pageerror", (e) => consoleErrors.push(String(e)));
     try {
-      await page.goto(`${origin}/index.html?${query}`);
+      await page.goto(`${at}/index.html?${query}`);
       await page.waitForSelector("#out[data-done='1']", { timeout });
       return JSON.parse(await page.textContent("#out"));
     } finally {
@@ -146,6 +157,53 @@ for (const name of browsers) {
     }
   }
 
+  // The display stream (rule 14; C18). One scenario in slices of 50 ticks, read once per frame
+  // from the ring on the isolated origin and from messages on the plain one: the same digest
+  // as recorded, every record written received, the two paths' records identical, the log's
+  // one line naming the transport, and no drop.
+  const displayOf = (r) => ({ ...(r.display || {}), produced: r.written && r.written.produced, produced_digest: r.written && r.written.produced_digest, batches: r.written && r.written.batches });
+  const transportOf = (r) => ((r.events || []).find((x) => x.code === "telemetry.transport") || { params: { transport: {} } }).params.transport.value;
+  const droppedOf = (r) => (r.events || []).filter((x) => x.code === "telemetry.dropped").map((x) => ({ records: x.params.records.value, path: x.params.path.value }));
+  const paths = [["ring", origin, "sw=1"], ["messages", plain.origin, "sw=0"]];
+  const received = {};
+  for (const [path, at, sw] of paths) {
+    const s = "dv-triangle";
+    try {
+      const r = await open(`scenario=${s}&seed=${digests_of(s).seed}&display=1&slice=50&period=4&${sw}`, 600000, at);
+      const d = displayOf(r);
+      received[path] = d.received_digest;
+      check(r.chain === digests_of(s).chain && r.ended === digests_of(s).ended, `${name}: ${s} with the display read from the ${path} gives the recorded digest`, { chain: r.chain, ended: r.ended, ...t(r.ms), error: r.error });
+      check(d.path === path && transportOf(r) === (path === "ring" ? "shared" : "messages"), `${name}: the ${path} is in use and the log says so`, { path: d.path, transport: transportOf(r), isolated: r.isolated });
+      check(d.received_digest === d.produced_digest && d.records === d.produced && d.records > 0, `${name}: every record written to the ${path} was read`, { records: d.records, produced: d.produced, batches: d.batches, instants: d.instants, flights: d.flights, activity: d.activity, unknown: d.unknown });
+      check(d.dropped === 0 && droppedOf(r).length === 0, `${name}: nothing dropped on the ${path}`, { dropped: d.dropped, reported: droppedOf(r) });
+      console.log(JSON.stringify({ figure: "display", browser: name, path, records: d.records, frames: d.frames, interval_p95_ms: d.interval_p95_ms, read_p95_ms: d.read_p95_ms, read_max_ms: d.read_max_ms }));
+    } catch (err) {
+      check(false, `${name}: display over the ${path}`, { error: String(err).split("\n")[0] });
+    }
+  }
+  check(received.ring && received.ring === received.messages, `${name}: the ring and the messages deliver identical records`, received);
+  // The transport's cell: each batch padded to 2,000 records at the display's cadence for the
+  // run's length, on both paths; every record read, the read cost a figure. Then the same
+  // with the page not reading for a second: the transport drops, counts, and the run's log
+  // has `telemetry.dropped` with the path and the count.
+  for (const [path, at, sw] of paths) {
+    const s = "dv-triangle";
+    try {
+      const r = await open(`scenario=${s}&seed=${digests_of(s).seed}&display=1&slice=20&period=16&pad=2000&${sw}`, 600000, at);
+      const d = displayOf(r);
+      check(d.received_digest === d.produced_digest && d.records === d.produced && d.records >= 2000 * 100 && d.dropped === 0, `${name}: 2,000 records per frame over the ${path}, none dropped`, { records: d.records, produced: d.produced, batches: d.batches, frames: d.frames, dropped: d.dropped });
+      check(d.read_p95_ms !== null && d.read_p95_ms <= 2, `${name}: reading the ${path} costs at most 2 ms per frame at the 95th percentile`, { read_p95_ms: d.read_p95_ms, read_max_ms: d.read_max_ms });
+      console.log(JSON.stringify({ figure: "display-cell", browser: name, path, records_per_batch: 2000, records: d.records, frames: d.frames, interval_p95_ms: d.interval_p95_ms, interval_max_ms: d.interval_max_ms, read_p95_ms: d.read_p95_ms, read_max_ms: d.read_max_ms }));
+      const stalled = await open(`scenario=${s}&seed=${digests_of(s).seed}&display=1&slice=20&period=16&pad=2000&stall=1200&${sw}`, 600000, at);
+      const sd = displayOf(stalled);
+      const reported = droppedOf(stalled).reduce((n, x) => n + x.records, 0);
+      check(sd.dropped > 0 && reported === sd.dropped && droppedOf(stalled).every((x) => x.path === path), `${name}: a stalled page's drops on the ${path} are counted and in the log`, { dropped: sd.dropped, reported: droppedOf(stalled) });
+      check(sd.records + sd.dropped === sd.produced, `${name}: on the ${path} every record was either read or counted as dropped`, { records: sd.records, dropped: sd.dropped, produced: sd.produced });
+    } catch (err) {
+      check(false, `${name}: the display cell over the ${path}`, { error: String(err).split("\n")[0] });
+    }
+  }
+
   // The transport's form refuses bytes that are no message with its code.
   try {
     const h = await open("bench=handle");
@@ -202,10 +260,11 @@ for (const name of browsers) {
     await context.setOffline(false);
   }
 
-  check(foreign.size === 0, `${name}: the network log holds only the page's origin`, { foreign: [...foreign] });
+  check(foreign.size === 0, `${name}: the network log holds only the page's origins`, { foreign: [...foreign] });
   check(consoleErrors.length === 0, `${name}: no error in the console`, { errors: consoleErrors.slice(0, 5) });
   await browser.close();
 }
 server.close();
+plain.server.close();
 console.log(JSON.stringify({ failures }));
 process.exit(failures ? 1 : 0);

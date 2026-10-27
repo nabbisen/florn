@@ -264,6 +264,9 @@ pub enum Subscription {
     /// Faults, limits, interventions applied: the notifications produced while running.
     Events,
     Progress,
+    /// The display stream of RFC 005 rule 14 (0.2): the Host writes its records from the next
+    /// advance on; they travel by the display transport, never as control messages.
+    Display,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -271,6 +274,7 @@ pub enum SubscriptionKind {
     Telemetry,
     Events,
     Progress,
+    Display,
 }
 
 impl Subscription {
@@ -279,6 +283,7 @@ impl Subscription {
             Self::Telemetry { .. } => SubscriptionKind::Telemetry,
             Self::Events => SubscriptionKind::Events,
             Self::Progress => SubscriptionKind::Progress,
+            Self::Display => SubscriptionKind::Display,
         }
     }
     pub fn validate(&self) -> Result<(), Box<Notification>> {
@@ -797,6 +802,7 @@ fn subscription_w(e: &mut Encoder, s: &Subscription) {
         }
         Subscription::Events => e.u8(1),
         Subscription::Progress => e.u8(2),
+        Subscription::Display => e.u8(3),
     }
 }
 fn subscription_r(d: &mut Decoder) -> Option<Subscription> {
@@ -807,6 +813,7 @@ fn subscription_r(d: &mut Decoder) -> Option<Subscription> {
         },
         1 => Subscription::Events,
         2 => Subscription::Progress,
+        3 => Subscription::Display,
         _ => return None,
     })
 }
@@ -815,6 +822,7 @@ fn kind_w(e: &mut Encoder, k: SubscriptionKind) {
         SubscriptionKind::Telemetry => 0,
         SubscriptionKind::Events => 1,
         SubscriptionKind::Progress => 2,
+        SubscriptionKind::Display => 3,
     });
 }
 fn kind_r(d: &mut Decoder) -> Option<SubscriptionKind> {
@@ -822,6 +830,7 @@ fn kind_r(d: &mut Decoder) -> Option<SubscriptionKind> {
         0 => SubscriptionKind::Telemetry,
         1 => SubscriptionKind::Events,
         2 => SubscriptionKind::Progress,
+        3 => SubscriptionKind::Display,
         _ => return None,
     })
 }

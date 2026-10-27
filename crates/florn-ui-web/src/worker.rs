@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::fmt::Write as _;
 
+use florn_control::display::{DisplayPath, Transport, encode_all};
 use florn_control::{Answer, Command, Envelope, Message, Query, SeedChoice, Subscription, Unit};
 use florn_domain_network::NetworkDomain;
 use florn_engine::bench;
@@ -15,6 +16,9 @@ thread_local! {
     static CONTROLLER: RefCell<Option<Controller<WebEngine>>> = const { RefCell::new(None) };
     /// The text or bytes of the last reply, read through `florn_out_ptr` and `florn_out_len`.
     static OUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    /// The last display batch (RFC 005 rule 14), read through `florn_display_ptr` after
+    /// `florn_take_display` gave its length; the worker's script writes it to the transport.
+    static DISPLAY: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
 fn set_out(bytes: Vec<u8>) {
@@ -48,11 +52,13 @@ pub extern "C" fn florn_out_len() -> u32 {
     OUT.with(|o| o.borrow().len() as u32)
 }
 
-/// The Host over this worker, with the capacity the page gives (RFC 003 rule 20).
+/// The Host over this worker, with the capacity the page gives (RFC 003 rule 20) and the
+/// display transport the page reads from (RFC 005 rule 14): 1 the ring in shared memory, 2
+/// messages, 0 none (a page that draws nothing).
 #[unsafe(no_mangle)]
-pub extern "C" fn florn_start(instances: u32, memory_bytes: f64) -> i32 {
+pub extern "C" fn florn_start(instances: u32, memory_bytes: f64, transport: u32) -> i32 {
     let platform = WebPlatform::with_capacity(u64::from(instances), memory_bytes.max(0.0) as u64);
-    let c = Controller::new(
+    let mut c = Controller::new(
         WebEngine::new(),
         florn_host::run::default_admission(),
         Box::new(platform),
@@ -63,6 +69,11 @@ pub extern "C" fn florn_start(instances: u32, memory_bytes: f64) -> i32 {
             ..Options::browser()
         },
     );
+    match transport {
+        1 => c.set_transport(Transport::Shared),
+        2 => c.set_transport(Transport::Messages),
+        _ => {}
+    }
     CONTROLLER.with(|slot| *slot.borrow_mut() = Some(c));
     0
 }
@@ -266,6 +277,53 @@ pub extern "C" fn florn_advance(tick_lo: u32, tick_hi: u32) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn florn_subscribe_events() -> i32 {
     send(Message::Subscribe(Subscription::Events))
+}
+
+/// The display stream from the next advance on (RFC 005 rule 14).
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_subscribe_display() -> i32 {
+    send(Message::Subscribe(Subscription::Display))
+}
+
+/// The display batch since the last take, encoded: its length in bytes (a multiple of
+/// sixteen), the bytes at `florn_display_ptr`; -1 before `florn_start`.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_take_display() -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        let bytes = encode_all(&c.take_display());
+        let n = bytes.len() as i32;
+        DISPLAY.with(|d| *d.borrow_mut() = bytes);
+        n
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_display_ptr() -> *const u8 {
+    DISPLAY.with(|d| d.borrow().as_ptr())
+}
+
+/// Records the display path dropped, as two words, on the ring (`path` 0) or in the message
+/// queue (1): the run's log records them as `telemetry.dropped`.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_display_dropped(lo: u32, hi: u32, path: u32) -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        let records = (u64::from(hi) << 32) | u64::from(lo);
+        let path = if path == 0 {
+            DisplayPath::Ring
+        } else {
+            DisplayPath::Messages
+        };
+        c.display_dropped(records, path);
+        0
+    })
 }
 
 #[unsafe(no_mangle)]

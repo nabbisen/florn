@@ -2,8 +2,8 @@
 // module and whatever it fetched are served from the cache, with the isolation headers and the
 // policy on every cached response. florn's own code, nothing from another origin.
 "use strict";
-const CACHE = "florn-test-page-0.1";
-const FILES = ["./", "./index.html", "./page.css", "./main.js", "./worker.js", "./florn_host.wasm"];
+const CACHE = "florn-test-page-0.2";
+const FILES = ["./", "./index.html", "./page.css", "./main.js", "./worker.js", "./display.js", "./florn_host.wasm"];
 const HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",

@@ -1,5 +1,7 @@
 // A static server for the test page with the headers of RFC 005 rule 33, serving the page's
-// files at the root and the kit's scenarios under /scenarios. Test tooling only.
+// files at the root and the kit's scenarios under /scenarios. Test tooling only. With
+// `isolated: false` the isolation headers are left out, as a host that cannot set them would:
+// the page then reads the display stream from messages (rule 14).
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
@@ -14,14 +16,18 @@ const TYPES = {
   ".json": "application/json",
 };
 
-export const HEADERS = {
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Embedder-Policy": "require-corp",
+export const POLICY = {
   "Content-Security-Policy":
     "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'",
 };
+export const HEADERS = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  ...POLICY,
+};
 
-export function startServer({ www, scenarios, port = 0 }) {
+export function startServer({ www, scenarios, port = 0, isolated = true }) {
+  const headers = isolated ? HEADERS : POLICY;
   const roots = [
     ["/scenarios/", resolve(scenarios)],
     ["/", resolve(www)],
@@ -40,11 +46,11 @@ export function startServer({ www, scenarios, port = 0 }) {
       res.writeHead(200, {
         "Content-Type": TYPES[extname(file)] || "application/octet-stream",
         "Cache-Control": "no-store",
-        ...HEADERS,
+        ...headers,
       });
       res.end(data);
     } catch {
-      res.writeHead(404, HEADERS);
+      res.writeHead(404, headers);
       res.end("not found");
     }
   });

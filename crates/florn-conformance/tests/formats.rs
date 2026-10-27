@@ -109,6 +109,8 @@ const NEW_RUN: &str = "010000000003002a00000000000000";
 const ADVANCE: &str = "01000000000503e803000000000000";
 const RUN_STATE: &str = "010000000101";
 const EVENTS: &str = "010000000201";
+/// The `display` subscription of 0.2 (RFC 005 rule 14): an addition, the rest unchanged.
+const DISPLAY: &str = "010000000203";
 
 #[test]
 fn control_messages_encode_as_recorded() {
@@ -129,6 +131,11 @@ fn control_messages_encode_as_recorded() {
         ),
         ("run-state", Message::Query(Query::RunState), RUN_STATE),
         ("events", Message::Subscribe(Subscription::Events), EVENTS),
+        (
+            "display",
+            Message::Subscribe(Subscription::Display),
+            DISPLAY,
+        ),
     ] {
         let env = Envelope::new(m);
         let bytes = florn_control::encode(&env);

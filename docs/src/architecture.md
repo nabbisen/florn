@@ -8,7 +8,7 @@ One Host core compiled for the browser and for native targets; an engine adapter
 | `florn-abi` | Canonical ABI lifting and lowering over an abstract memory, strict and canonical | 002 §2 |
 | `florn-model` | The scenario manifest, quantities, identities, the canonical encoding and hash, the package | 004 |
 | `florn-admission` | Validation, the manifest sections, the estimate, the transformation with cost-model version 1, the state layout, the config encoder | 003 |
-| `florn-control` | Commands, queries, subscriptions, notifications; the catalogue of codes; the encoding over every transport | 005 §6, 007 |
+| `florn-control` | Commands, queries, subscriptions, notifications; the catalogue of codes; the encoding over every transport; the display stream's record and reduction | 005 §6, 005 rule 14, 007 |
 | `florn-host` | The run loop, the instance pool, activation with the budget before lowering, classification, quotas, export and restore, the diagnostic log, the run identity and record, the controller | 005 §4 to §6 |
 | `florn-host::domain` | The domain interface: the `Domain` trait, the registry of the Host's domains, the composed world that routes a send, a change, an intervention or an event to the domain owning the type, class or kind; the conformance kit's test domain implements it | 008 §2 |
 | `florn-engine`, `florn-engine-wasmtime`, `florn-engine-web` | The engine adapter trait and its two implementations; the benchmark drivers | 005 §2 |
@@ -16,7 +16,7 @@ One Host core compiled for the browser and for native targets; an engine adapter
 | `florn-guest`, `florn-guest-network` | The guest SDK and the example guests; the router world's bindings and `router!` | 002 §8, 008 §6 |
 | `florn-domain-network` | The network domain: links and lans over interfaces, frames with delay, serialisation, jitter and loss, the `link` and `node` interventions, the blackhole built-in, the codes, the decoders | 008 |
 | `florn-cli`, `florn` | The headless runner as a library, and the binary | 005 rule 31 |
-| `florn-ui-web` | The Host's worker module and the test page; the shell of 0.2 | 005 §7, §8 |
+| `florn-ui-web` | The Host's worker module, the display transport (the ring or messages) and the test page; the shell of 0.2 | 005 §7, §8 |
 | `florn-conformance` | The kit: scenarios with digests, the RFC verification rows, the benchmarks | AUTO-007 |
 | `florn-ui-model`, `florn-ui-scene` | Empty until 0.2 | 005 §8 |
 

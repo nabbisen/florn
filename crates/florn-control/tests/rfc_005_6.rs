@@ -127,6 +127,7 @@ fn every_message_round_trips() {
         },
         Subscription::Events,
         Subscription::Progress,
+        Subscription::Display,
     ] {
         roundtrip(Message::Subscribe(s));
     }
@@ -134,6 +135,7 @@ fn every_message_round_trips() {
         SubscriptionKind::Telemetry,
         SubscriptionKind::Events,
         SubscriptionKind::Progress,
+        SubscriptionKind::Display,
     ] {
         roundtrip(Message::Unsubscribe(k));
     }

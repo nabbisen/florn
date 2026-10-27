@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use florn_admission::{Admission, ClassLimits, ModuleManifest};
+use florn_control::display::{DisplayPath, Record as DisplayRecord, Transport};
 use florn_control::message::{
     ActorInfo, ActorSummary, CapacityInfo, ConnectionSummary, ExportPreview, FaultInfo,
     ModuleSummary, ParamSummary, PortSummary, RunStateInfo, ScenarioSummary, SupportInfo,
@@ -41,6 +42,7 @@ struct Subscriptions {
     telemetry_seen: u32,
     events: bool,
     progress: bool,
+    display: bool,
 }
 
 pub struct Controller<E: Engine> {
@@ -60,6 +62,8 @@ pub struct Controller<E: Engine> {
     subs: Subscriptions,
     log_seen: usize,
     dropped_seen: u64,
+    /// The display transport of this Host, when its front end draws (RFC 005 rule 14).
+    transport: Option<Transport>,
 }
 
 impl<E: Engine> Controller<E> {
@@ -89,6 +93,7 @@ impl<E: Engine> Controller<E> {
             subs: Subscriptions::default(),
             log_seen: 0,
             dropped_seen: 0,
+            transport: None,
         }
     }
 
@@ -137,6 +142,7 @@ impl<E: Engine> Controller<E> {
                         } => self.subs.telemetry = Some((channels, keep_one_in)),
                         Subscription::Events => self.subs.events = true,
                         Subscription::Progress => self.subs.progress = true,
+                        Subscription::Display => self.set_display(true),
                     }
                     out.push(Message::Answer(Answer::Done));
                 }
@@ -147,6 +153,7 @@ impl<E: Engine> Controller<E> {
                     SubscriptionKind::Telemetry => self.subs.telemetry = None,
                     SubscriptionKind::Events => self.subs.events = false,
                     SubscriptionKind::Progress => self.subs.progress = false,
+                    SubscriptionKind::Display => self.set_display(false),
                 }
                 out.push(Message::Answer(Answer::Done));
             }
@@ -270,6 +277,36 @@ impl<E: Engine> Controller<E> {
         let events = self.subs.events;
         self.after_advance(&mut out, events);
         out
+    }
+
+    /// The display transport this Host's front end reads from (RFC 005 rule 14); each run's
+    /// log then opens with `telemetry.transport`.
+    pub fn set_transport(&mut self, transport: Transport) {
+        self.transport = Some(transport);
+    }
+
+    fn set_display(&mut self, on: bool) {
+        self.subs.display = on;
+        if let Some(run) = &mut self.run {
+            run.set_display(on);
+        }
+    }
+
+    /// The display batch since the last take (rule 14): the front end's transport carries it.
+    /// Empty without the `display` subscription or a run.
+    pub fn take_display(&mut self) -> Vec<DisplayRecord> {
+        self.run.as_mut().map(Run::take_display).unwrap_or_default()
+    }
+
+    /// Records the display path dropped (rule 14): the transport counted them, the run's log
+    /// records them as `telemetry.dropped`, and the trace is untouched.
+    pub fn display_dropped(&mut self, records: u64, path: DisplayPath) {
+        if let (Some(run), true) = (&mut self.run, records > 0) {
+            run.notify_now(Code::TelemetryDropped.notification(
+                Scope::run(),
+                vec![Value::Count(records), Value::Enum(path.as_str().into())],
+            ));
+        }
     }
 
     fn not_now(&self, command: &str) -> florn_control::Notification {
@@ -594,7 +631,8 @@ impl<E: Engine> Controller<E> {
             return self.notify(out, self.not_now("new-run"));
         };
         let manifest = loaded.manifest.clone();
-        let options = self.options.clone();
+        let mut options = self.options.clone();
+        options.display = self.subs.display;
         let result = match replay {
             Some(record) => Run::replay(
                 engine,
@@ -631,8 +669,15 @@ impl<E: Engine> Controller<E> {
             }
         };
         match result {
-            Ok(run) => {
+            Ok(mut run) => {
                 self.log_seen = 0;
+                // The run's log says what carries its display stream (rule 14): one line.
+                if let Some(t) = self.transport {
+                    run.notify_now(
+                        Code::TelemetryTransport
+                            .notification(Scope::run(), vec![Value::Enum(t.as_str().into())]),
+                    );
+                }
                 self.run = Some(run);
                 self.state = RunState::Paused;
                 self.target = None;

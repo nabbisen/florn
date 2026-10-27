@@ -1,9 +1,10 @@
-// The Host's worker (RFC 005 rules 6 to 8, 10, 32): instantiates the Host module and holds the
-// guest instances for it. The Host reaches a guest through the imports under "florn" below and
-// through its own exported function table, which this script grows with every guest export it
-// resolves; a guest reaches the Host through the Host's exports bound as its imports; the
+// The Host's worker (RFC 005 rules 6 to 8, 10, 14, 32): instantiates the Host module and holds
+// the guest instances for it. The Host reaches a guest through the imports under "florn" below
+// and through its own exported function table, which this script grows with every guest export
+// it resolves; a guest reaches the Host through the Host's exports bound as its imports; the
 // budget global is shared by every guest and reached by the Host through the budget module.
-"use strict";
+// When the page draws, each Host tick's display batch goes out through the display transport.
+import { RECORD, createWriter } from "./display.js";
 
 // (module
 //   (import "env" "gas_counter" (global $g (mut i64)))
@@ -244,8 +245,63 @@ function words(n) {
   return [Number(b & 0xffffffffn), Number(b >> 32n)];
 }
 
-function runScenario(m) {
-  host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function sha256Hex(chunks) {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const all = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.length;
+  }
+  const digest = await crypto.subtle.digest("SHA-256", all);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// The display stream of this run (rule 14): the writer over the ring the page made, or over
+// messages; the drops the ring's writer counts go to the Host as `telemetry.dropped`, and so
+// do the queue's, which the page reports. The conformance kit's transport cell pads each
+// batch with `pad` synthetic flights so that the transport is measured at a chosen rate; the
+// Host's own records are untouched and come first.
+let display = null;
+
+function writeDisplay() {
+  if (!display) return;
+  const n = host.exports.florn_take_display();
+  let bytes = n > 0 ? hostBytes().slice(host.exports.florn_display_ptr(), host.exports.florn_display_ptr() + n) : new Uint8Array(0);
+  if (display.pad > 0) {
+    const padded = new Uint8Array(bytes.length + display.pad * RECORD);
+    padded.set(bytes, 0);
+    const v = new DataView(padded.buffer);
+    for (let i = 0; i < display.pad; i++) {
+      const at = bytes.length + i * RECORD;
+      padded[at] = 1;
+      padded[at + 1] = 0;
+      v.setUint16(at + 2, 0, true);
+      v.setFloat32(at + 4, 1, true);
+      v.setBigUint64(at + 8, BigInt(display.batches), true);
+    }
+    bytes = padded;
+  }
+  display.batches += 1;
+  display.produced += bytes.length / RECORD;
+  display.chunks.push(bytes);
+  const dropped = display.writer.write(bytes);
+  if (dropped > 0) {
+    display.dropped += dropped;
+    const [lo, hi] = words(dropped);
+    host.exports.florn_display_dropped(lo, hi, 0);
+  }
+}
+
+async function runScenario(m) {
+  const d = m.display;
+  host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, d ? (d.ring ? 1 : 2) : 0);
+  if (d) {
+    display = { writer: createWriter(d.ring, (msg, transfer) => self.postMessage(msg, transfer)), pad: d.pad || 0, batches: 0, produced: 0, dropped: 0, chunks: [] };
+  }
   const events = [];
   const collect = (r) => {
     for (const x of r || []) if (x.code) events.push(x);
@@ -263,13 +319,30 @@ function runScenario(m) {
     collect(out());
   }
   host.exports.florn_subscribe_events();
+  if (d) host.exports.florn_subscribe_display();
   const [lo, hi] = m.seed === null ? [0, 0] : words(m.seed);
   host.exports.florn_new_run(lo, hi, m.seed === null ? 0 : 1);
   collect(out());
   const t0 = performance.now();
-  host.exports.florn_advance(0xffffffff, 0xffffffff);
+  if (d) {
+    // Paced: one advance of `slice` ticks per Host tick, a batch written after each, the
+    // worker's event loop between them so that the page's messages arrive.
+    writeDisplay();
+    let to = 0;
+    for (;;) {
+      to += d.slice;
+      const [tlo, thi] = words(to);
+      host.exports.florn_advance(tlo, thi);
+      const replies = collect(out());
+      writeDisplay();
+      if (replies.some((x) => x.code === "run.ended")) break;
+      await sleep(d.period_ms);
+    }
+  } else {
+    host.exports.florn_advance(0xffffffff, 0xffffffff);
+    collect(out());
+  }
   const ms = performance.now() - t0;
-  collect(out());
   host.exports.florn_run_state();
   const state = (out() || []).find((x) => x.kind === "run-state") || {};
   host.exports.florn_support();
@@ -292,7 +365,12 @@ function runScenario(m) {
       replay = { error: "no record exported" };
     }
   }
-  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay };
+  let written = null;
+  if (display) {
+    written = { transport: display.writer.kind, batches: display.batches, produced: display.produced, dropped_by_writer: display.dropped, produced_digest: await sha256Hex(display.chunks) };
+    display = null;
+  }
+  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay, written };
 }
 
 function runBench(m) {
@@ -344,7 +422,7 @@ function runBench(m) {
   }
   if (m.kind === "handle") {
     // The transport's form with bytes that are no control message: the coded refusal.
-    host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes);
+    host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, 0);
     const junk = new Uint8Array([1, 2, 3]);
     host.exports.florn_handle(give(junk), junk.length);
     return { kind: "handle", replies: out() };
@@ -352,10 +430,16 @@ function runBench(m) {
   throw new Error("unknown benchmark " + m.kind);
 }
 
-self.onmessage = (e) => {
+self.onmessage = async (e) => {
   const m = e.data;
+  if (m.type === "display-dropped") {
+    // The page's queue let records go (rule 14): the run's log records it.
+    const [lo, hi] = words(m.records);
+    host.exports.florn_display_dropped(lo, hi, 1);
+    return;
+  }
   try {
-    const result = m.type === "scenario" ? runScenario(m) : runBench(m);
+    const result = m.type === "scenario" ? await runScenario(m) : runBench(m);
     self.postMessage({ type: "done", result });
   } catch (err) {
     self.postMessage({ type: "error", error: String((err && err.stack) || err) });

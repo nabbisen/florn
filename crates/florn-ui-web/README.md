@@ -6,8 +6,9 @@ The browser front end. In release 0.1 it is the Host's worker module and a test 
 
 | Path | What |
 |---|---|
-| `src/worker.rs` | The worker module's exports: `florn_start`, `florn_load_scenario`, `florn_load_module`, `florn_admit`, `florn_admit_kit`, `florn_new_run`, `florn_advance`, `florn_pump`, `florn_subscribe_events`, `florn_run_state`, `florn_support`, `florn_handle` (one encoded control message in), `florn_bench_crossing`, `florn_bench_cost`; replies as JSON through `florn_out_ptr` and `florn_out_len` |
-| `www/worker.js` | The worker's script: instantiates the Host module, holds the guest instances, provides the imports of `florn-engine-web` and `florn-platform-web` |
+| `src/worker.rs` | The worker module's exports: `florn_start`, `florn_load_scenario`, `florn_load_module`, `florn_admit`, `florn_admit_kit`, `florn_new_run`, `florn_advance`, `florn_pump`, `florn_subscribe_events`, `florn_run_state`, `florn_support`, `florn_handle` (one encoded control message in), `florn_subscribe_display`, `florn_take_display` (the display batch, through `florn_display_ptr`), `florn_display_dropped`, `florn_bench_crossing`, `florn_bench_cost`; replies as JSON through `florn_out_ptr` and `florn_out_len` |
+| `www/worker.js` | The worker's script (a module): instantiates the Host module, holds the guest instances, provides the imports of `florn-engine-web` and `florn-platform-web`, writes each Host tick's display batch to the transport |
+| `www/display.js` | The display transport of RFC 005 rule 14: one reader interface over the ring in shared memory (where the page is cross-origin isolated) and over one transferred message per Host tick; the page reads it once per animation frame |
 | `www/main.js`, `www/index.html`, `www/page.css` | The test page: runs one shipped scenario or one benchmark as the query says and writes the result as JSON |
 | `www/sw.js` | The service worker: the page starts offline after one visit, with the headers of RFC 005 rule 33 on every cached response |
 | `build.rs` | Exports the module's function table and lets it grow (RFC 005 rule 7) |
@@ -22,7 +23,7 @@ cp target/wasm32-unknown-unknown/release/florn_ui_web.wasm crates/florn-ui-web/w
 cd ci/browser && npm ci && node serve.js
 ```
 
-Then open `http://127.0.0.1:8765/index.html?scenario=echo-pair&seed=42`, or `?bench=crossing`, `?bench=cost`. The server sets the isolation headers and the policy of RFC 005 rule 33; `scenarios/` is served under `/scenarios`.
+Then open `http://127.0.0.1:8765/index.html?scenario=echo-pair&seed=42`, or `?bench=crossing`, `?bench=cost`; `?scenario=dv-triangle&seed=1&display=1` runs in slices and reads the display stream once per frame, reporting what was read beside what was written (`&slice=`, `&period=`, `&pad=`, `&stall=` set the kit's transport cell). The server sets the isolation headers and the policy of RFC 005 rule 33; `scenarios/` is served under `/scenarios`.
 
 The conformance kit's browser run, as CI does it (`npx playwright install` first):
 
@@ -30,4 +31,4 @@ The conformance kit's browser run, as CI does it (`npx playwright install` first
 cd ci/browser && node run.js --browsers chromium,firefox,webkit
 ```
 
-It runs every shipped scenario, compares the digests and the admitted hashes with `scenarios/digests.toml`, checks the hostile scenarios' faults, the isolation, the policy, the network log, the start from the cache offline, the transport's refusal, and prints the crossing and cost figures.
+It runs every shipped scenario, compares the digests and the admitted hashes with `scenarios/digests.toml`, checks the hostile scenarios' faults, the isolation, the policy, the network log, the start from the cache offline, the transport's refusal, the display stream over the ring and over messages (a second origin without the isolation headers), and prints the crossing, cost and display figures.

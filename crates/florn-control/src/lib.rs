@@ -8,10 +8,12 @@
 #![forbid(unsafe_code)]
 
 pub mod catalogue;
+pub mod display;
 pub mod message;
 pub mod notification;
 
 pub use catalogue::{CATALOGUE, Code, Entry, FaultCode, ParamType, ScopeKind};
+pub use display::{DisplayPath, Record as DisplayRecord, Reduced, Transport};
 pub use message::{
     Answer, CONTROL_VERSION, Command, DecodeError, Envelope, ExportKind, FileKind, Message, Pacing,
     Progress, Query, RunState, SeedChoice, Subscription, SubscriptionKind, Unit, decode, encode,

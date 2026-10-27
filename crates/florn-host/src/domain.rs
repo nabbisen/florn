@@ -20,6 +20,7 @@ use florn_abi::{Ty, Val};
 use florn_admission::config::Units;
 use florn_admission::manifest::ModuleManifest;
 use florn_admission::world::{FuncSig, ImportInterface, WorldInterfaces, WorldSpec};
+use florn_control::display::Record as DisplayRecord;
 use florn_control::{Ends, Notification};
 use florn_kernel::{Delivery, EventKey, Identity, Instant, Sink, Tick, World};
 use florn_model::manifest::{ActorKind, DomainMap, Port, domain_of};
@@ -473,6 +474,11 @@ pub struct Composite {
     seq: BTreeMap<Identity, u64>,
     /// The actors that faulted, for `deliver`.
     pub dead: BTreeSet<Identity>,
+    /// Each port's place for the display stream (RFC 005 rule 14): the connection's index in
+    /// id order and the port's index in the connection, for the ports both fit.
+    display_index: BTreeMap<(Identity, u32), (u16, u8)>,
+    /// The flights of the batch in progress, when a front end subscribed to the display stream.
+    display: Option<Vec<DisplayRecord>>,
 }
 
 impl Composite {
@@ -541,6 +547,17 @@ impl Composite {
         for d in &mut domains {
             d.compose(scenario, root_seed);
         }
+        let mut display_index = BTreeMap::new();
+        for (i, c) in scenario.connections.iter().enumerate() {
+            let Ok(connection) = u16::try_from(i) else {
+                break;
+            };
+            for (j, p) in c.ports.iter().enumerate() {
+                if let Ok(port) = u8::try_from(j) {
+                    display_index.insert((p.actor, p.port), (connection, port));
+                }
+            }
+        }
         Ok(Self {
             core: CoreWorld::from_scenario(scenario),
             domains,
@@ -553,7 +570,21 @@ impl Composite {
             class_names,
             seq: BTreeMap::new(),
             dead: BTreeSet::new(),
+            display_index,
+            display: None,
         })
+    }
+
+    /// Write the display stream's flights from now on, or stop.
+    pub fn set_display(&mut self, on: bool) {
+        self.display = on.then(Vec::new);
+    }
+    /// The flights since the last take, in order; empty when the display is off.
+    pub fn take_display(&mut self) -> Vec<DisplayRecord> {
+        self.display
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
     }
 
     pub fn core(&self) -> &CoreWorld {
@@ -634,9 +665,23 @@ impl World for Composite {
         port: u32,
         payload: &[u8],
     ) -> Vec<Delivery> {
-        match self.by_port.get(&(origin, port)) {
+        let deliveries = match self.by_port.get(&(origin, port)) {
             Some(&i) => self.domains[i].deliver(now, origin, seq, port, payload, &self.dead),
             None => self.core.deliver(now, origin, seq, port, payload),
+        };
+        // A delivery with a delay is in flight for that long (RFC 005 rule 14, `flight`).
+        if let Some(display) = &mut self.display
+            && let Some(&(connection, from)) = self.display_index.get(&(origin, port))
+        {
+            display.extend(deliveries.iter().filter(|d| d.delay > 0).map(|d| {
+                DisplayRecord::Flight {
+                    connection,
+                    port: from,
+                    delay: d.delay as f32,
+                    sent: now.tick,
+                }
+            }));
         }
+        deliveries
     }
 }
