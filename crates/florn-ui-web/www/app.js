@@ -9,6 +9,11 @@ import init, { shell_start, shell_reply, shell_frame, shell_scenario, shell_modu
 import { createReader } from "./display.js";
 
 const query = new URLSearchParams(location.search);
+// Policy violations, if any, with what was refused: the journeys read them (RFC 005 rule 34).
+const violations = [];
+document.addEventListener("securitypolicyviolation", (e) => {
+  violations.push({ directive: e.effectiveDirective, blocked: e.blockedURI, sample: e.sample, file: e.sourceFile, line: e.lineNumber });
+});
 const worker = new Worker("worker.js", { type: "module" });
 const { reader, ring, transport } = createReader();
 let shell = null;
@@ -113,7 +118,7 @@ worker.onmessage = async (e) => {
     shell = await init();
     shell_start(bridge);
     // The journeys read the shell's facts here (checklist C20).
-    window.florn = { state: () => ({ ...JSON.parse(shell_state()), replies }), downloads, transport, reader, loadLab };
+    window.florn = { state: () => ({ ...JSON.parse(shell_state()), replies }), downloads, transport, reader, loadLab, violations };
     try {
       const labs = await (await fetch("labs.txt")).text();
       shell_labs(labs);

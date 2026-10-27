@@ -61,6 +61,10 @@ async function until(page, pred, timeout = 60000, what = "condition") {
     await sleep(100);
   }
 }
+// WebKit tabs through form fields only unless the person presses Option with Tab (the
+// browser's own convention); the journeys press what a person would.
+let tabKey = "Tab";
+const violationsOf = (page) => page.evaluate(() => (window.florn && window.florn.violations) || []);
 async function openApp(context, query = "") {
   const page = await context.newPage({ viewport: { width: 1400, height: 900 } });
   const errors = [];
@@ -95,6 +99,7 @@ for (const name of browsers) {
     continue;
   }
   const context = await browser.newContext({ acceptDownloads: true });
+  tabKey = name === "webkit" ? "Alt+Tab" : "Tab";
   const foreign = new Set();
   context.on("request", (r) => {
     const u = new URL(r.url());
@@ -139,7 +144,7 @@ for (const name of browsers) {
     s = await until(page, (x) => x.state === "ended", 120000, "ended");
     j1chain = s.chain;
     check(s.chain === triangle.chain, `${name}: J1 the lab's run has the recorded digest`, { chain: s.chain });
-    check(errors.length === 0, `${name}: J1 no error in the console`, { errors: errors.slice(0, 5) });
+    check(errors.length === 0, `${name}: J1 no error in the console`, { errors: errors.slice(0, 5), violations: (await violationsOf(page)).slice(0, 5) });
     await page.close();
   } catch (err) {
     check(false, `${name}: J1`, { error: String(err).split("\n")[0] });
@@ -241,7 +246,7 @@ for (const name of browsers) {
     await page.click("#run");
     s = await until(page, (x) => x.state === "ended", 120000, "replay ended");
     check(s.replay === "replay.matched" && s.chain === j3chain, `${name}: J4 the saved scenario reloads and replays the saved run with its intervention to the same digest`, { chain: s.chain, replay: s.replay });
-    check(errors.length === 0, `${name}: J3/J4 no error in the console`, { errors: errors.slice(0, 5) });
+    check(errors.length === 0, `${name}: J3/J4 no error in the console`, { errors: errors.slice(0, 5), violations: (await violationsOf(page)).slice(0, 5) });
     await page.close();
   } catch (err) {
     check(false, `${name}: J3/J4`, { error: String(err).split("\n")[0] });
@@ -317,7 +322,7 @@ for (const name of browsers) {
     await runToEnd(page);
     s = await state(page);
     check(s.chain === triangle.chain, `${name}: J2 the authored scenario runs to the digest the runner recorded`, { chain: s.chain, expected: triangle.chain });
-    check(errors.length === 0, `${name}: J2 no error in the console`, { errors: errors.slice(0, 5) });
+    check(errors.length === 0, `${name}: J2 no error in the console`, { errors: errors.slice(0, 5), violations: (await violationsOf(page)).slice(0, 5) });
     await page.close();
   } catch (err) {
     check(false, `${name}: J2`, { error: String(err).split("\n")[0] });
@@ -355,7 +360,7 @@ for (const name of browsers) {
     const reached = { "#run": 0 };
     let presses = 0;
     for (let i = 0; i < 160 && Object.keys(reached).length < landmarks.length; i++) {
-      await page.keyboard.press("Tab");
+      await page.keyboard.press(tabKey);
       presses += 1;
       for (const l of landmarks) {
         if (reached[l] !== undefined) continue;
@@ -377,7 +382,7 @@ for (const name of browsers) {
     const f = await state(page);
     console.log(JSON.stringify({ figure: "frame", browser: name, median_ms: f.frame_median_ms, p95_ms: f.frame_p95_ms, frames: f.frames }));
     check(f.frames > 60 && f.frame_p95_ms <= 16, `${name}: the frame loop runs and drawing stays within the budget`, { p95: f.frame_p95_ms, frames: f.frames });
-    check(errors.length === 0, `${name}: rule 41 no error in the console`, { errors: errors.slice(0, 5) });
+    check(errors.length === 0, `${name}: rule 41 no error in the console`, { errors: errors.slice(0, 5), violations: (await violationsOf(page)).slice(0, 5) });
     await page.close();
   } catch (err) {
     check(false, `${name}: rule 41`, { error: String(err).split("\n")[0] });
