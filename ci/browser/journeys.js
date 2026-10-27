@@ -64,7 +64,12 @@ async function until(page, pred, timeout = 60000, what = "condition") {
 async function openApp(context, query = "") {
   const page = await context.newPage({ viewport: { width: 1400, height: 900 } });
   const errors = [];
-  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  page.on("console", (m) => {
+    if (m.type() === "error") {
+      const l = m.location() || {};
+      errors.push(`${m.text()} (${l.url || ""}:${l.lineNumber || 0})`);
+    }
+  });
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.goto(`${origin}/index.html${query}`);
   await page.waitForFunction(() => window.florn && window.florn.state().admitted >= 2, null, { timeout: 60000 });
@@ -343,11 +348,11 @@ for (const name of browsers) {
     await page.click("#pause");
     await until(page, (x) => x.state === "paused", 10000, "paused");
     await sleep(500);
-    // Keyboard: from the top of the page (a click on the title sets the starting point there),
-    // every landmark's first control within the bound.
-    await page.click("header h1");
+    // Keyboard: from the first control of the page, every landmark's first control within the
+    // bound (WebKit does not wrap the Tab order around the page, so the start is explicit).
+    await page.focus("#run");
     const landmarks = ["#run", "#lang-en", "button.lab", "#actors button", "#authoring-title", "#topology", "#inspector-fields input, #select-world", "#timeline button"];
-    const reached = {};
+    const reached = { "#run": 0 };
     let presses = 0;
     for (let i = 0; i < 160 && Object.keys(reached).length < landmarks.length; i++) {
       await page.keyboard.press("Tab");

@@ -41,7 +41,7 @@ function pickFile(kind) {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = kind === "module" ? ".wasm" : kind === "record" ? ".florn-run,.zip" : ".toml,.florn";
-  input.style.display = "none";
+  input.hidden = true;
   input.addEventListener("change", async () => {
     const f = input.files && input.files[0];
     if (f) shell_file(kind, new Uint8Array(await f.arrayBuffer()));
