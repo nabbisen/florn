@@ -271,6 +271,21 @@ for (const name of browsers) {
     const { page, errors } = await openApp(context);
     await page.click("#authoring-title");
     await page.click("#new-draft");
+    // RFC 006 C15: text typed into the scenario is rendered as text, never as markup or script.
+    const markup = "<b>bold</b><script>alert(1)</script>";
+    await page.fill("#draft-name", markup);
+    await page.press("#draft-name", "Tab");
+    await page.fill("#draft-end", "3000ns");
+    await page.press("#draft-end", "Tab");
+    await page.fill("#place-ports", "2");
+    await page.click('button.place[data-module="distance-vector"]');
+    await page.click("#apply-draft");
+    await sleep(400);
+    const shownName = await page.textContent("#scenario-name");
+    const markupNodes = await page.locator("#scenario-name b, #scenario-name script, header b, header script").count();
+    const violationsBefore = (await state(page)).violations;
+    check(shownName === markup && markupNodes === 0, `${name}: J2 a scenario named with markup renders as text (RFC 006 C15)`, { shown: shownName, nodes: markupNodes, violations: violationsBefore });
+    await page.click("#new-draft");
     await page.fill("#draft-name", "triangle");
     await page.press("#draft-name", "Tab");
     await page.fill("#draft-end", "3000");
@@ -364,6 +379,10 @@ for (const name of browsers) {
     await page.click("#lang-en");
     await sleep(200);
     check((await page.textContent("#actors-title")) === "Actors" && (await page.inputValue("#actor-period")) === "250n", `${name}: and back, with the text still there`);
+    // RFC 006 C12: the status line shows the version and the origin the application was loaded from.
+    const about = await page.textContent("#status-about");
+    const version = (about.match(/florn (\d+\.\d+\.\d+)/) || [])[1];
+    check(version !== undefined && about.includes(new URL(page.url()).host), `${name}: the status line shows the version and the origin (RFC 006 C12)`, { about, version });
     await page.click("#pause");
     await until(page, (x) => x.state === "paused", 10000, "paused");
     await sleep(500);

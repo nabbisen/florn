@@ -19,7 +19,7 @@ root = 1
 memory = "2MiB"
 
 [modules.ospf]
-sha256 = "cb5e26a49c3e7dde3d16ae7d4d8151a747f0ef16e56c09160e80f657b626fa48"
+sha256 = "61bef461f1af90dbd38cd77e92f60cfea4a712501414336c3077aa00b9ff158c"
 contract = "florn:network/router@0.1.0"
 
 [[actors]]

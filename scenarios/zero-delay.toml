@@ -19,7 +19,7 @@ root = 1
 memory = "2MiB"
 
 [modules.pinger]
-sha256 = "795b41b1ad7331e07f3bcbfc05ca635ad5cc92090921f457db9549f4af631ef9"
+sha256 = "779a18caaff5a00adf49df6a226ce2a635e81cbc955c9f3f8d6a12af1d35bc3b"
 contract = "florn:core/guest@0.1.0"
 
 [[actors]]

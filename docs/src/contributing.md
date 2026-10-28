@@ -23,14 +23,17 @@ cargo run --release -p florn-conformance -- scenarios
 
 Even a formatting change to a guest changes its bytes (panic locations), so the kit's test would otherwise fail. The release profile strips symbols; a change to the profile changes the modules too.
 
-The browser run needs Node and the Playwright browsers:
+The browser run needs Node, the Playwright browsers and the wasm-bindgen command of the version the shell pins:
 
 ```sh
-cargo build --release --target wasm32-unknown-unknown -p florn-ui-web
-cp target/wasm32-unknown-unknown/release/florn_ui_web.wasm crates/florn-ui-web/www/florn_host.wasm
+cargo install --locked wasm-bindgen-cli --version 0.2.126
+ci/build-shell.sh
 cd ci/browser && npm ci && npx playwright install --with-deps chromium firefox webkit
-node run.js --browsers chromium,firefox,webkit
+node run.js --browsers chromium,firefox,webkit          # the kit under the browser Host
+node journeys.js --browsers chromium,firefox,webkit     # the journeys through the application
 ```
+
+`ci/check-shell-exports.sh` keeps the shell on the control interface alone, and `cargo test -p florn-ui-web --features shell` checks the catalogues.
 
 Fuzzing needs the nightly toolchain and `cargo-fuzz`; `ci/fuzz.sh 60` runs every target for a minute. The weekly CI job runs them for three minutes each.
 
@@ -45,4 +48,4 @@ Fuzzing needs the nightly toolchain and `cargo-fuzz`; `ci/fuzz.sh 60` runs every
 
 ## Publishing to crates.io
 
-The crates people consume and their dependency chain are publishable: `florn` (the runner), `florn-guest` (the SDK), and the library crates between them; the kit, the browser crates, the UI crates and the test guests are not. `ci/publish.sh --dry-run` packages and verifies every publishable crate in dependency order; `ci/publish.sh` publishes them with the owner's token after `cargo login`. A release's crates are published from the release's commit, with the version the tag names; the SDK's readme then names the registry form of the dependency. crates.io admits a burst of five new crates and one more every ten minutes after that; when a first publication stops there, `cargo publish --workspace` will not resume past the crates already present, so the rest are published one at a time with `cargo publish -p <crate> --locked` in dependency order. A new version of an existing crate is not counted against that limit.
+The crates people consume and their dependency chain are publishable: `florn` (the runner), `florn-guest` and `florn-guest-network` (the SDKs), `florn-domain-network` and the library crates between them; the kit, the browser crates, the UI crates and the test guests are not. `ci/publish.sh --dry-run` packages and verifies every publishable crate in dependency order; `ci/publish.sh` publishes them with the owner's token after `cargo login`. A release's crates are published from the release's commit, with the version the tag names; the SDK's readme then names the registry form of the dependency. crates.io admits a burst of five new crates and one more every ten minutes after that; when a first publication stops there, `cargo publish --workspace` will not resume past the crates already present, so the rest are published one at a time with `cargo publish -p <crate> --locked` in dependency order. A new version of an existing crate is not counted against that limit.

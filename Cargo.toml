@@ -8,37 +8,38 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
 authors = ["nabbisen"]
 repository = "https://github.com/nabbisen/florn"
 rust-version = "1.99"
-# No release exists yet. Publication is decided with the first pre-release (roadmap, release 0.1).
+# The crates people consume and their dependency chain set `publish = true` and are on crates.io;
+# the kit, the browser crates, the UI crates and the test guests inherit this and stay private.
 publish = false
 
 [workspace.dependencies]
 # Internal crates
-florn-kernel = { path = "crates/florn-kernel", version = "0.1.0" }
-florn-abi = { path = "crates/florn-abi", version = "0.1.0" }
-florn-model = { path = "crates/florn-model", version = "0.1.0" }
-florn-admission = { path = "crates/florn-admission", version = "0.1.0" }
-florn-control = { path = "crates/florn-control", version = "0.1.0" }
-florn-host = { path = "crates/florn-host", version = "0.1.0" }
-florn-engine = { path = "crates/florn-engine", version = "0.1.0" }
-florn-engine-wasmtime = { path = "crates/florn-engine-wasmtime", version = "0.1.0" }
-florn-engine-web = { path = "crates/florn-engine-web", version = "0.1.0" }
-florn-platform = { path = "crates/florn-platform", version = "0.1.0" }
-florn-platform-native = { path = "crates/florn-platform-native", version = "0.1.0" }
-florn-platform-web = { path = "crates/florn-platform-web", version = "0.1.0" }
-florn-guest = { path = "crates/florn-guest", version = "0.1.0" }
-florn-guest-network = { path = "crates/florn-guest-network", version = "0.1.0" }
-florn-domain-network = { path = "crates/florn-domain-network", version = "0.1.0" }
-florn-conformance = { path = "crates/florn-conformance", version = "0.1.0" }
-florn-cli = { path = "crates/florn-cli", version = "0.1.0" }
+florn-kernel = { path = "crates/florn-kernel", version = "0.2.0" }
+florn-abi = { path = "crates/florn-abi", version = "0.2.0" }
+florn-model = { path = "crates/florn-model", version = "0.2.0" }
+florn-admission = { path = "crates/florn-admission", version = "0.2.0" }
+florn-control = { path = "crates/florn-control", version = "0.2.0" }
+florn-host = { path = "crates/florn-host", version = "0.2.0" }
+florn-engine = { path = "crates/florn-engine", version = "0.2.0" }
+florn-engine-wasmtime = { path = "crates/florn-engine-wasmtime", version = "0.2.0" }
+florn-engine-web = { path = "crates/florn-engine-web", version = "0.2.0" }
+florn-platform = { path = "crates/florn-platform", version = "0.2.0" }
+florn-platform-native = { path = "crates/florn-platform-native", version = "0.2.0" }
+florn-platform-web = { path = "crates/florn-platform-web", version = "0.2.0" }
+florn-guest = { path = "crates/florn-guest", version = "0.2.0" }
+florn-guest-network = { path = "crates/florn-guest-network", version = "0.2.0" }
+florn-domain-network = { path = "crates/florn-domain-network", version = "0.2.0" }
+florn-conformance = { path = "crates/florn-conformance", version = "0.2.0" }
+florn-cli = { path = "crates/florn-cli", version = "0.2.0" }
 florn-test-guests = { path = "crates/florn-test-guests" }
-florn-ui-model = { path = "crates/florn-ui-model", version = "0.1.0" }
-florn-ui-scene = { path = "crates/florn-ui-scene", version = "0.1.0" }
+florn-ui-model = { path = "crates/florn-ui-model", version = "0.2.0" }
+florn-ui-scene = { path = "crates/florn-ui-scene", version = "0.2.0" }
 # External, pinned (implementation handoff section 2); added to a crate only by the PR that needs it
 wit-parser = "=0.261.0"
 toml = "=1.1.8"

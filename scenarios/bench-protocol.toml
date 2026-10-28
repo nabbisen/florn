@@ -19,11 +19,11 @@ root = 1
 memory = "2MiB"
 
 [modules.pinger]
-sha256 = "795b41b1ad7331e07f3bcbfc05ca635ad5cc92090921f457db9549f4af631ef9"
+sha256 = "779a18caaff5a00adf49df6a226ce2a635e81cbc955c9f3f8d6a12af1d35bc3b"
 contract = "florn:core/guest@0.1.0"
 
 [modules.bench_protocol]
-sha256 = "f053e9d010c2ad7d6b1a65693f4b95532e4f5b845d7f7130087a65db3ad01913"
+sha256 = "71aa813f95f7edab48ce1e7883f2d7ef71654426c01fe44fb693808404fd0810"
 contract = "florn:core/guest@0.1.0"
 
 [[actors]]

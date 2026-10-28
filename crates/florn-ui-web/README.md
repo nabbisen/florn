@@ -1,6 +1,6 @@
 # florn-ui-web
 
-The browser front end. In release 0.1 it is the Host's worker module and a test page; the shell of RFC 005 section 8 follows in 0.2.
+The browser front end: the Host's worker module, the application (the shell of RFC 005 section 8, since 0.2.0) and the kit's page.
 
 ## What is here
 
@@ -16,15 +16,17 @@ The browser front end. In release 0.1 it is the Host's worker module and a test 
 | `www/sw.js` | The service worker: the page starts offline after one visit, with the headers of RFC 005 rule 33 on every cached response |
 | `build.rs` | Exports the module's function table and lets it grow (RFC 005 rule 7) |
 
-The module uses no `wasm-bindgen`: its surface is a few C functions, and the guests are reached without a JavaScript value in between (see `florn-engine-web`). The shell of 0.2 will use `wasm-bindgen` on the main thread.
+The module uses no `wasm-bindgen`: its surface is a few C functions, and the guests are reached without a JavaScript value in between (see `florn-engine-web`). The shell uses `wasm-bindgen` on the main thread and reaches the Host through `florn_handle` only.
 
 ## Running the page
 
 ```sh
-cargo build --release --target wasm32-unknown-unknown -p florn-ui-web
-cp target/wasm32-unknown-unknown/release/florn_ui_web.wasm crates/florn-ui-web/www/florn_host.wasm
+cargo install --locked wasm-bindgen-cli --version 0.2.126   # once
+ci/build-shell.sh
 cd ci/browser && npm ci && node serve.js
 ```
+
+The application is `http://127.0.0.1:8765/`; the kit's page is `kit.html`:
 
 Then open `http://127.0.0.1:8765/index.html?scenario=echo-pair&seed=42`, or `?bench=crossing`, `?bench=cost`; `?scenario=dv-triangle&seed=1&display=1` runs in slices and reads the display stream once per frame, reporting what was read beside what was written (`&slice=`, `&period=`, `&pad=`, `&stall=` set the kit's transport cell). The server sets the isolation headers and the policy of RFC 005 rule 33; `scenarios/` is served under `/scenarios`.
 

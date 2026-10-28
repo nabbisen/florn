@@ -31,7 +31,7 @@ fn core_wit_equals_rfc_002() {
 /// RFC 008 rule 15: the network contract's file equals the RFC's block.
 #[test]
 fn network_wit_equals_rfc_008() {
-    let rfc = std::fs::read_to_string(root().join("rfcs/accepted/008-network-domain.md"))
+    let rfc = std::fs::read_to_string(root().join("rfcs/done/008-network-domain.md"))
         .or_else(|_| std::fs::read_to_string(root().join("rfcs/done/008-network-domain.md")))
         .unwrap();
     let file =

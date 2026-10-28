@@ -41,9 +41,7 @@ _None at present._
 
 ### Accepted
 
-| ID | Title | Accepted | Implemented by |
-|----|-------|----------|----------------|
-| 008 | [Network domain: how a domain enters the Host, links, frames, the router contract, the guest ladder](./accepted/008-network-domain.md) | 2026-10-24 | Release 0.2 |
+_None at present._
 
 ### Implemented
 
@@ -57,7 +55,7 @@ _None at present._
 | 005 | [Host architecture: one core, adapters, control interface, repository layout](./done/005-host-architecture.md) | 0.1.0 (accepted 2026-10-14) |
 | 006 | [Security baseline for the browser Host](./done/006-security-baseline-browser-host.md) | 0.1.0 (accepted 2026-10-14) |
 | 007 | [Error model and internationalisation](./done/007-error-model-and-internationalisation.md) | 0.1.0 (accepted 2026-10-14) |
-| 000 | [RFC lifecycle policy](./done/000-rfc-lifecycle-policy.md) | 0.1.0 (accepted Project start) |
+| 008 | [Network domain: how a domain enters the Host, links, frames, the router contract, the guest ladder](./done/008-network-domain.md) | 0.2.0 (accepted 2026-10-24) |
 
 ### Archive
 

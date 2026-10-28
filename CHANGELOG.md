@@ -4,6 +4,10 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
+The network learning lab (Phase 2 of the roadmap): the network domain, the router contract, the guest ladder ending in an OSPF subset, and the browser application in English and Japanese. The release notes with the figures, the security review and the file hashes are `docs/src/releases/0.2.0.md` and the GitHub release.
+
 ### Added
 - RFC 008, the network domain, accepted on 2026-10-24; its Phase 2 handoff package under `rfcs/handoffs/008-network-domain/` (PR-15 to PR-22, release 0.2.0).
 - The domain interface (RFC 008 §2, PR-15): the `Domain` trait of `florn-host` with a composed world dispatching by port type, domain events, scheduled changes and interventions of a domain's kinds routed to the domain, built-in actors run by their domain with `metered = 0`, a domain's imports answered inside an activation, its units in the config, its state in checkpoints. `Run` and `Controller` take the Host's `Domains`. A table of flat call shapes in `florn-abi`, shared by admission and both engine adapters: a world function outside it is refused at admission (`module.export-unsupported`). The conformance kit's test domain and the RFC 008 interface tests.

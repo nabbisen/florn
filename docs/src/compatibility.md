@@ -2,22 +2,25 @@
 
 What is stable from which version, and what a newer florn does with older files (requirement PKG-006). Before 1.0.0 a minor version may change a contract; this page says what that means for each artefact.
 
-| Artefact | Version field | In 0.1.0 | What a newer florn does with an older one |
-|---|---|---|---|
-| Guest contract `florn:core` | The WIT package version, `florn:core@0.1.0` | 0.1.0 | A guest is admitted only against the exact contract version its sections name (RFC 002 rule 21); a Host supporting several versions lists them in `module.contract-unsupported` |
-| Module manifest | `florn-module = 1` | 1 | A newer schema is refused with `module.manifest-schema`; schema 1 stays readable through 1.0 |
-| Scenario manifest | `florn = 1` | 1 | A newer schema is refused with `manifest.schema-version`; schema 1 stays readable through 1.0 |
-| Package `.florn` | `florn-package = 1` in `package.toml` | 1 | As the scenario manifest |
-| Run record `.florn-run` | `run-record = 1` in `run.toml` | 1 | A record of a newer version is refused with `file.unreadable` naming the version; version 1 stays readable through 1.0 |
-| Trace records | The run record's version | 1 | As the run record; the encodings are frozen by the kit's format tests |
-| Checkpoint | `CHECKPOINT_VERSION` 1 | 1 | Refused with `checkpoint.mismatch` naming the field |
-| Control interface | `control` 1 | 1 | A front end and a Host of different versions refuse each other with `control.version` |
-| Admission and cost model | Recorded in every run record | 1 and 1 | A run recorded under one version replays under that version; a run under another version is refused with `checkpoint.mismatch` (`admission-version`, `cost-model`) |
-| Diagnostic log codes | The catalogue of RFC 007 section 4 | — | A code is never reused and never changes meaning; a retired code stays in the catalogue; an unknown code renders as `message.unknown` with its parameters |
+| Artefact | Version field | In 0.1.0 | In 0.2.0 | What a newer florn does with an older one |
+|---|---|---|---|---|
+| Guest contract `florn:core` | The WIT package version, `florn:core@0.1.0` | 0.1.0 | 0.1.0 | A guest is admitted only against the exact contract version its sections name (RFC 002 rule 21); a Host supporting several versions lists them in `module.contract-unsupported` |
+| Router contract `florn:network` | The WIT package version, `florn:network@0.1.0` | — | 0.1.0 | As `florn:core`; the router world includes the core world, so a core-only guest is admitted by a network scenario and a router by no other domain |
+| Module manifest | `florn-module = 1` | 1 | 1 (the domain tables `[network]` are new fields of schema 1, ignored by a 0.1.0 Host) | A newer schema is refused with `module.manifest-schema`; schema 1 stays readable through 1.0 |
+| Scenario manifest | `florn = 1` | 1 | 1 (a connection's `type`, the domain attributes, `classes` and `changes` are new fields of schema 1; a 0.1.0 Host refuses a manifest naming a domain it lacks) | A newer schema is refused with `manifest.schema-version`; schema 1 stays readable through 1.0 |
+| Package `.florn` | `florn-package = 1` in `package.toml` | 1 | 1 | As the scenario manifest |
+| Run record `.florn-run` | `run-record = 1` in `run.toml` | 1 | 1 | A record of a newer version is refused with `file.unreadable` naming the version; version 1 stays readable through 1.0 |
+| Trace records | The run record's version | 1 | 1 (domain events are a record kind of version 1) | As the run record; the encodings are frozen by the kit's format tests |
+| Checkpoint | `CHECKPOINT_VERSION` 1 | 1 | 1 | Refused with `checkpoint.mismatch` naming the field |
+| Control interface | `control` 1 | 1 | 1 (the `decode` and `payload` queries, the `display` subscription and the summaries' new fields are additions; a 0.1.0 Host refuses the additions as unknown, a 0.2.0 front end reads a 0.1.0 Host's answers) | A front end and a Host of different versions refuse each other with `control.version` |
+| Display stream | `display` record version | — | 1 | A reader of a newer version refuses the stream before reading a record |
+| Admission and cost model | Recorded in every run record | 1 and 1 | 1 and 1 | A run recorded under one version replays under that version; a run under another version is refused with `checkpoint.mismatch` (`admission-version`, `cost-model`) |
+| Diagnostic log codes | The catalogue of RFC 007 section 4 | — | — | A code is never reused and never changes meaning; a retired code stays in the catalogue; an unknown code renders as `message.unknown` with its parameters |
 
 Rules:
 
 - A trace digest is comparable across releases only when every recorded input version is equal; the run record carries them so that a comparison can say why two digests differ.
-- The SDK's public items (`declare!`, `Actor`, `host`, `Random`, the encoders) follow semantic versioning of the `florn-guest` crate; before 1.0 a minor version may change them, and the release notes say so.
+- The SDK's public items (`declare!`, `Actor`, `host`, `Random`, the encoders) follow semantic versioning of the `florn-guest` crate; before 1.0 a minor version may change them, and the release notes say so. 0.2.0 adds the optional `tables` entry of `declare!` and the `florn-guest-network` crate; a guest written for 0.1.0 builds unchanged.
+- The SDK writes its own version into the module manifest it generates, so the same source built against another SDK version is another module by hash; the trace digests do not depend on it.
 - The shipped scenarios' digests are regenerated by a release that changes any recorded input, and the change is named in the release notes.
 - Nothing is removed from a file format within a major version; fields are added with a version step.

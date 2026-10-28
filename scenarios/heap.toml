@@ -19,7 +19,7 @@ root = 1
 memory = "4MiB"
 
 [modules.heap]
-sha256 = "83eb6a8203a2f05e646d0c852ea3fb38447516ef213e437dccf937f3fb2b7878"
+sha256 = "9ae5330162aeb97e4dda65ea0ca453968e303a5f2b2095025778b68a48d4a460"
 contract = "florn:core/guest@0.1.0"
 
 [[actors]]

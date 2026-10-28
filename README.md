@@ -17,7 +17,7 @@ florn is a local-first platform for executable testbeds. The logic under test �
 
 ## Status
 
-Release 0.1.0: the core on two Hosts. A deterministic kernel, module admission with limits, a guest SDK for Rust, a headless runner, a browser test page, and a conformance kit whose scenarios give one digest on x86-64, AArch64, Apple Silicon, Chromium, Firefox and WebKit, checked in continuous integration on every push. The next release, 0.2.0, is a network learning lab with a browser interface. See [ROADMAP.md](./ROADMAP.md) and the [release notes](./docs/src/releases/0.1.0.md).
+Release 0.2.0: the network learning lab. On the core of 0.1.0 (a deterministic kernel, module admission with limits, a guest SDK for Rust, a headless runner, a conformance kit whose scenarios give one digest on x86-64, AArch64, Apple Silicon, Chromium, Firefox and WebKit), the network domain with links and lans, a router contract and a ladder of guests ending in an OSPF subset, and a browser application in English and Japanese that shows a topology, a timeline and inspectors, lets a person build a topology and break a link during a run, and replays what happened. The next release, 0.3.0, adds checkpoints, backward navigation and the import of a user's module. See [ROADMAP.md](./ROADMAP.md) and the [release notes](./docs/src/releases/0.2.0.md).
 
 ## Quick start
 
@@ -27,7 +27,9 @@ cargo install florn
 florn run scenarios/echo-pair.toml --modules scenarios/modules --seed 42
 ```
 
-The `chain` line is the digest of the run; `scenarios/digests.toml` records what it must be. `cargo test -p florn-conformance` runs the whole kit. To write a guest of your own, start with the [module author's chapter](./docs/src/module-authors.md) and the SDK's template in [`crates/florn-guest`](./crates/florn-guest/README.md); to script runs, the [automation chapter](./docs/src/automation.md). The browser application and the kit's page are described in [`crates/florn-ui-web`](./crates/florn-ui-web/README.md) and the [interface chapter](./docs/src/interface.md).
+The `chain` line is the digest of the run; `scenarios/digests.toml` records what it must be. `cargo test -p florn-conformance` runs the whole kit. To write a guest of your own, start with the [module author's chapter](./docs/src/module-authors.md) and the SDK's template in [`crates/florn-guest`](./crates/florn-guest/README.md); to script runs, the [automation chapter](./docs/src/automation.md).
+
+The browser application is the release's `florn-app-0.2.0.tar.gz`, served under the headers the [interface chapter](./docs/src/interface.md) names, or built from a checkout with `ci/build-shell.sh`; the [learning lab](./docs/src/lab.md) is the place to start. 日本語の手引きは[こちら](./docs/src/ja/interface.md)。
 
 ## Design notes
 

@@ -9,7 +9,7 @@ The Rust toolchain with the guest target, and the `florn` runner:
 ```sh
 rustup target add wasm32-unknown-unknown
 cargo install florn                    # from crates.io, or
-cargo install --git https://github.com/nabbisen/florn --tag 0.1.0 florn
+cargo install --git https://github.com/nabbisen/florn --tag 0.2.0 florn
 cargo install --path crates/florn      # from a checkout of florn
 ```
 
@@ -20,8 +20,8 @@ cargo install --path crates/florn      # from a checkout of florn
 The SDK's readme (`crates/florn-guest/README.md`) carries a complete template: a `Cargo.toml` of a `cdylib` crate depending on `florn-guest`, and a `src/lib.rs` with one declaration and one `impl Actor`. The dependency is written in one of two forms:
 
 ```toml
-florn-guest = "0.1.0"                                                         # from crates.io
-florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.1.0" }   # pinned to the tag
+florn-guest = "0.2.0"                                                         # from crates.io
+florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.2.0" }   # pinned to the tag
 florn-guest = { path = "../florn/crates/florn-guest" }                        # from a checkout
 ```
 
@@ -150,8 +150,8 @@ A guest of the network domain (RFC 008) speaks the router world, `florn:network/
 
 ```toml
 [dependencies]
-florn-guest = "0.1.0"
-florn-guest-network = "0.1.0"
+florn-guest = "0.2.0"
+florn-guest-network = "0.2.0"
 ```
 
 ```rust

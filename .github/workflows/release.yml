@@ -1,7 +1,8 @@
 # The release (RFC 006 rules 5 and 8; RFC 005 rule 35): on a tag, the runner for three targets,
-# the test page bundle with the Host's worker module, and the SHA-256 of every file, published
-# as a GitHub release with the notes of docs/src/releases/<tag>.md. Only GitHub's own actions
-# and the gh command line are used.
+# the browser application as a bundle (the shell, the Host's worker module, the kit's page and
+# the shipped scenarios) to serve at an immutable versioned path, and the SHA-256 of every file,
+# published as a GitHub release with the notes of docs/src/releases/<tag>.md. Only GitHub's own
+# actions and the gh command line are used.
 
 name: release
 
@@ -37,35 +38,36 @@ jobs:
           name: runner-${{ matrix.triple }}
           path: florn-${{ github.ref_name }}-${{ matrix.triple }}
 
-  page:
-    name: test page
+  app:
+    name: browser application
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
         run: rustup target add wasm32-unknown-unknown
-      - name: Build the worker module and bundle the page with the scenarios
+      - name: wasm-bindgen (the shell's bindings; the version the crate pins)
+        run: cargo install --locked wasm-bindgen-cli --version 0.2.126
+      - name: Build the worker module and the shell, and bundle the application with the scenarios
         run: |
-          cargo build --locked --release --target wasm32-unknown-unknown -p florn-ui-web
-          mkdir -p bundle/florn-test-page-${GITHUB_REF_NAME}
-          cp -r crates/florn-ui-web/www/. bundle/florn-test-page-${GITHUB_REF_NAME}/
-          cp target/wasm32-unknown-unknown/release/florn_ui_web.wasm bundle/florn-test-page-${GITHUB_REF_NAME}/florn_host.wasm
-          mkdir -p bundle/florn-test-page-${GITHUB_REF_NAME}/scenarios
-          cp scenarios/*.toml bundle/florn-test-page-${GITHUB_REF_NAME}/scenarios/
-          cp -r scenarios/modules bundle/florn-test-page-${GITHUB_REF_NAME}/scenarios/
-          (cd bundle/florn-test-page-${GITHUB_REF_NAME} && find . -type f | sort | xargs sha256sum) > bundle/florn-test-page-${GITHUB_REF_NAME}.files.sha256
-          tar -C bundle -czf florn-test-page-${GITHUB_REF_NAME}.tar.gz florn-test-page-${GITHUB_REF_NAME}
-          cp bundle/florn-test-page-${GITHUB_REF_NAME}.files.sha256 .
+          ci/build-shell.sh
+          mkdir -p bundle/florn-app-${GITHUB_REF_NAME}
+          cp -r crates/florn-ui-web/www/. bundle/florn-app-${GITHUB_REF_NAME}/
+          mkdir -p bundle/florn-app-${GITHUB_REF_NAME}/scenarios
+          cp scenarios/*.toml bundle/florn-app-${GITHUB_REF_NAME}/scenarios/
+          cp -r scenarios/modules bundle/florn-app-${GITHUB_REF_NAME}/scenarios/
+          (cd bundle/florn-app-${GITHUB_REF_NAME} && find . -type f | sort | xargs sha256sum) > bundle/florn-app-${GITHUB_REF_NAME}.files.sha256
+          tar -C bundle -czf florn-app-${GITHUB_REF_NAME}.tar.gz florn-app-${GITHUB_REF_NAME}
+          cp bundle/florn-app-${GITHUB_REF_NAME}.files.sha256 .
       - uses: actions/upload-artifact@v4
         with:
-          name: page
+          name: app
           path: |
-            florn-test-page-${{ github.ref_name }}.tar.gz
-            florn-test-page-${{ github.ref_name }}.files.sha256
+            florn-app-${{ github.ref_name }}.tar.gz
+            florn-app-${{ github.ref_name }}.files.sha256
 
   publish:
     name: publish
-    needs: [runner, page]
+    needs: [runner, app]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +79,7 @@ jobs:
         run: |
           cd assets
           sha256sum florn-* > SHA256SUMS
-          cat florn-test-page-${GITHUB_REF_NAME}.files.sha256 >> SHA256SUMS
+          cat florn-app-${GITHUB_REF_NAME}.files.sha256 >> SHA256SUMS
           cd ..
           { cat "docs/src/releases/${GITHUB_REF_NAME}.md"; echo; echo "## SHA-256 of the assets and of the files inside the page bundle"; echo; echo '```'; cat assets/SHA256SUMS; echo '```'; } > notes.md
       - name: Publish

@@ -4,8 +4,8 @@ The guest SDK for the router world of RFC 008 (`florn:network@0.1.0`): the core 
 
 ```toml
 [dependencies]
-florn-guest = "0.1.0"
-florn-guest-network = "0.1.0"
+florn-guest = "0.2.0"
+florn-guest-network = "0.2.0"
 ```
 
 The module author's chapter of the documentation has the network section.

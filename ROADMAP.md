@@ -19,7 +19,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 |---|---|---|---|
 | Stage 0 | Foundation | Decisions, proofs of concept, foundational RFCs, revised specifications. No product code. | — |
 | Phase 1 | Core on two engines | Deterministic kernel, module admission, guest SDK, headless runner. One guest with an identical trace on both engines. **Released 2026-10-20.** | 0.1.0 |
-| Phase 2 | Network learning lab | Network domain, first protocol guests, browser UI in two languages. | 0.2.0 |
+| Phase 2 | Network learning lab | Network domain, first protocol guests, browser UI in two languages. **Released 2026-10-29.** | 0.2.0 |
 | Phase 3 | Depth | Checkpoints, backward navigation, branching, import of user modules, a second protocol family. | 0.3.0 |
 | Phase 4 | Circuit and control | Second domain. Tests whether the core is neutral. | 0.4.0 |
 | Phase 5 | Finance | Third domain. Tests the core under high event volume. | 0.5.0 |
