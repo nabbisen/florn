@@ -26,4 +26,4 @@ Independent of the order above: PR-18 may follow PR-15 directly; PR-19 may start
 | PR-19 | merged | `503adae`, 2026-10-27 | C19 pending |
 | PR-20 | merged | `ffab1d0` with the WebKit follow-ups to `36d926f`, 2026-10-28 | C20 pending |
 | PR-21 | merged | `7da82d1`, 2026-10-28 | C21 pending |
-| PR-22 | not started | | |
+| PR-22 | merged; 0.2.0 tagged | `72be8d5` then `eec5400`, 2026-10-29; dispatched CI run 40775621596 green; tag `0.2.0`: release workflow run 40781942771 green | C22 pending |
