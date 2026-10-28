@@ -78,6 +78,50 @@ fn dv(id: u32, period: u64, infinity: u64) -> crate::scenario::Actor {
         .with("infinity", infinity.to_string())
 }
 
+/// An OSPF router with `hello` ticks between hellos and `dead` ticks before a silent
+/// neighbour is down, in `area`.
+fn ospf(id: u32, interfaces: u32, hello: u64, dead: u64, area: u64) -> crate::scenario::Actor {
+    let mut a = router(id, "ospf", interfaces)
+        .with("hello", format!("\"{hello}ns\""))
+        .with("dead", format!("\"{dead}ns\""));
+    if area != 0 {
+        a = a.with("area", area.to_string());
+    }
+    a
+}
+
+/// The learning lab of NET-010 (RFC 008 rule 21): four OSPF routers in a ring with a costly
+/// chord r1-r3, hellos every 50 ticks, a neighbour dead after 200; the link r2-r3 breaks at
+/// 1500 and is repaired at 3000, so that the adjacencies form, the database floods, the
+/// routes converge, reroute the long way or over the chord, and converge back.
+pub fn ospf_lab() -> Scenario {
+    Scenario::new("ospf-lab", 4_500)
+        .domain("network")
+        .actor(ospf(1, 3, 50, 200, 0))
+        .actor(ospf(2, 2, 50, 200, 0))
+        .actor(ospf(3, 3, 50, 200, 0))
+        .actor(ospf(4, 2, 50, 200, 0))
+        .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")])
+        .link("network/link", &[(2, 1), (3, 0)], &[("delay", "\"2ns\"")])
+        .change(1_500, &[("enabled", "false")])
+        .change(3_000, &[("enabled", "true")])
+        .link("network/link", &[(3, 1), (4, 0)], &[("delay", "\"2ns\"")])
+        .link("network/link", &[(4, 1), (1, 1)], &[("delay", "\"2ns\"")])
+        .link("network/link", &[(1, 2), (3, 2)], &[("delay", "\"2ns\"")])
+        .per_port((1, 2), &[("cost", "5")])
+        .per_port((3, 2), &[("cost", "5")])
+}
+
+/// A scenario with a feature outside the subset (checklist C21): r2 is in area 1, so it logs
+/// its refusal and stays idle while the run goes on; r1 keeps saying hello.
+pub fn ospf_outside() -> Scenario {
+    Scenario::new("ospf-outside", 600)
+        .domain("network")
+        .actor(ospf(1, 1, 50, 200, 0))
+        .actor(ospf(2, 1, 50, 200, 1))
+        .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")])
+}
+
 /// The triangle of RFC 008 §12 (NET-012): three routers, the link r1-r2 down at 1000 and up at
 /// 2000, so that the routes converge, reroute through r3 and converge back.
 pub fn dv_triangle(period: u64) -> Scenario {
@@ -228,6 +272,9 @@ fn definitions() -> Vec<Shipped> {
                 .link("network/link", &[(2, 1), (3, 0)], &[("delay", "\"2ns\"")])
                 .link("network/link", &[(3, 1), (4, 0)], &[("delay", "\"2ns\"")]),
         ),
+        // The OSPF subset (RFC 008 rule 21): the learning lab, and a router outside the subset.
+        normal(ospf_lab()),
+        normal(ospf_outside()),
         // The blackhole built-in drops every frame and reports the count.
         normal(
             Scenario::new("net-blackhole", 200)

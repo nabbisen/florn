@@ -28,6 +28,7 @@ pub const SDK: &[&str] = &[
     "clock",
     "net_echo",
     "distance_vector",
+    "ospf",
 ];
 
 /// The workspace root.

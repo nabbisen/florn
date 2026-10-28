@@ -187,5 +187,11 @@
  "label.inspector.fault": "{code} at tick {at} after {metered} units of work",
  "label.authoring.place": "Place {module}",
  "label.authoring.problems": "{count} problems",
- "label.interventions.applied_at": "applied at tick {at}"
+ "label.interventions.applied_at": "applied at tick {at}",
+ "lab.ospf-lab.title": "OSPF: a ring with a chord",
+ "lab.ospf-lab.story": "Four routers in a ring, r1 to r4, with a costly chord between r1 and r3. Every 50 ticks each router says hello on its interfaces; a neighbour that hears itself named becomes full, floods its router-LSA with a sequence number, and acknowledges what it receives. Watch the neighbour reports go full, the updates flood in the timeline, and the routes appear in each inspector: r1 reaches r3 the short way round, not over the chord that costs 5. At tick 1,500 the link between r2 and r3 breaks: after the dead interval of 200 ticks both routers withdraw the adjacency, re-originate their LSAs, and the routes to the far side move to the long way or the chord. At 3,000 the link is repaired and the routes come back.",
+ "lab.ospf-lab.try": "Try: take the link between r3 and r4 down from its inspector and watch r4 reach the others over r1; take r2 down and watch its LSA age out of the others' routes; replay the run and see the same digest.",
+ "lab.dv-triangle.title": "Distance vector: a triangle",
+ "lab.dv-triangle.story": "Three routers advertise their tables every 100 ticks with split horizon. The link between r1 and r2 breaks at 1,000 and is repaired at 2,000: watch the routes reconverge through r3 and back.",
+ "lab.dv-triangle.try": "Try: take a link down during the run and compare with the scheduled change; step one event at a time around the break."
 }

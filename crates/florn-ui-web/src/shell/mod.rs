@@ -95,6 +95,8 @@ pub struct Shared {
     /// 0 unknown, 1 available offline, 2 not available.
     pub offline: RwSignal<u8>,
     pub labs: RwSignal<Vec<Lab>>,
+    /// The lab opened last, whose story the labs panel shows.
+    pub lab: RwSignal<Option<String>>,
     pub step_unit: RwSignal<StepUnit>,
     pub speed: RwSignal<u64>,
     dirty: Rc<Cell<bool>>,
@@ -165,6 +167,7 @@ impl Shared {
         self.update(|vm| vm.set_speed(pacing));
     }
     pub fn load_lab(&self, name: &str) {
+        self.lab.set(Some(name.to_string()));
         self.bridge.load_lab(name);
     }
     pub fn pick_file(&self, kind: &str) {
@@ -489,6 +492,7 @@ pub fn shell_start(bridge: Bridge) {
         frame: RwSignal::new((0.0, 0.0)),
         offline: RwSignal::new(0),
         labs: RwSignal::new(Vec::new()),
+        lab: RwSignal::new(None),
         step_unit: RwSignal::new(StepUnit::Event),
         speed: RwSignal::new(1_000),
         dirty: Rc::new(Cell::new(false)),

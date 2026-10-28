@@ -17,7 +17,7 @@ Then open `http://127.0.0.1:8765/`. The server sets the isolation headers and th
 | Area | What it holds |
 |---|---|
 | Header | The scenario's name; Run, Pause, Step with its unit, Speed, Reset, Go to; the language; the status line: the run's state, the instant, the interventions, the transport notice, dropped records, the limiting factor, the measured draw time, the offline state, the version and origin |
-| Learning labs and files | The bundled scenarios; open and save a scenario, import a module, export a run record after a preview, replay a run record |
+| Learning labs and files | The bundled scenarios, the OSPF lab first, each with a story of what to watch and the interventions to try; open and save a scenario, import a module, export a run record after a preview, replay a run record |
 | Actors | Every actor by name, one Tab stop, arrow keys inside, Enter selects: the canvas's twin |
 | Scenario | Authoring: place actors from the palette, connect ports, set attributes and parameters, schedule changes, apply; every problem at its field, the Host's refusals included |
 | Topology | The actors and connections; messages in flight; a link down is dashed and a faulted actor is a cross; drag, wheel and keys pan and zoom; a click selects |

@@ -11,7 +11,7 @@ use crate::guests;
 /// world for the rest.
 pub fn contract_of(module: &str) -> &'static str {
     match module {
-        "net_echo" | "distance_vector" => "florn:network/router@0.1.0",
+        "net_echo" | "distance_vector" | "ospf" => "florn:network/router@0.1.0",
         _ => "florn:core/guest@0.1.0",
     }
 }

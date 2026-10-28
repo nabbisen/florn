@@ -80,8 +80,21 @@ fn both_catalogues_cover_every_code_and_enumeration_exactly() {
         .filter(|k| k.starts_with("label."))
         .collect();
     assert!(!labels.is_empty());
+    // The learning labs' stories (`lab.<name>.title`, `.story`, `.try`): the same in both.
+    let labs: BTreeSet<String> = keys(&en)
+        .into_iter()
+        .filter(|k| k.starts_with("lab."))
+        .collect();
+    assert!(labs.iter().any(|k| k == "lab.ospf-lab.story"));
+    for k in &labs {
+        assert!(
+            k.ends_with(".title") || k.ends_with(".story") || k.ends_with(".try"),
+            "{k}: a lab key is a title, a story or a try"
+        );
+    }
     let mut all = expected.clone();
     all.extend(labels.iter().cloned());
+    all.extend(labs.iter().cloned());
     assert_eq!(
         keys(&en),
         all,

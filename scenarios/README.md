@@ -46,4 +46,6 @@ The `zero-delay` scenario ends with the run fault of RFC 001 rule 13 by design; 
 | `net-blackhole` | RFC 008 §12: the `network/blackhole` built-in drops every frame and reports the count, with `metered = 0` |
 | `dv-triangle` | RFC 008 rule 20 (NET-012): three distance-vector routers; the link r1-r2 down at 1000 and up at 2000; the routes converge, reroute through r3 and converge back within three periods |
 | `dv-chain` | RFC 008 rule 20: four distance-vector routers in a line with `infinity = 3`; the far ends never install each other |
+| `ospf-lab` | RFC 008 rule 21 (NET-004, NET-010), the learning lab: four OSPF routers in a ring with a costly chord r1-r3, hellos every 50 ticks and a dead interval of 200; the link r2-r3 down at 1500 and up at 3000; the adjacencies go full, the LSAs flood, the routes take the short way, reroute after the dead interval and come back |
+| `ospf-outside` | RFC 008 rule 21: r2 is in area 1, outside the subset; it logs its refusal and stays idle while r1 keeps saying hello |
 | `bench-protocol`, `bench-compute` | The kernel-path benchmarks of RFC 005 section 11 |

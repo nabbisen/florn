@@ -26,3 +26,7 @@ crate-type = ["cdylib"]
 [[example]]
 name = "distance_vector"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "ospf"
+crate-type = ["cdylib"]

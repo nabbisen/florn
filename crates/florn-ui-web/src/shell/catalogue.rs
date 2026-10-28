@@ -85,6 +85,11 @@ pub fn label(lang: Lang, key: &str, values: &[(&str, String)]) -> String {
     out
 }
 
+/// A learning lab's text (`lab.<name>.<part>`), or nothing when the lab has none.
+pub fn lab_text(lang: Lang, name: &str, part: &str) -> Option<String> {
+    lookup(lang, &format!("lab.{name}.{part}"))
+}
+
 /// An enumeration value's text, or the value itself when the set has none.
 pub fn enum_text(lang: Lang, set: &str, value: &str) -> String {
     lookup(lang, &format!("enum.{set}.{value}")).unwrap_or_else(|| value.replace('-', " "))

@@ -40,6 +40,9 @@ function parseDigests(text) {
 }
 const digests = parseDigests(await readFile(join(root, "scenarios/digests.toml"), "utf8"));
 const triangle = digests.runs["dv-triangle"];
+// The learning lab of NET-010: four OSPF routers in a ring with a chord (RFC 008 rule 21).
+const LAB = "ospf-lab";
+const lab = digests.runs[LAB];
 
 const { server, origin } = await startServer({ www: join(root, "crates/florn-ui-web/www"), scenarios: join(root, "scenarios"), port: parseInt(arg("--port", "0"), 10) });
 let failures = 0;
@@ -89,9 +92,9 @@ async function openApp(context, query = "") {
   await page.waitForFunction(() => window.florn && window.florn.state().admitted >= 2, null, { timeout: 60000 });
   return { page, errors };
 }
-async function openLab(page, name) {
+async function openLab(page, name, nodes = 4) {
   await page.click(`button.lab[data-lab="${name}"]`);
-  await until(page, (s) => s.state === "ready" && s.nodes === 3, 30000, `lab ${name} ready`);
+  await until(page, (s) => s.state === "ready" && s.nodes === nodes, 30000, `lab ${name} ready`);
 }
 async function runToEnd(page, speed = "0") {
   await page.selectOption("#speed", speed);
@@ -123,9 +126,10 @@ for (const name of browsers) {
   let j1chain = null;
   try {
     const { page, errors } = await openApp(context);
-    await openLab(page, "dv-triangle");
+    await openLab(page, LAB);
     let s = await state(page);
-    check(s.nodes === 3 && s.links === 3 && s.timeline >= 2, `${name}: J1 the lab opens with its topology and its scheduled changes`, { nodes: s.nodes, links: s.links, timeline: s.timeline });
+    const storyText = await page.textContent("#lab-story");
+    check(s.nodes === 4 && s.links === 5 && s.timeline >= 2 && storyText.length > 200, `${name}: J1 the lab opens with its topology, its scheduled changes and its story`, { nodes: s.nodes, links: s.links, timeline: s.timeline, story: storyText.length });
     // Slowly first (a frame's flight is a few ticks: at 100 ticks per second it crosses a
     // batch boundary and is drawn in flight), then at the lab's pace.
     await page.selectOption("#speed", "100");
@@ -150,10 +154,10 @@ for (const name of browsers) {
     const reports = await page.textContent('dd[data-fact="reports"]');
     check(reports.includes("route") && reports.includes("prefix="), `${name}: J1 the inspector shows the router's routes`, { reports: reports.slice(0, 120) });
     const label = await page.getAttribute("#topology", "aria-label");
-    check(label.includes("3") && (await page.textContent("#topology-description")).length > 20, `${name}: J1 the canvas has its description and the actors list is its twin`);
-    s = await until(page, (x) => x.state === "ended", 120000, "ended");
+    check(label.includes("4") && label.includes("5") && (await page.textContent("#topology-description")).length > 20, `${name}: J1 the canvas has its description and the actors list is its twin`, { label });
+    s = await until(page, (x) => x.state === "ended", 180000, "ended");
     j1chain = s.chain;
-    check(s.chain === triangle.chain, `${name}: J1 the lab's run has the recorded digest`, { chain: s.chain });
+    check(s.chain === lab.chain, `${name}: J1 the lab's run has the recorded digest`, { chain: s.chain, expected: lab.chain });
     await consoleCheck(page, errors, `${name}: J1 no error of the application in the console`);
     await page.close();
   } catch (err) {
@@ -163,10 +167,10 @@ for (const name of browsers) {
   // J3 (AC-009): a link taken down during the run; stepping; a frame inspected; export; replay.
   try {
     const { page, errors } = await openApp(context);
-    await openLab(page, "dv-triangle");
+    await openLab(page, LAB);
     await page.selectOption("#speed", "1000");
     await page.click("#run");
-    await until(page, (x) => x.instant >= 300, 30000, "at 300");
+    await until(page, (x) => x.instant >= 600, 30000, "at 600");
     await page.click("#pause");
     await until(page, (x) => x.state === "paused", 10000, "paused");
     // Select the link r2-r3 from the timeline's scheduled change target? Select by the canvas's twin: the connection inspector through hit testing is the canvas's; the keyboard path is the actors list. The link is selected by clicking its middle on the canvas.
@@ -197,7 +201,7 @@ for (const name of browsers) {
     check(s.handled >= before + 3, `${name}: J3 stepping advances one event at a time`, { before, after: s.handled });
     // Inspect a frame: an activation of the frame class with a send, from the timeline.
     await page.click("#run");
-    await until(page, (x) => x.instant >= 900, 60000, "at 900");
+    await until(page, (x) => x.instant >= 1200, 60000, "at 1200");
     await page.click("#pause");
     await until(page, (x) => x.state === "paused", 10000, "paused");
     await page.click('input.kind-filter[data-kind="activation"]');
@@ -249,7 +253,7 @@ for (const name of browsers) {
     const j3chain = s.chain;
     const [chooser2] = await Promise.all([page.waitForEvent("filechooser"), page.click("#open-scenario")]);
     await chooser2.setFiles(scenarioPath);
-    await until(page, (x) => x.state === "ready" && x.nodes === 3, 20000, "scenario reloaded");
+    await until(page, (x) => x.state === "ready" && x.nodes === 4, 20000, "scenario reloaded");
     const [chooser3] = await Promise.all([page.waitForEvent("filechooser"), page.click("#replay-record")]);
     await chooser3.setFiles(recordPath);
     await until(page, (x) => x.state === "paused", 20000, "replay of the saved run started");
@@ -342,7 +346,7 @@ for (const name of browsers) {
   // control is reached by keyboard within a bound; the frame budget is measured.
   try {
     const { page, errors } = await openApp(context);
-    await openLab(page, "dv-triangle");
+    await openLab(page, "dv-triangle", 3);
     await page.selectOption("#speed", "100");
     await page.click("#run");
     await until(page, (x) => x.state === "running", 10000, "running");
@@ -403,10 +407,10 @@ for (const name of browsers) {
   try {
     await context.setOffline(true);
     const { page } = await openApp(context);
-    await openLab(page, "dv-triangle");
+    await openLab(page, LAB);
     const offline = await page.textContent("#status-offline");
     const s = await state(page);
-    check(s.nodes === 3 && s.offline === 1 && /offline/i.test(offline), `${name}: the application starts offline and says so`, { offline, nodes: s.nodes });
+    check(s.nodes === 4 && s.offline === 1 && /offline/i.test(offline), `${name}: the application starts offline and says so`, { offline, nodes: s.nodes });
     const isolated = await page.evaluate(() => self.crossOriginIsolated === true);
     check(isolated, `${name}: the cached application is cross-origin isolated`);
     await page.close();

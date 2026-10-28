@@ -260,9 +260,16 @@ fn Header(shared: Shared) -> impl IntoView {
 fn Labs(shared: Shared) -> impl IntoView {
     let i18n = use_i18n();
     let labs = shared.labs;
+    let lab = shared.lab;
     let rev = shared.rev;
     let sv = StoredValue::new_local(shared.clone());
     let focused = RwSignal::new(0usize);
+    let story = move |part: &'static str| {
+        let lang = lang_of(i18n.get_locale());
+        lab.get()
+            .and_then(|n| catalogue::lab_text(lang, &n, part))
+            .unwrap_or_default()
+    };
     let preview = move || -> Option<ExportPreview> {
         rev.track();
         sv.with_value(|s| s.read(|vm| vm.preview.clone()).flatten())
@@ -275,11 +282,17 @@ fn Labs(shared: Shared) -> impl IntoView {
                 <For each=move || labs.get().into_iter().enumerate() key=|(_, l)| l.name.clone() children=move |(i, lab)| {
                     let name = lab.name.clone();
                     let (attr, label, target) = (name.clone(), name.clone(), name);
+                    let title = move || catalogue::lab_text(lang_of(i18n.get_locale()), &label, "title").unwrap_or_else(|| label.clone());
                     view! {
-                        <li><button type="button" class="lab" data-lab=attr tabindex=tabindex(focused, i) on:focus=move |_| focused.set(i) on:click=move |_| sv.with_value(|s| s.load_lab(&target))>{label}</button></li>
+                        <li><button type="button" class="lab" data-lab=attr tabindex=tabindex(focused, i) on:focus=move |_| focused.set(i) on:click=move |_| sv.with_value(|s| s.load_lab(&target))>{title}</button></li>
                     }
                 }/>
             </ol>
+            <div class="story" id="lab-story">
+                <h3 id="lab-title">{move || story("title")}</h3>
+                <p>{move || story("story")}</p>
+                <p class="help">{move || story("try")}</p>
+            </div>
             <h2>{t!(i18n, files.title)}</h2>
             <p class="help">{t!(i18n, files.cache_note)}</p>
             <div class="buttons">

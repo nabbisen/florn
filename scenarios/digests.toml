@@ -19,6 +19,7 @@ hostile_loop = "89738c1f8e65a10dce07e9267c14d91903adf39c430395c3c931c73eb502806d
 hostile_recurse = "f3b3c91977b8df941e6d8531fd319a12580ba988dc17b0c2839a7e82b0907a9f"
 hostile_wasi = "f316050b550e92559ba7ed3a3a35b4166653aac2040301c67b441b0b3dde55df"
 net_echo = "8b499081bc13e1fca3b9c2a287126ae2cf10378db6cda1d05e389b55cc01a989"
+ospf = "cb5e26a49c3e7dde3d16ae7d4d8151a747f0ef16e56c09160e80f657b626fa48"
 pinger = "795b41b1ad7331e07f3bcbfc05ca635ad5cc92090921f457db9549f4af631ef9"
 probe = "12adbdf3f4bbddf4aa218e9e588a78c07e34f10ce863b38817586d4024aff04a"
 timers = "a0a13139d9f7ca37ac3b891ca4c8e2628f92edbc08d39d25f38c394f2b22feb4"
@@ -37,6 +38,7 @@ hostile_grow = "7bbb6d4849ca5ca7d6cf1bc47a5d57e410ff678fc6c2978bd6ad4e5e6f24af0b
 hostile_loop = "16589d828c3dbe6bacb9b1c5e7503d1853b81c34b81ac2dc2ad37f1ede6526cf"
 hostile_recurse = "5e53bdc618fcc3a3e306e07f6aff7d5ea5a28cf4e2f5fa9e8383d0151b2c8c8d"
 net_echo = "8babd43901afc01b493a2b5de2748a938f61db00891ac7038fd960a00f79ba1a"
+ospf = "99f1e080f4be37ceecdf11afec5de886387446d08dd6a7e7fbb97cb6f25de4f1"
 pinger = "cf31165a214541d85fe7bad86b073e0e3a1af440d867e0f055fa9b51094bb409"
 probe = "b29ca035a02560bb2d9c577664b1a7a0c65fa39c0d7a8ce38bd1863dc71d8359"
 timers = "d1ee9a12c5d9339e35a901fd68d48f694bdd9f0adb4e8417c8b0740c8c1f2f68"
@@ -147,6 +149,18 @@ ended = "end-reached"
 seed = 1
 chain = "4575d9dd2bd0de372fbacd1600047f4b10eedd8d1a564019c631d31d29df59a7"
 records = 18985
+ended = "end-reached"
+
+[runs."ospf-lab"]
+seed = 1
+chain = "39036cc517aede5789d86678994374b4996c59d1139c00d52ec28caa25b8807b"
+records = 1438
+ended = "end-reached"
+
+[runs."ospf-outside"]
+seed = 1
+chain = "33a78cdcf9db20a984c22f7b2723dedc73c22a6f349a29a51a2626294b8ae9e3"
+records = 36
 ended = "end-reached"
 
 [runs."race-by-identity"]
