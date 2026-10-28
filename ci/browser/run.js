@@ -250,8 +250,36 @@ for (const name of browsers) {
   // Rules 32 and 35: a start from the service worker's cache, offline, with the headers. The
   // last scenario's files were fetched under the service worker's control, so they are cached.
   try {
-    await context.setOffline(true);
+    // The cache is complete before the connection is cut: the service worker's installation is
+    // atomic, and a page under its control sees every file of the list in the cache. WebKit on a
+    // loaded runner has reached this point with the worker not yet in control.
     const s = scenarios[scenarios.length - 1];
+    const warm = await context.newPage();
+    try {
+      await warm.goto(`${origin}/kit.html`);
+      await warm.evaluate(async () => {
+        await navigator.serviceWorker.ready;
+      });
+      if (!(await warm.evaluate(() => navigator.serviceWorker.controller !== null))) await warm.reload();
+      const need = await warm.evaluate(async (s) => {
+        const need = ["/florn_host.wasm", `/scenarios/${s}.toml`];
+        const text = await (await fetch(`scenarios/${s}.toml`)).text();
+        for (const m of text.matchAll(/^\[modules\.([A-Za-z0-9_-]+)\]/gm)) need.push(`/scenarios/modules/${m[1]}.wasm`);
+        for (const f of need) await fetch(f.slice(1));
+        return need;
+      }, s);
+      await warm.waitForFunction(async (need) => {
+        if (!navigator.serviceWorker.controller) return false;
+        const have = new Set();
+        for (const n of await caches.keys()) {
+          for (const k of await (await caches.open(n)).keys()) have.add(new URL(k.url).pathname);
+        }
+        return ["/kit.html", "/main.js", "/page.css", "/worker.js", "/display.js", ...need].every((f) => have.has(f));
+      }, need, { timeout: 60000, polling: 250 });
+    } finally {
+      await warm.close();
+    }
+    await context.setOffline(true);
     const r = await open(`scenario=${s}&seed=${digests.runs[s].seed}`, 300000);
     check(r.chain === digests.runs[s].chain, `${name}: the page starts offline from the cache`, { chain: r.chain, error: r.error });
     check(r.isolated === true, `${name}: the cached responses carry the headers`);

@@ -145,6 +145,9 @@ pub struct Topology {
     /// In id order, as the display stream indexes them.
     pub links: Vec<Link>,
     pub flights: Vec<Flight>,
+    /// Every flight the display stream has reported in this run, arrived or not: a count
+    /// a script can read where a flight of a few ticks is gone between two looks.
+    pub flights_seen: u64,
     /// The tick the Host reached (every event before it is handled), from the display stream.
     pub instant: u64,
     pub viewport: Viewport,
@@ -183,6 +186,7 @@ impl Topology {
                 .collect(),
             links,
             flights: Vec::new(),
+            flights_seen: 0,
             instant: 0,
             viewport: Viewport::default(),
         }
@@ -200,6 +204,7 @@ impl Topology {
             l.up = true;
         }
         self.flights.clear();
+        self.flights_seen = 0;
         self.instant = 0;
     }
 
@@ -244,12 +249,15 @@ impl Topology {
                     port,
                     delay,
                     sent,
-                } => self.flights.push(Flight {
-                    connection,
-                    port,
-                    sent,
-                    delay,
-                }),
+                } => {
+                    self.flights_seen += 1;
+                    self.flights.push(Flight {
+                        connection,
+                        port,
+                        sent,
+                        delay,
+                    });
+                }
                 Record::Activity {
                     actor,
                     count,

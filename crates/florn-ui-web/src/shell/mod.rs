@@ -421,7 +421,7 @@ pub fn shell_state() -> String {
                 })
                 .collect();
             format!(
-                "{{\"state\":{},\"now\":{},\"instant\":{},\"handled\":{},\"records\":{},\"chain\":{},\"seed\":{},\"ended\":{},\"replay\":{},\"transport\":{},\"dropped\":{},\"nodes\":{},\"links\":{},\"links_down\":{},\"faulted\":{},\"flights\":{},\"selected\":{},\"timeline\":{},\"routes\":{},\"neighbours\":{},\"interventions\":{},\"applied\":{},\"notices\":{},\"draft_problems\":{},\"draft_errors\":{},\"admitted\":{},\"frame_median_ms\":{},\"frame_p95_ms\":{},\"frames\":{},\"offline\":{},\"positions\":{{{}}},\"codes\":[{}]}}",
+                "{{\"state\":{},\"now\":{},\"instant\":{},\"handled\":{},\"records\":{},\"chain\":{},\"seed\":{},\"ended\":{},\"replay\":{},\"transport\":{},\"dropped\":{},\"nodes\":{},\"links\":{},\"links_down\":{},\"faulted\":{},\"flights\":{},\"flights_seen\":{},\"selected\":{},\"timeline\":{},\"routes\":{},\"neighbours\":{},\"interventions\":{},\"applied\":{},\"notices\":{},\"draft_problems\":{},\"draft_errors\":{},\"admitted\":{},\"frame_median_ms\":{},\"frame_p95_ms\":{},\"frames\":{},\"offline\":{},\"positions\":{{{}}},\"codes\":[{}]}}",
                 js_str(vm.run.state.as_str()),
                 vm.run.now.map_or("null".into(), |a| a.tick.to_string()),
                 vm.topology.instant,
@@ -438,6 +438,7 @@ pub fn shell_state() -> String {
                 d.links_down,
                 d.faulted,
                 d.flights,
+                vm.topology.flights_seen,
                 d.selected.as_deref().map_or("null".into(), js_str),
                 vm.timeline.entries.len(),
                 routes,

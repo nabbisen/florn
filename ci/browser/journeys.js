@@ -136,16 +136,10 @@ for (const name of browsers) {
     await page.click("#run");
     s = await until(page, (x) => x.state === "running" && x.instant > 10, 30000, "running");
     check(s.state === "running", `${name}: J1 the run runs at the chosen speed`, { instant: s.instant });
-    const sawFlights = await (async () => {
-      for (let i = 0; i < 200; i++) {
-        const x = await state(page);
-        if (x.flights > 0) return true;
-        if (x.state === "ended") break;
-        await sleep(50);
-      }
-      return false;
-    })();
-    check(sawFlights, `${name}: J1 frames move on the topology while it runs`);
+    // A flight of two ticks lasts 20 ms at this speed: the shell counts every flight it was
+    // shown, so the check does not depend on catching one between two looks.
+    s = await until(page, (x) => x.flights_seen > 0 || x.state === "ended", 20000, "a flight");
+    check(s.flights_seen > 0, `${name}: J1 frames move on the topology while it runs`, { flights_seen: s.flights_seen });
     await page.selectOption("#speed", "1000");
     s = await until(page, (x) => x.routes >= 4 && x.neighbours >= 2, 60000, "routes in the timeline");
     check(s.routes >= 4 && s.neighbours >= 2, `${name}: J1 neighbours form and routes converge in the timeline`, { routes: s.routes, neighbours: s.neighbours });
