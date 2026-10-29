@@ -184,7 +184,7 @@ fn exports(bytes: &[u8]) -> Vec<(String, wasmparser::ExternalKind)> {
 /// cost-model version 1. A change to any pass, to the library, or to the guest changes it; that is
 /// the point (RFC 003 rule 10). Update only with a new admission version.
 const RECORDED_ADMITTED_HASH: &str =
-    "4575dd3408bac722eae0d9bb7a5cdf92a9e2be6cd59b2810e610547fb6aa0ee5";
+    "dbbad3fbc533446c8c57ef73a67b95929e9cd7f0790256f508501c19bbfd84e9";
 
 #[test]
 fn the_good_guest_is_admitted_and_the_hash_is_recorded() {
@@ -195,7 +195,7 @@ fn the_good_guest_is_admitted_and_the_hash_is_recorded() {
         .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(a.source_sha256, sha256(&source));
     assert_eq!(a.admission_version, 1);
-    assert_eq!(a.cost_model_version, 1);
+    assert_eq!(a.cost_model_version, florn_admission::COST_MODEL_VERSION);
     assert_eq!(a.manifest.kind, "echo");
     assert_eq!(a.world, WorldSpec::core());
     assert_eq!(a.memory_initial_pages, 2);

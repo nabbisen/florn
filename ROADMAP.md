@@ -117,7 +117,7 @@ POC-2 measured the cost of deterministic metering at 2–4× on guest execution,
 | 1 | RFC 003, Stage 0 | The admission step and a versioned cost model are specified. The cost-model version and its table are part of the run identity. |
 | 2 | Phase 1, 0.1.0 | The conformance kit carries a cost benchmark (protocol-style and compute-style guests, metered against unmetered, on every supported engine). Its figures appear in the notes of every minor release. |
 | 3 | Phase 3, 0.3.0 | florn's own metering pass, charging per function entry and loop back-edge, replaces the library pass as cost-model version 2. Target: at most 1.5× protocol-style, 2× compute-style. Earlier runs replay under their recorded version. **Implemented 2026-10-29 (PR-24)**; the figures of every engine decide step 4. |
-| 4 | Phase 3 review | If the target is missed, the owner decides again with the measured figures. |
+| 4 | Phase 3 review | If the target is missed, the owner decides again with the measured figures. **Decided 2026-10-29**: met on every engine but Chromium's compute-style guest (2.99×, down from 8.31×); version 2 is the default everywhere. |
 
 ## 1.0.0 — Stable contracts
 

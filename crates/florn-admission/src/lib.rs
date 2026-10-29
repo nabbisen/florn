@@ -29,9 +29,10 @@ pub use world::WorldSpec;
 /// The admission version (RFC 003 rule 10): the passes of rule 7 in their order with
 /// `fvm-wasm-instrument` 0.4.
 pub const ADMISSION_VERSION: u32 = 1;
-/// The cost-model version new runs default to (RFC 003 rules 14 and 15; RFC 010 rule 9): the
-/// Host keeps every published version, and a run names its own.
-pub const COST_MODEL_VERSION: u32 = 1;
+/// The cost-model version new runs default to (RFC 003 rules 14 and 15; RFC 010 rule 9, the
+/// owner's decision of 2026-10-29 on the figures): the Host keeps every published version, and
+/// a run names its own.
+pub const COST_MODEL_VERSION: u32 = 2;
 /// The published cost-model versions.
 pub const COST_MODEL_VERSIONS: [u32; 2] = [1, 2];
 pub use meter::COST_MODEL_V2_TABLE;

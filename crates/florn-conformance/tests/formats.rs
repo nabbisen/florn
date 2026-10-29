@@ -183,9 +183,9 @@ fn control_messages_encode_as_recorded() {
     complete();
 }
 
-const RUN_TOML: &str = "2f9e7a06763c765b31ff3e5bde77a605eeba92123e21d69328a1c22f741b5a5c";
+const RUN_TOML: &str = "b5067636665393f4946d6091605a1e4bcfe27ad83a17e32a4f70011299c46709";
 // Version 2 since 0.3.0 (RFC 009 rule 1): the origins' sequence counters joined the layout.
-const CHECKPOINT: &str = "f6621db80a93e8ecf15e5a8036ff8999ac248da905f4bab1e5d5a4566aa25eb4";
+const CHECKPOINT: &str = "6dd48fef2cf8dbd71519b2a5439b7da9a3eb603958a0144e7bb59c6da5da89c6";
 const ENTRIES: &str = "README.md diagnostic.bin diagnostic.log payloads/<64-hex-digest> run.toml trace/0.bin trace/1.bin";
 
 /// A fixed run of the hand-written guests under a fixed platform: its `run.toml` (with the

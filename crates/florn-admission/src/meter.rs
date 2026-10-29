@@ -301,9 +301,12 @@ impl Reencode for Pass {
         imports: &mut ImportSection,
         section: wasmparser::ImportSectionReader<'_>,
     ) -> Result<(), reencode::Error<Self::Error>> {
+        // After the module's own imports, as the library places it: the one imported global
+        // is global 0 either way, and the import order is the same under both versions.
+        reencode::utils::parse_import_section(self, imports, section)?;
         imports.import(BUDGET_IMPORT_MODULE, BUDGET_IMPORT_NAME, budget_global());
         self.seen_import = true;
-        reencode::utils::parse_import_section(self, imports, section)
+        Ok(())
     }
 
     /// A module without imports gets an import section for the budget global, before the

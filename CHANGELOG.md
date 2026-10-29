@@ -10,6 +10,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - Checkpoints (RFC 009 section 2, PR-23): the Host takes one every 10,000 handled events at the next boundary and on the `checkpoint` command, keeps them under a memory budget by thinning the older ones (the newest eight always), lists them (`checkpoints`), restores one in place (`restore`: the trace after its instant discarded, the interventions after it undone and said with `run.rewound`, re-applied by a replay), exports one as a `.florn-checkpoint` file after the preview, and starts a run from such a file (`load-checkpoint`) with the identity checked field by field; the file is bounded by the maxima of RFC 006 section 7. The runner gains `resume` and `run --checkpoint-at --checkpoint-out`; the kit proves a checkpoint crosses the Hosts both ways in CI. The codes `checkpoint.taken`, `checkpoint.budget`, `run.rewound`.
 
 ### Changed
+- New runs default to cost-model version 2 on every Host (RFC 010 rule 9, the owner's decision of 2026-10-29 on the figures); version 1 stays for replay and `--cost-model 1`. The shipped `[admitted]` hashes are version 2's; the recorded digests of the hostile scenarios whose fault is a stack fault or a trap changed with the version (a trap is metered without the local's remainder), every other digest stands.
 - The checkpoint encoding is version 2: it carries the composed world's sequence counters per domain origin, without which a restored run ordered equal-time events otherwise. Version 1 was never written to a file.
 
 ### Fixed
