@@ -37,7 +37,7 @@ use crate::domain::{
 use crate::identity::{EndReason, Environment, ModuleInput, RunInputs, RunToml};
 use crate::log::DiagnosticLog;
 use crate::record::Contents;
-use crate::snapshot::{ActorState, Checkpoint, CheckpointIdentity};
+use crate::snapshot::{ActorState, Checkpoint, CheckpointIdentity, SparseBytes};
 use crate::world::{CLASS_TIMER, Intervention};
 
 /// The SHA-256 of module bytes as hexadecimal: the module identity (RFC 004 rule 16).
@@ -211,7 +211,7 @@ fn size_of_checkpoint(c: &Checkpoint) -> u64 {
     let actors: u64 = c
         .actors
         .values()
-        .map(|a| a.memory.len() as u64 + 32 * (a.globals.len() + a.tables.len()) as u64 + 64)
+        .map(|a| a.memory.stored() as u64 + 32 * (a.globals.len() + a.tables.len()) as u64 + 64)
         .sum();
     let kernel = 64 * c.kernel.queue.len() as u64
         + 64 * c.kernel.actors.len() as u64
@@ -314,10 +314,8 @@ const ON_TIMER: usize = 2;
 struct Slot<E: Engine> {
     instance: Option<E::Instance>,
     /// The actor's state while it is not resident (RFC 009 rule 13): what a fresh instance
-    /// receives before its next activation. The kernel's part is the kernel's, not this. The
-    /// memory is kept to its last non-zero byte with its full length beside: a guest's memory
-    /// is mostly zeros, and thousands of swapped actors must fit the Host's own memory.
-    swapped: Option<(ActorState, usize)>,
+    /// receives before its next activation. The kernel's part is the kernel's, not this.
+    swapped: Option<ActorState>,
     /// The activation counter at the actor's last activation: the pool's victim is the least.
     last_activated: u64,
     /// One reference per export of the world, in the world's order (RFC 005 rule 7).
@@ -1127,14 +1125,14 @@ impl<E: Engine> Run<E> {
                 let state = self.export_instance(victim)?;
                 self.drop_instance(victim);
                 if let Some(s) = self.actors.get_mut(&victim) {
-                    s.swapped = Some(compact(state));
+                    s.swapped = Some(state);
                 }
             }
         }
         self.instantiate(id)?;
         let swapped = self.actors.get_mut(&id).and_then(|s| s.swapped.take());
         if let Some(state) = swapped {
-            self.write_state(id, &expand(state))?;
+            self.write_state(id, &state)?;
             self.swaps += 1;
         }
         Ok(())
@@ -1976,7 +1974,7 @@ impl<E: Engine> Run<E> {
         if slot.instance.is_none()
             && let Some(s) = &slot.swapped
         {
-            let mut state = expand(s.clone());
+            let mut state = s.clone();
             state.kernel = self
                 .kernel
                 .actor(id)
@@ -2033,7 +2031,7 @@ impl<E: Engine> Run<E> {
             .cloned()
             .ok_or(HostError::NoInstance(id))?;
         Ok(ActorState {
-            memory,
+            memory: SparseBytes::from_dense(&memory),
             globals,
             tables,
             kernel,
@@ -2058,7 +2056,7 @@ impl<E: Engine> Run<E> {
         self.drop_instance(id);
         if self.pool.is_some() {
             if let Some(s) = self.actors.get_mut(&id) {
-                s.swapped = Some(compact(state.clone()));
+                s.swapped = Some(state.clone());
             }
         } else {
             self.instantiate(id)?;
@@ -2076,8 +2074,9 @@ impl<E: Engine> Run<E> {
         let size = u32::try_from(state.memory.len()).map_err(|_| HostError::Malformed("memory"))?;
         self.engine.memory_grow_to(inst, size)?;
         let mut err = None;
-        self.engine
-            .with_memory(inst, &mut |m| err = m.write(0, &state.memory).err())?;
+        self.engine.with_memory(inst, &mut |m| {
+            err = m.write(0, &state.memory.to_dense()).err()
+        })?;
         if let Some(e) = err {
             return Err(HostError::Engine(EngineError::Memory(e.to_string())));
         }
@@ -2794,25 +2793,6 @@ impl<E: Engine> Run<E> {
     pub fn actor_chain(&self, id: Identity) -> Option<Digest> {
         self.kernel.trace.actor_chain(id)
     }
-}
-
-/// A swapped actor's state with the memory cut at its last non-zero byte, the full length beside.
-fn compact(mut state: ActorState) -> (ActorState, usize) {
-    let len = state.memory.len();
-    let used = state
-        .memory
-        .iter()
-        .rposition(|b| *b != 0)
-        .map_or(0, |i| i + 1);
-    state.memory.truncate(used);
-    state.memory.shrink_to_fit();
-    (state, len)
-}
-
-/// The full memory again: zeros to the length it had.
-fn expand((mut state, len): (ActorState, usize)) -> ActorState {
-    state.memory.resize(len, 0);
-    state
 }
 
 /// The activation itself, over disjoint borrows of the run.

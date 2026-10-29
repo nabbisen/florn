@@ -12,6 +12,13 @@ use florn_host::Domains;
 use florn_host::{Controller, Options};
 use florn_platform_web::WebPlatform;
 
+#[link(wasm_import_module = "florn")]
+unsafe extern "C" {
+    /// A panic's text, for the worker's script to log and report (RFC 005 rule 10: the Host
+    /// says what failed).
+    fn host_panic(ptr: *const u8, len: u32);
+}
+
 thread_local! {
     static CONTROLLER: RefCell<Option<Controller<WebEngine>>> = const { RefCell::new(None) };
     /// The text or bytes of the last reply, read through `florn_out_ptr` and `florn_out_len`.
@@ -59,6 +66,13 @@ pub extern "C" fn florn_out_len() -> u32 {
 /// kit's page, which reads the digest).
 #[unsafe(no_mangle)]
 pub extern "C" fn florn_start(instances: u32, memory_bytes: f64, transport: u32, keep: u32) -> i32 {
+    // A panic in the Host is otherwise an `unreachable` trap without a word: its text goes to
+    // the worker's script, which logs it and reports it as the Host's error.
+    std::panic::set_hook(Box::new(|info| {
+        let text = info.to_string();
+        // SAFETY: a live string's pointer and length, read by the script before the call returns.
+        unsafe { host_panic(text.as_ptr(), text.len() as u32) }
+    }));
     let platform = WebPlatform::with_capacity(u64::from(instances), memory_bytes.max(0.0) as u64);
     let mut c = Controller::new(
         WebEngine::new(),

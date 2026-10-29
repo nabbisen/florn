@@ -21,5 +21,5 @@ pub use florn_kernel::Advance;
 pub use identity::{EndReason, Environment, ModuleInput, Parent, RunInputs, RunToml};
 pub use log::DiagnosticLog;
 pub use run::{FaultPolicy, HostError, Kept, Options, Residency, Run, Seed, Telemetry};
-pub use snapshot::{ActorState, Checkpoint};
+pub use snapshot::{ActorState, Checkpoint, SparseBytes};
 pub use world::{CLASS_MESSAGE, CLASS_TIMER, CoreWorld, Intervention};

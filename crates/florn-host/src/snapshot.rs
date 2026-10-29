@@ -11,11 +11,56 @@ use florn_kernel::{
 };
 use florn_model::canonical::{Decoder, Encoder};
 
+/// A memory's bytes held sparse: the 4 KiB chunks that hold a non-zero byte, by offset, and the
+/// full length. A guest's memory is mostly zeros (the stack not reached, the heap not touched),
+/// and a checkpoint of thousands of actors, or their swapped state (RFC 009 rules 13 and 15),
+/// must fit the Host's own memory. The file form is the dense bytes: the layout is unchanged.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct SparseBytes {
+    len: usize,
+    chunks: Vec<(usize, Vec<u8>)>,
+}
+
+impl SparseBytes {
+    pub const CHUNK: usize = 4096;
+
+    pub fn from_dense(bytes: &[u8]) -> Self {
+        Self {
+            len: bytes.len(),
+            chunks: bytes
+                .chunks(Self::CHUNK)
+                .enumerate()
+                .filter(|(_, c)| c.iter().any(|b| *b != 0))
+                .map(|(i, c)| (i * Self::CHUNK, c.to_vec()))
+                .collect(),
+        }
+    }
+    /// The bytes again, zeros where no chunk is held.
+    pub fn to_dense(&self) -> Vec<u8> {
+        let mut out = vec![0u8; self.len];
+        for (offset, chunk) in &self.chunks {
+            out[*offset..*offset + chunk.len()].copy_from_slice(chunk);
+        }
+        out
+    }
+    /// The memory's size.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    /// The bytes held.
+    pub fn stored(&self) -> usize {
+        self.chunks.iter().map(|(_, c)| c.len()).sum()
+    }
+}
+
 /// An actor's state (RFC 003 rule 21): the memory up to its size, every mutable global, every
 /// table's size, and the kernel's own state for the actor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActorState {
-    pub memory: Vec<u8>,
+    pub memory: SparseBytes,
     /// Name, type, and the value's bits.
     pub globals: Vec<(String, GlobalKind, u64)>,
     /// Name and size: tables never change (RFC 003 rule 5), so the size is verified on restore.
@@ -85,7 +130,7 @@ fn kind_of(tag: u8) -> Option<GlobalKind> {
 }
 
 fn encode_actor_state(e: &mut Encoder, s: &ActorState) {
-    e.bytes(&s.memory);
+    e.bytes(&s.memory.to_dense());
     e.list(&s.globals, |e, (n, k, v)| {
         e.text(n);
         e.u8(kind_tag(*k));
@@ -358,7 +403,7 @@ impl SnapshotDecoder for Decoder<'_> {
         })
     }
     fn actor_state(&mut self) -> Option<ActorState> {
-        let memory = self.bytes()?;
+        let memory = SparseBytes::from_dense(&self.bytes()?);
         let globals = self.list(|d| Some((d.text()?, kind_of(d.u8()?)?, d.u64()?)))?;
         let tables = self.list(|d| Some((d.text()?, d.u64()?)))?;
         let kernel = self.kernel_actor()?;

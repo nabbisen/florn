@@ -112,6 +112,12 @@ function importsFor(bindings) {
 }
 
 const florn = {
+  // A panic in the Host (RFC 005 rule 10): logged, and the Host's error for the page.
+  host_panic(ptr, len) {
+    const s = text(ptr, len);
+    fail(s, 0);
+    console.error("florn host: " + s);
+  },
   engine_compile(ptr, len) {
     try {
       modules.push(new WebAssembly.Module(hostBytes().subarray(u(ptr), u(ptr) + u(len))));
