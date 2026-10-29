@@ -1,0 +1,29 @@
+# Phase 3 — Task breakdown and pull-request plan
+
+Entry point: [`README.md`](./README.md). One pull request per task, in this order unless marked independent. Each PR names the RFC rules it implements, the tests it adds, and the checklist items the verifier runs. The progress table at the end is updated with every merge.
+
+| # | Task | Implements | Tests added | Verifier checks | Size |
+|---|---|---|---|---|---|
+| PR-23 | **Checkpoints.** Automatic and requested checkpoints, the kept set under a budget, restore with the identity check, the `.florn-checkpoint` file and its maxima, `load-checkpoint`, the `checkpoints` query, the notifications; `florn resume`, `--checkpoint-at`, `--checkpoint-out` | RFC 009 rules 1 to 6, section 8; RFC 001 rules 51, 52; RFC 003 rules 22, 23; RFC 006 section 7 | AC-006 extended across the two Hosts; the observation test; the budget and interval; the maxima | C23 | L |
+| PR-24 | **Cost-model version 2.** florn's metering pass with the stack check folded in, the longest check-free path, `module.segment-too-long`, the version in admission, `--cost-model`, `new-run { cost-model }`; the fuzz target; the figures for both versions | RFC 010 rules 1 to 10; RFC 003 section 7 row 3 | Every recorded digest under version 2; AC-002 under version 2; the admitted hashes; the fuzz target; the cost benchmark table | C24; the owner's decision at the roadmap's step 4 on the figures | XL |
+| PR-25 | **Backward navigation and detail.** `advance { to }` backward, the discarded suffix, undone interventions and `run.rewound`, `trace-window` by re-execution through the live pool, records since the last checkpoint only in the browser | RFC 009 rules 7 to 9; RFC 001 rules 53, 55 | Back to every chain point and forward to the recorded digest; undo and re-apply; the window equality and the unchanged present | C25 | L |
+| PR-26 | **Branching.** `branch`, the parent in `run.toml`, the parent's record kept, `run.branched` | RFC 009 rules 10 to 12; RFC 001 rule 54 | The parent's chain at `T`; replay without the parent; two branches differ after `T` only | C26 | M |
+| PR-27 | **Actor swapping.** The pool with a resident set, least recently activated out, restore from the compiled cache, `new-run { residency }`, `host.swapping`, checkpoints of a swapping run | RFC 009 rules 13 to 15; RFC 005 rule 17; RFC 003 rule 20 | One digest with pools of one, two and full capacity on every engine; refusal by default, run with `swap`; a swapping checkpoint restored resident | C27 | L |
+| PR-28 | **The application's depth.** Going back and branching in the shell with the discard notice and the undone list, the checkpoint list and controls, origin storage as a visible cache, journey J5 with both hashes shown, `module.component`, the installable manifest, `limited by` with memory and swapping, the address check; both catalogues | RFC 009 rules 16 to 22; RFC 005 rule 36; WEB-004, WEB-005, WEB-012, NFR-004, SEC-007 | J5 and the navigation, branching, installation and address checks in three browsers; the view model natively; the dependency check; the forbidden words | C28 (J5 and the procedures of the checklist's section A) | XL |
+| PR-29 | **BGP subset and its lab.** The `bgp` example, its frames and decoder, the `peer` and `route` layouts, `bgp-lab` and `bgp-outside` with their stories and digests; RFC 008 rule 20 amended | RFC 011 rules 1 to 10; NET-005, NET-007 | The verification table of RFC 011 natively and in three browsers | C29 | L |
+| PR-30 | **Release 0.3.0.** Documentation in both languages, the security review for the added flows, release notes with the figures of both cost-model versions, RFC 009 to 011 to `rfcs/done/`, the tag, the crates published | RFC 006 rule 5; RFC 000 | The release checklist | C30; the owner accepts Phase 3 against the exit criteria | M |
+
+Independent of the order above: PR-24 depends on nothing of Phase 3 and may be first; PR-29 depends on nothing but the ladder and may run beside PR-25 to PR-27. PR-26 and PR-27 depend on PR-23; PR-28 depends on PR-23, PR-25, PR-26 and PR-27.
+
+## Progress
+
+| PR | State | Merged | Verifier record |
+|---|---|---|---|
+| PR-23 | not started | | |
+| PR-24 | not started | | |
+| PR-25 | not started | | |
+| PR-26 | not started | | |
+| PR-27 | not started | | |
+| PR-28 | not started | | |
+| PR-29 | not started | | |
+| PR-30 | not started | | |

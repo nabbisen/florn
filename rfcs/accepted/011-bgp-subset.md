@@ -1,6 +1,6 @@
 # RFC 011 — The BGP subset and its learning lab
 
-**Status.** Proposed 2026-10-29 for release 0.3.0 (Phase 3 of `ROADMAP.md`: "BGP guest"). The subset's boundary is the decision requested from the owner (open question 1).
+**Status.** Accepted 2026-10-29, the owner's word on the day it was proposed, as proposed: open question 1 decided (the subset's boundary as rules 1 to 6 state it). Proposed 2026-10-29 for release 0.3.0 (Phase 3 of `ROADMAP.md`: "BGP guest"). Implementation: Phase 3, release 0.3.0, by the handoff package `rfcs/handoffs/009-depth/`.
 
 **Tracks.** Requirements NET-005, NET-007, NET-010, NET-012; the 0.3 row of the acceptance table ("a BGP guest exchanges routes"). Requirement IDs refer to `docs/src/requirements.md`.
 
@@ -105,5 +105,5 @@ A prefix is `length u8` and that many bytes. The decoder of RFC 008 rule 16, in 
 
 | # | Question | Decided by |
 |---|---|---|
-| 1 | The subset's boundary as rules 1 to 6 state it; in particular that internal BGP and capabilities are outside it | The owner, at acceptance |
+| 1 | ~~The subset's boundary as rules 1 to 6 state it; in particular that internal BGP and capabilities are outside it~~ Decided 2026-10-29 at acceptance: as written. | — |
 | 2 | The lab's intervals (`hold`, `keepalive`) and the instants of the break and the repair, before the digests are recorded | The implementing pull request, with the lab's story |

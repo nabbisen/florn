@@ -1,6 +1,6 @@
 # RFC 010 — Cost model version 2: florn's own metering pass
 
-**Status.** Proposed 2026-10-29 for release 0.3.0 (Phase 3 of `ROADMAP.md`, "Metering cost", step 3). The owner's decision at step 4 of that plan is the open question at the end.
+**Status.** Accepted 2026-10-29, the owner's word on the day it was proposed, as proposed; open question 1 waits for the figures of the implementing pull request. Proposed 2026-10-29 for release 0.3.0 (Phase 3 of `ROADMAP.md`, "Metering cost", step 3). Implementation: Phase 3, release 0.3.0, by the handoff package `rfcs/handoffs/009-depth/`.
 
 **Tracks.** Requirements ACT-006 and ACT-010; the roadmap's Phase 3 exit criterion on the cost benchmark ("at most 1.5× on the protocol-style guest and 2× on the compute-style guest under cost-model version 2, or the owner has decided again on the measured figures; runs recorded under version 1 still replay"). Requirement IDs refer to `docs/src/requirements.md`.
 

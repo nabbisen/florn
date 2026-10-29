@@ -1,6 +1,6 @@
 # RFC 009 — Checkpoints, backward navigation, branching, actor swapping, and the application's depth
 
-**Status.** Proposed 2026-10-29 for release 0.3.0 (Phase 3 of `ROADMAP.md`). Decisions requested from the owner are the open questions at the end.
+**Status.** Accepted 2026-10-29, the owner's word on the day it was proposed, as proposed: open question 1 decided (`resident` by default; swapping on request with the numbers shown) and open question 2 decided (a Component is refused on import in 0.3 with the reason). Proposed 2026-10-29 for release 0.3.0 (Phase 3 of `ROADMAP.md`). Implementation: Phase 3, release 0.3.0, by the handoff package `rfcs/handoffs/009-depth/`.
 
 **Tracks.** Requirements ACT-008, DATA-005, DES-008, OBS-010, DATA-008, NFR-004, WEB-004, WEB-005, WEB-012, SEC-007; acceptance AC-006 and the 0.3 row of the acceptance table ("a run restored from a checkpoint continues with the digest of an uninterrupted run; a user imports a module through the UI and runs it"). Requirement IDs refer to `docs/src/requirements.md`.
 
@@ -164,7 +164,7 @@ The headless runner gains `florn resume <checkpoint> <scenario> [--module …] [
 
 | # | Question | Decided by |
 |---|---|---|
-| 1 | Residency's default: `resident` with swapping on request (this RFC, rule 14), or swapping whenever a scenario exceeds the capacity, with the notice | The owner, before the handoff |
-| 2 | Components on import: refused in 0.3 with the reason (rule 18), or reduced to a core module in 0.3 | The owner (RFC 002 open question 4) |
+| 1 | ~~Residency's default: `resident` with swapping on request (this RFC, rule 14), or swapping whenever a scenario exceeds the capacity, with the notice~~ Decided 2026-10-29 at acceptance: `resident`; swapping on request. | — |
+| 2 | ~~Components on import: refused in 0.3 with the reason (rule 18), or reduced to a core module in 0.3~~ Decided 2026-10-29 at acceptance: refused with the reason (RFC 002 open question 4 closed the same way). | — |
 | 3 | The checkpoint interval's default (rule 2) and the memory budgets (rule 3), set here from the proof of concept's figures | The implementing pull request, with the kit's figures |
 | 4 | Whether a checkpoint file carries the scenario text and the module bytes for convenience (a package and a checkpoint in one file) | Not in 0.3: a checkpoint references them by hash as a run record does (RFC 005 rule 29) |

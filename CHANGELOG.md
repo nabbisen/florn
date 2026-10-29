@@ -5,7 +5,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 ## [Unreleased]
 
 ### Added
-- RFC 009 (checkpoints, backward navigation, branching, actor swapping, and the application's depth), RFC 010 (cost model version 2: florn's own metering pass) and RFC 011 (the BGP subset and its learning lab) proposed on 2026-10-29 for release 0.3.0, Phase 3 of the roadmap.
+- RFC 009 (checkpoints, backward navigation, branching, actor swapping, and the application's depth), RFC 010 (cost model version 2: florn's own metering pass) and RFC 011 (the BGP subset and its learning lab) proposed and accepted on 2026-10-29 for release 0.3.0, Phase 3 of the roadmap; its handoff package under `rfcs/handoffs/009-depth/` (PR-23 to PR-30).
 
 ## [0.2.0] - 2026-10-29
 

@@ -37,15 +37,15 @@ RFC enters it.
 
 ### Proposed
 
-| ID | Title | Proposed | For |
-|----|-------|----------|-----|
-| 009 | [Checkpoints, backward navigation, branching, actor swapping, and the application's depth](./proposed/009-checkpoints-navigation-branching.md) | 2026-10-29 | Release 0.3 |
-| 010 | [Cost model version 2: florn's own metering pass](./proposed/010-cost-model-version-2.md) | 2026-10-29 | Release 0.3 |
-| 011 | [The BGP subset and its learning lab](./proposed/011-bgp-subset.md) | 2026-10-29 | Release 0.3 |
+_None at present._
 
 ### Accepted
 
-_None at present._
+| ID | Title | Accepted | Implemented by |
+|----|-------|----------|----------------|
+| 009 | [Checkpoints, backward navigation, branching, actor swapping, and the application's depth](./accepted/009-checkpoints-navigation-branching.md) | 2026-10-29 | Release 0.3 |
+| 010 | [Cost model version 2: florn's own metering pass](./accepted/010-cost-model-version-2.md) | 2026-10-29 | Release 0.3 |
+| 011 | [The BGP subset and its learning lab](./accepted/011-bgp-subset.md) | 2026-10-29 | Release 0.3 |
 
 ### Implemented
 
@@ -71,3 +71,4 @@ _None yet._
 |---|---|---|
 | 005 | [Phase 1 handoff package — core on two engines, release 0.1.0](./handoffs/005-host-architecture/README.md): implementation handoff, task breakdown and PR plan, acceptance and QA checklist; implements RFC 001 to 007 | 2026-10-14 |
 | 008 | [Phase 2 handoff package — network learning lab, release 0.2.0](./handoffs/008-network-domain/README.md): implementation handoff, task breakdown and PR plan, acceptance and QA checklist; implements RFC 008 and the 0.2 rules of RFC 005 | 2026-10-24 |
+| 009 | [Phase 3 handoff package — depth, release 0.3.0](./handoffs/009-depth/README.md): implementation handoff, task breakdown and PR plan, acceptance and QA checklist; implements RFC 009, 010 and 011 and the 0.3 rules of RFC 001, 003 and 005 | 2026-10-29 |
