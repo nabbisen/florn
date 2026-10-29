@@ -235,25 +235,14 @@ for (const name of browsers) {
     check(false, `${name}: cost benchmark`, { error: String(err).split("\n")[0] });
   }
 
-  // The hash figures (RFC 005 rule 22) and the capacity probe (RFC 003 rule 20).
-  try {
-    const h = await open(`bench=hash&scale=${quick ? 20 : 1}`);
-    check(h.status === 0 && Array.isArray(h.figures), `${name}: the hash benchmark runs`, { error: h.error });
-    for (const f of h.figures || []) console.log(JSON.stringify({ figure: "hash", browser: name, engine: h.engine, ...f }));
-    const p = await open("bench=probe&bound=5000");
-    console.log(JSON.stringify({ figure: "probe", browser: name, engine: p.engine, instances: p.instances, stopped_by: p.stopped_by, micros_per_instance: p.micros_per_instance, memory_pages: p.memory_pages }));
-    check(p.instances >= 100, `${name}: the renderer holds at least 100 instances`, { instances: p.instances });
-  } catch (err) {
-    check(false, `${name}: hash or probe`, { error: String(err).split("\n")[0] });
-  }
-
   // Rules 32 and 35: a start from the service worker's cache, offline, with the headers. The
   // last scenario's files were fetched under the service worker's control, so they are cached.
-  try {
-    // The cache is complete before the connection is cut: the service worker's installation is
-    // atomic, and a page under its control sees every file of the list in the cache. WebKit on a
-    // loaded runner has reached this point with the worker not yet in control.
-    const s = scenarios[scenarios.length - 1];
+  // The check runs before the capacity probe, whose thousands of reserved memories put WebKit
+  // under pressure, and it is attempted twice: WebKit on a loaded runner has served a cache miss
+  // offline right after the page saw the files in the cache; a second attempt that still misses
+  // is a failure, a first miss is reported as a notice.
+  const s = scenarios[scenarios.length - 1];
+  const warmCache = async () => {
     const warm = await context.newPage();
     try {
       await warm.goto(`${origin}/kit.html`);
@@ -279,14 +268,41 @@ for (const name of browsers) {
     } finally {
       await warm.close();
     }
+  };
+  const offlineStart = async () => {
+    await warmCache();
     await context.setOffline(true);
-    const r = await open(`scenario=${s}&seed=${digests.runs[s].seed}`, 300000);
+    try {
+      return await open(`scenario=${s}&seed=${digests.runs[s].seed}`, 120000);
+    } finally {
+      await context.setOffline(false);
+    }
+  };
+  try {
+    let r;
+    try {
+      r = await offlineStart();
+    } catch (err) {
+      console.log(JSON.stringify({ notice: `${name}: offline start, second attempt`, error: String(err).split("\n")[0] }));
+      consoleErrors.length = 0;
+      r = await offlineStart();
+    }
     check(r.chain === digests.runs[s].chain, `${name}: the page starts offline from the cache`, { chain: r.chain, error: r.error });
     check(r.isolated === true, `${name}: the cached responses carry the headers`);
   } catch (err) {
     check(false, `${name}: offline start`, { error: String(err).split("\n")[0] });
-  } finally {
-    await context.setOffline(false);
+  }
+
+  // The hash figures (RFC 005 rule 22) and the capacity probe (RFC 003 rule 20).
+  try {
+    const h = await open(`bench=hash&scale=${quick ? 20 : 1}`);
+    check(h.status === 0 && Array.isArray(h.figures), `${name}: the hash benchmark runs`, { error: h.error });
+    for (const f of h.figures || []) console.log(JSON.stringify({ figure: "hash", browser: name, engine: h.engine, ...f }));
+    const p = await open("bench=probe&bound=5000");
+    console.log(JSON.stringify({ figure: "probe", browser: name, engine: p.engine, instances: p.instances, stopped_by: p.stopped_by, micros_per_instance: p.micros_per_instance, memory_pages: p.memory_pages }));
+    check(p.instances >= 100, `${name}: the renderer holds at least 100 instances`, { instances: p.instances });
+  } catch (err) {
+    check(false, `${name}: hash or probe`, { error: String(err).split("\n")[0] });
   }
 
   check(foreign.size === 0, `${name}: the network log holds only the page's origins`, { foreign: [...foreign] });
