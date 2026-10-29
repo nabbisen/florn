@@ -260,13 +260,32 @@ pub unsafe extern "C" fn florn_admit_kit(ptr: *mut u8, len: u32) -> i32 {
 
 /// A new run: the seed given as two words when `given` is not zero, else chosen by the platform.
 #[unsafe(no_mangle)]
-pub extern "C" fn florn_new_run(seed_lo: u32, seed_hi: u32, given: i32) -> i32 {
+pub extern "C" fn florn_new_run(seed_lo: u32, seed_hi: u32, given: i32, swap: i32) -> i32 {
     let seed = if given != 0 {
         SeedChoice::Given((u64::from(seed_hi) << 32) | u64::from(seed_lo))
     } else {
         SeedChoice::Choose
     };
-    send(Message::Command(Command::NewRun { seed }))
+    let residency = if swap != 0 {
+        florn_control::Residency::Swap
+    } else {
+        florn_control::Residency::Resident
+    };
+    send(Message::Command(Command::NewRun { seed, residency }))
+}
+
+/// A cap on the resident set of swapping runs (RFC 009 rule 13: the kit's pools of one and
+/// two); 0 lifts it.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_set_resident_limit(limit: u32) -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        c.set_resident_limit((limit > 0).then_some(u64::from(limit)));
+        0
+    })
 }
 
 /// Advance to the tick given as two words.

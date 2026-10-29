@@ -159,6 +159,9 @@ async function request(worker) {
     const branchAt = query.get("branch-at");
     // `cost-model=N`: the version new runs admit under (RFC 010 rule 9).
     const costModel = query.get("cost-model");
+    // `residency=swap`: swapping asked for (RFC 009 rule 14); `resident=N`: the pool's cap.
+    const residency = query.get("residency");
+    const resident = query.get("resident");
     let display = null;
     let reader = null;
     if (query.get("display") === "1") {
@@ -183,6 +186,8 @@ async function request(worker) {
         resume,
         checkpoint_at: checkpointAt === null ? null : checkpointAt,
         branch_at: branchAt === null ? null : branchAt,
+        residency: residency === null ? null : residency,
+        resident: resident === null ? null : parseInt(resident, 10),
         cost_model: costModel === null ? null : parseInt(costModel, 10),
       },
       transfer: [...modules.map((m) => m.bytes.buffer), ...(resume ? [resume.buffer] : [])],
@@ -212,6 +217,9 @@ async function request(worker) {
         seed: "1",
         replay: false,
         display: null,
+        // `residency=swap` beside `overflow`: the same scenario runs through a pool (rule 13).
+        residency: query.get("residency"),
+        resident: query.get("resident") === null ? null : parseInt(query.get("resident"), 10),
       },
       transfer: [echo.buffer],
       reader: null,

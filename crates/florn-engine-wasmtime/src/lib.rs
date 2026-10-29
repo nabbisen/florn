@@ -22,9 +22,12 @@ use wasmtime::{
 /// The pinned Wasmtime version (RFC 005 rule 44); a test keeps it equal to `Cargo.lock`.
 pub const WASMTIME_VERSION: &str = "48.0.7";
 
-/// What the Host allows one store to hold (RFC 003 rule 20; RFC 005 rule 9).
+/// What the Host allows one instance's store to hold (RFC 003 rule 20; RFC 005 rule 9). Every
+/// instance has a store of its own, so that dropping it (RFC 009 rule 13: a swapped-out actor)
+/// gives its memory back; Wasmtime frees an instance with its store, never before.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
+    /// The live instances across every store: `instantiate` refuses the next one.
     pub instances: usize,
     pub memories: usize,
     pub tables: usize,
@@ -55,7 +58,9 @@ struct Data {
 
 pub struct WasmtimeEngine {
     engine: wasmtime::Engine,
-    store: Store<Data>,
+    limits: Limits,
+    /// Instances alive now, under `limits.instances`.
+    live: usize,
     modules: HashMap<[u8; 32], Module>,
     compiled: usize,
     next_id: InstanceId,
@@ -63,6 +68,8 @@ pub struct WasmtimeEngine {
 
 pub struct Inst {
     id: InstanceId,
+    /// The instance's own store: dropped with it.
+    store: Store<Data>,
     instance: Instance,
     memory: wasmtime::Memory,
     realloc: Option<Func>,
@@ -87,14 +94,26 @@ impl WasmtimeEngine {
         cfg.epoch_interruption(true);
         let engine =
             wasmtime::Engine::new(&cfg).map_err(|e| EngineError::Compile(e.to_string()))?;
+        Ok(Self {
+            engine,
+            limits,
+            live: 0,
+            modules: HashMap::new(),
+            compiled: 0,
+            next_id: 1,
+        })
+    }
+
+    /// A store for one instance, under the limits, with the watchdog's deadline armed.
+    fn new_store(&self) -> Store<Data> {
         let store_limits = StoreLimitsBuilder::new()
-            .instances(limits.instances)
-            .memories(limits.memories)
-            .tables(limits.tables)
-            .memory_size(limits.memory_bytes)
+            .instances(1)
+            .memories(self.limits.memories)
+            .tables(self.limits.tables)
+            .memory_size(self.limits.memory_bytes)
             .build();
         let mut store = Store::new(
-            &engine,
+            &self.engine,
             Data {
                 handler: None,
                 limits: store_limits,
@@ -103,13 +122,7 @@ impl WasmtimeEngine {
         store.limiter(|d| &mut d.limits);
         // One increment of the epoch interrupts the guest (the watchdog's signal).
         store.set_epoch_deadline(1);
-        Ok(Self {
-            engine,
-            store,
-            modules: HashMap::new(),
-            compiled: 0,
-            next_id: 1,
-        })
+        store
     }
 
     /// The watchdog's signal: interrupts a guest that is running. Safe to call from another thread
@@ -324,8 +337,15 @@ impl Engine for WasmtimeEngine {
     }
 
     fn instantiate(&mut self, module: &Module, spec: &ImportSpec) -> Result<Inst, EngineError> {
+        if self.live >= self.limits.instances {
+            return Err(EngineError::Resource(format!(
+                "instance count too high at {}",
+                self.live + 1
+            )));
+        }
         let id = self.next_id;
         self.next_id += 1;
+        let mut store = self.new_store();
         let mut linker: Linker<Data> = Linker::new(&self.engine);
         for f in &spec.functions {
             let ty = FuncType::new(
@@ -376,25 +396,27 @@ impl Engine for WasmtimeEngine {
         let mut host_globals = HashMap::new();
         for g in &spec.globals {
             let global = Global::new(
-                &mut self.store,
+                &mut store,
                 GlobalType::new(ValType::I64, Mutability::Var),
                 Val::I64(g.initial),
             )
             .map_err(|e| EngineError::Instantiate(e.to_string()))?;
             linker
-                .define(&self.store, &g.module, &g.name, global)
+                .define(&store, &g.module, &g.name, global)
                 .map_err(|e| EngineError::Instantiate(e.to_string()))?;
             host_globals.insert((g.module.clone(), g.name.clone()), global);
         }
         let instance = linker
-            .instantiate(&mut self.store, module)
+            .instantiate(&mut store, module)
             .map_err(|e| EngineError::Instantiate(e.to_string()))?;
         let memory = instance
-            .get_memory(&mut self.store, "memory")
+            .get_memory(&mut store, "memory")
             .ok_or_else(|| EngineError::Export("memory".into()))?;
-        let realloc = instance.get_func(&mut self.store, "cabi_realloc");
+        let realloc = instance.get_func(&mut store, "cabi_realloc");
+        self.live += 1;
         Ok(Inst {
             id,
+            store,
             instance,
             memory,
             realloc,
@@ -407,31 +429,32 @@ impl Engine for WasmtimeEngine {
     }
 
     fn drop_instance(&mut self, inst: Inst) {
+        self.live = self.live.saturating_sub(1);
         drop(inst);
     }
 
-    fn func(&mut self, inst: &Inst, name: &str, _: Shape) -> Option<Func> {
+    fn func(&mut self, inst: &mut Inst, name: &str, _: Shape) -> Option<Func> {
         // Wasmtime calls from the function's own type; the shape is the browser adapter's need.
-        inst.instance.get_func(&mut self.store, name)
+        inst.instance.get_func(&mut inst.store, name)
     }
 
     fn call(
         &mut self,
-        _inst: &mut Inst,
+        inst: &mut Inst,
         func: &Func,
         args: &[Flat],
         handler: &mut dyn ImportHandler,
     ) -> Result<Vec<Flat>, Trap> {
         let params: Vec<Val> = args.iter().map(to_val).collect();
-        let n = func.ty(&self.store).results().len();
+        let n = func.ty(&inst.store).results().len();
         let mut results = vec![Val::I32(0); n];
         let ptr: *mut (dyn ImportHandler + '_) = handler;
         // SAFETY: the lifetime is erased only for the duration of `func.call` below; the pointer is
         // cleared before `handler`'s borrow ends, and nothing else dereferences it (see `Data`).
         let ptr: *mut (dyn ImportHandler + 'static) = unsafe { std::mem::transmute(ptr) };
-        self.store.data_mut().handler = Some(ptr);
-        let r = func.call(&mut self.store, &params, &mut results);
-        self.store.data_mut().handler = None;
+        inst.store.data_mut().handler = Some(ptr);
+        let r = func.call(&mut inst.store, &params, &mut results);
+        inst.store.data_mut().handler = None;
         r.map_err(|e| classify(&e))?;
         Ok(results.iter().map(to_flat).collect())
     }
@@ -442,7 +465,7 @@ impl Engine for WasmtimeEngine {
         f: &mut dyn FnMut(&mut dyn Memory),
     ) -> Result<(), EngineError> {
         let mut mem = StoreMemory {
-            store: &mut self.store,
+            store: &mut inst.store,
             memory: inst.memory,
             realloc: inst.realloc,
         };
@@ -451,15 +474,15 @@ impl Engine for WasmtimeEngine {
     }
 
     fn memory_size(&mut self, inst: &mut Inst) -> u32 {
-        inst.memory.data_size(&self.store) as u32
+        inst.memory.data_size(&inst.store) as u32
     }
 
     fn memory_grow_to(&mut self, inst: &mut Inst, bytes: u32) -> Result<(), EngineError> {
-        let have = inst.memory.data_size(&self.store) as u64;
+        let have = inst.memory.data_size(&inst.store) as u64;
         let want = bytes as u64;
         if want > have {
             inst.memory
-                .grow(&mut self.store, (want - have).div_ceil(65_536))
+                .grow(&mut inst.store, (want - have).div_ceil(65_536))
                 .map_err(|e| EngineError::Memory(e.to_string()))?;
         }
         Ok(())
@@ -473,9 +496,9 @@ impl Engine for WasmtimeEngine {
     ) -> Option<GlobalValue> {
         let g = match module {
             Some(m) => *inst.host_globals.get(&(m.to_string(), name.to_string()))?,
-            None => inst.instance.get_global(&mut self.store, name)?,
+            None => inst.instance.get_global(&mut inst.store, name)?,
         };
-        Some(match g.get(&mut self.store) {
+        Some(match g.get(&mut inst.store) {
             Val::I32(x) => GlobalValue::I32(x),
             Val::I64(x) => GlobalValue::I64(x),
             Val::F32(b) => GlobalValue::F32(b),
@@ -498,7 +521,7 @@ impl Engine for WasmtimeEngine {
                 .ok_or_else(|| EngineError::Global(format!("{m}.{name}")))?,
             None => inst
                 .instance
-                .get_global(&mut self.store, name)
+                .get_global(&mut inst.store, name)
                 .ok_or_else(|| EngineError::Global(name.to_string()))?,
         };
         let v = match value {
@@ -507,12 +530,12 @@ impl Engine for WasmtimeEngine {
             GlobalValue::F32(b) => Val::F32(b),
             GlobalValue::F64(b) => Val::F64(b),
         };
-        g.set(&mut self.store, v)
+        g.set(&mut inst.store, v)
             .map_err(|e| EngineError::Global(e.to_string()))
     }
 
     fn table_size(&mut self, inst: &mut Inst, name: &str) -> Option<u32> {
-        let t = inst.instance.get_table(&mut self.store, name)?;
-        Some(t.size(&self.store) as u32)
+        let t = inst.instance.get_table(&mut inst.store, name)?;
+        Some(t.size(&inst.store) as u32)
     }
 }

@@ -90,6 +90,31 @@ impl FaultPolicy {
     }
 }
 
+/// Where a run's guest-backed actors live (RFC 009 rule 14): every one in its own resident
+/// instance, or a resident set smaller than the actor count with the rest held as exported state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Residency {
+    #[default]
+    Resident,
+    Swap,
+}
+
+impl Residency {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Resident => "resident",
+            Self::Swap => "swap",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "resident" => Self::Resident,
+            "swap" => Self::Swap,
+            _ => return None,
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Options {
     pub fault_policy: FaultPolicy,
@@ -117,6 +142,11 @@ pub struct Options {
     /// The cost-model version new runs admit under (RFC 003 rule 15; RFC 010 rule 9): a replay
     /// or a restored checkpoint uses its record's version instead.
     pub cost_model: u32,
+    /// Swapping asked for, or every actor resident (RFC 009 rule 14; `resident` by default).
+    pub residency: Residency,
+    /// A cap on the resident set when swapping (the conformance kit's pools of one and two);
+    /// the probed capacity less the reserve otherwise.
+    pub resident_limit: Option<u64>,
 }
 
 impl Default for Options {
@@ -134,6 +164,8 @@ impl Default for Options {
             checkpoint_interval: Self::DEFAULT_CHECKPOINT_INTERVAL,
             checkpoint_memory: 256 * 1024 * 1024,
             cost_model: COST_MODEL_VERSION,
+            residency: Residency::Resident,
+            resident_limit: None,
         }
     }
 }
@@ -143,6 +175,9 @@ impl Options {
     pub const DEFAULT_CHECKPOINT_INTERVAL: u64 = 10_000;
     /// The checkpoints the budget never drops (RFC 009 rule 3).
     pub const CHECKPOINTS_ALWAYS_KEPT: usize = 8;
+    /// The instances the Host keeps for itself out of the probed capacity when swapping (RFC
+    /// 009 rule 14): the budget module's (RFC 005 rule 8).
+    pub const RESIDENT_RESERVE: u64 = 1;
 
     /// The browser Host's options: its maxima (RFC 003 rule 19) and build name.
     pub fn browser() -> Self {
@@ -278,6 +313,13 @@ const ON_TIMER: usize = 2;
 /// A module-backed actor in the pool.
 struct Slot<E: Engine> {
     instance: Option<E::Instance>,
+    /// The actor's state while it is not resident (RFC 009 rule 13): what a fresh instance
+    /// receives before its next activation. The kernel's part is the kernel's, not this. The
+    /// memory is kept to its last non-zero byte with its full length beside: a guest's memory
+    /// is mostly zeros, and thousands of swapped actors must fit the Host's own memory.
+    swapped: Option<(ActorState, usize)>,
+    /// The activation counter at the actor's last activation: the pool's victim is the least.
+    last_activated: u64,
     /// One reference per export of the world, in the world's order (RFC 005 rule 7).
     funcs: Vec<E::Func>,
     sink: Sink,
@@ -507,6 +549,12 @@ pub struct Run<E: Engine> {
     detail: bool,
     /// The parent, when this run is a branch (RFC 009 rule 12).
     parent: Option<crate::identity::Parent>,
+    /// The resident set's size when swapping (RFC 009 rule 13); `None` for a resident run.
+    pool: Option<u64>,
+    /// Activations so far: the clock of the pool's least-recently-activated policy.
+    activation_seq: u64,
+    /// Swaps in so far (an actor restored into a fresh instance before its activation).
+    swaps: u64,
 }
 
 impl<E: Engine> Run<E> {
@@ -555,6 +603,10 @@ impl<E: Engine> Run<E> {
             engine, admission, platform, domains, scenario, modules, seed, options,
         )?;
         if let Err(e) = run.instantiate_all() {
+            let (engine, admission) = run.into_parts();
+            return Err(Box::new((e, engine, admission)));
+        }
+        if let Err(e) = run.say_swapping(platform) {
             let (engine, admission) = run.into_parts();
             return Err(Box::new((e, engine, admission)));
         }
@@ -705,37 +757,92 @@ impl<E: Engine> Run<E> {
         if !refusals.is_empty() {
             return Err(Box::new((HostError::Domain(refusals), engine, admission)));
         }
-        // Stage 3: the estimate against limits and capacity (RFC 003 rule 20).
+        // Stage 3: the estimate against limits and capacity (RFC 003 rule 20). Swapping (RFC
+        // 009 rule 14): the check applies to the resident set, so the capacity is not the
+        // estimate's to check; the pool is sized below.
+        let swapping = options.residency == Residency::Swap;
         let est = estimate(
             &scenario,
             &facts,
             &options.class_defaults,
             &options.host,
-            EstimateCapacity {
-                instances: capacity.instances,
-                memory_bytes: capacity.memory_bytes,
+            if swapping {
+                EstimateCapacity {
+                    instances: u64::MAX,
+                    memory_bytes: u64::MAX,
+                }
+            } else {
+                EstimateCapacity {
+                    instances: capacity.instances,
+                    memory_bytes: capacity.memory_bytes,
+                }
             },
         );
+        let refuse = |e: &Errors, push: &mut dyn FnMut(Notification)| {
+            for err in &e.0 {
+                push(Notification::from_error(
+                    err.code(),
+                    err.params(),
+                    err.field.clone(),
+                    None,
+                    Ends::Command,
+                ));
+            }
+        };
         let est = match est {
             Ok(e) => e,
             Err(e) => {
-                for err in &e.0 {
-                    push(Notification::from_error(
-                        err.code(),
-                        err.params(),
-                        err.field.clone(),
-                        None,
-                        Ends::Command,
-                    ));
-                }
+                refuse(&e, &mut push);
                 return Err(Box::new((e.into(), engine, admission)));
             }
+        };
+        // The resident set (RFC 009 rule 14): the probed capacity less the Host's reserve, and
+        // what the memory holds of the largest actor; refused only when one actor's limit
+        // exceeds what can be reserved, or when nothing can be resident at all.
+        let pool = if swapping {
+            let largest = est
+                .actors
+                .iter()
+                .map(|(_, _, l)| l.memory_bytes)
+                .max()
+                .unwrap_or(0);
+            let by_instances = capacity.instances.saturating_sub(Options::RESIDENT_RESERVE);
+            let by_memory = capacity
+                .memory_bytes
+                .checked_div(largest)
+                .unwrap_or(u64::MAX);
+            let mut pool = by_instances.min(by_memory);
+            if let Some(limit) = options.resident_limit {
+                pool = pool.min(limit);
+            }
+            let exceeded = if largest > capacity.memory_bytes {
+                Some((largest, capacity.memory_bytes, "memory"))
+            } else if pool == 0 && est.instances > 0 {
+                Some((1, by_instances, "instances"))
+            } else {
+                None
+            };
+            if let Some((need, cap, what)) = exceeded {
+                let mut e = Errors::default();
+                e.push(florn_admission::Error::new(
+                    florn_admission::Kind::CapacityExceeded {
+                        need,
+                        capacity: cap,
+                        what,
+                    },
+                ));
+                refuse(&e, &mut push);
+                return Err(Box::new((e.into(), engine, admission)));
+            }
+            Some(pool)
+        } else {
+            None
         };
         for (what, used, cap) in [
             ("instances", est.instances, capacity.instances),
             ("memory", est.memory_bytes, capacity.memory_bytes),
         ] {
-            if used.saturating_mul(10) >= cap.saturating_mul(9) {
+            if !swapping && used.saturating_mul(10) >= cap.saturating_mul(9) {
                 push(
                     Notification::new(
                         "host.capacity-warning",
@@ -835,6 +942,9 @@ impl<E: Engine> Run<E> {
             checkpoint_requested: false,
             detail: false,
             parent: None,
+            pool,
+            activation_seq: 0,
+            swaps: 0,
         };
         // The slots, without instances yet.
         let tick = run.scenario.time.tick;
@@ -918,6 +1028,8 @@ impl<E: Engine> Run<E> {
                 *id,
                 Slot {
                     instance: None,
+                    swapped: None,
+                    last_activated: 0,
                     funcs: Vec::new(),
                     sink,
                     admitted: a,
@@ -980,8 +1092,77 @@ impl<E: Engine> Run<E> {
     fn instantiate_all(&mut self) -> Result<(), HostError> {
         let ids: Vec<Identity> = self.actors.keys().copied().collect();
         for id in ids {
-            self.instantiate(id)?;
+            // Swapping (RFC 009 rule 13): a fresh instance beyond the pool is exported at once
+            // and holds its initial state until its first activation brings it in.
+            self.ensure_resident(id)?;
         }
+        Ok(())
+    }
+
+    /// The resident instances now.
+    fn resident_count(&self) -> u64 {
+        self.actors
+            .values()
+            .filter(|s| s.instance.is_some())
+            .count() as u64
+    }
+
+    /// An instance for the actor before its activation (RFC 009 rule 13): the one it has, or a
+    /// fresh one from the compiled cache with its swapped state written in, after the least
+    /// recently activated resident actor was exported and dropped when the pool was full.
+    fn ensure_resident(&mut self, id: Identity) -> Result<(), HostError> {
+        let slot = self.actors.get(&id).ok_or(HostError::NoInstance(id))?;
+        if slot.instance.is_some() {
+            return Ok(());
+        }
+        if let Some(pool) = self.pool {
+            while self.resident_count() >= pool {
+                let victim = self
+                    .actors
+                    .iter()
+                    .filter(|(_, s)| s.instance.is_some())
+                    .min_by_key(|(_, s)| s.last_activated)
+                    .map(|(id, _)| *id)
+                    .ok_or(HostError::NoInstance(id))?;
+                let state = self.export_instance(victim)?;
+                self.drop_instance(victim);
+                if let Some(s) = self.actors.get_mut(&victim) {
+                    s.swapped = Some(compact(state));
+                }
+            }
+        }
+        self.instantiate(id)?;
+        let swapped = self.actors.get_mut(&id).and_then(|s| s.swapped.take());
+        if let Some(state) = swapped {
+            self.write_state(id, &expand(state))?;
+            self.swaps += 1;
+        }
+        Ok(())
+    }
+
+    /// One swap out and in of the first guest-backed actor, timed (RFC 009 rule 14: the cost per
+    /// kilobyte the notice says), then `host.swapping`. Nothing of the trace is touched.
+    fn say_swapping(&mut self, platform: &mut dyn Platform) -> Result<(), HostError> {
+        let Some(pool) = self.pool else {
+            return Ok(());
+        };
+        let actors = self.actors.len() as u64;
+        let mut cost = 0;
+        if let Some(&id) = self.actors.keys().next() {
+            self.ensure_resident(id)?;
+            let t0 = platform.monotonic_us();
+            let state = self.export_instance(id)?;
+            self.drop_instance(id);
+            self.instantiate(id)?;
+            self.write_state(id, &state)?;
+            let elapsed = platform.monotonic_us().saturating_sub(t0);
+            cost = elapsed / (state.memory.len() as u64 / 1024).max(1);
+        }
+        let n = Notification::new("host.swapping", Severity::Info, Scope::run(), Ends::Nothing)
+            .with("resident", Value::Count(pool.min(actors)))
+            .with("actors", Value::Count(actors))
+            .with("cost", Value::Count(cost));
+        self.notify(n);
         Ok(())
     }
 
@@ -990,7 +1171,7 @@ impl<E: Engine> Run<E> {
     fn instantiate(&mut self, id: Identity) -> Result<(), HostError> {
         let slot = self.actors.get_mut(&id).ok_or(HostError::NoInstance(id))?;
         let module = self.engine.compile(&slot.admitted.bytes)?;
-        let inst = match self.engine.instantiate(&module, &slot.spec) {
+        let mut inst = match self.engine.instantiate(&module, &slot.spec) {
             Ok(i) => i,
             Err(e) => {
                 // RFC 005 rule 10: a failure to hold the instance names the actor and the
@@ -1028,7 +1209,7 @@ impl<E: Engine> Run<E> {
         for (n, _, shape) in &slot.world.exports {
             funcs.push(
                 self.engine
-                    .func(&inst, n, *shape)
+                    .func(&mut inst, n, *shape)
                     .ok_or_else(|| EngineError::Export(n.to_string()))?,
             );
         }
@@ -1648,10 +1829,33 @@ impl<E: Engine> Run<E> {
 
     /// One activation (RFC 005 rule 15; RFC 003 rules 11 to 13; RFC 001 rules 22 to 24).
     fn activate(&mut self, id: Identity, event: Event, which: usize, vals: &[Val]) {
-        if !self.alive(id) || !self.actors.get(&id).is_some_and(|s| s.instance.is_some()) {
+        if !self.alive(id) || !self.actors.contains_key(&id) {
             return;
         }
         let instant = self.kernel.now();
+        // Swapping (RFC 009 rule 13): the actor's instance before anything of the activation.
+        if let Err(e) = self.ensure_resident(id) {
+            let n = Notification::new(
+                "host.instance-failed",
+                Severity::Error,
+                Scope::actor(id),
+                Ends::Run,
+            )
+            .with("actor", Value::Identity(id))
+            .with("text", Value::Text(e.to_string()))
+            .at(at(instant));
+            self.notify(n);
+            self.end(EndReason::HostFault);
+            return;
+        }
+        if !self.actors.get(&id).is_some_and(|s| s.instance.is_some()) {
+            return;
+        }
+        self.activation_seq += 1;
+        let seq = self.activation_seq;
+        if let Some(s) = self.actors.get_mut(&id) {
+            s.last_activated = seq;
+        }
         let act = self.kernel.begin(id, event);
         let outcome = {
             let Self {
@@ -1741,6 +1945,9 @@ impl<E: Engine> Run<E> {
     ) {
         // RFC 003 rule 13: the instance is discarded; the actor handles nothing further.
         self.drop_instance(id);
+        if let Some(s) = self.actors.get_mut(&id) {
+            s.swapped = None;
+        }
         self.world.dead.insert(id);
         let policy = self.options.fault_policy;
         let n = Notification::new(
@@ -1761,8 +1968,27 @@ impl<E: Engine> Run<E> {
         }
     }
 
-    /// Export an actor's state between activations (RFC 003 rule 21).
+    /// Export an actor's state between activations (RFC 003 rule 21): from its instance, or,
+    /// while it is not resident, the state as it was exported (RFC 009 rule 15) with the
+    /// kernel's part as it is now.
     pub fn export_actor(&mut self, id: Identity) -> Result<ActorState, HostError> {
+        let slot = self.actors.get(&id).ok_or(HostError::NoInstance(id))?;
+        if slot.instance.is_none()
+            && let Some(s) = &slot.swapped
+        {
+            let mut state = expand(s.clone());
+            state.kernel = self
+                .kernel
+                .actor(id)
+                .cloned()
+                .ok_or(HostError::NoInstance(id))?;
+            return Ok(state);
+        }
+        self.export_instance(id)
+    }
+
+    /// The instance's memory, globals and tables, with the kernel's part of the actor's state.
+    fn export_instance(&mut self, id: Identity) -> Result<ActorState, HostError> {
         let slot = self.actors.get_mut(&id).ok_or(HostError::NoInstance(id))?;
         let inst = slot.instance.as_mut().ok_or(HostError::NoInstance(id))?;
         let size = self.engine.memory_size(inst);
@@ -1816,6 +2042,8 @@ impl<E: Engine> Run<E> {
 
     /// Restore an actor into a fresh instance (RFC 003 rule 22): grow the memory, write the bytes,
     /// set the globals, verify the tables, restore the kernel's state. Host-owned globals reset.
+    /// In a swapping run the actor is left non-resident with the state to bring in at its next
+    /// activation (RFC 009 rule 15).
     pub fn restore_actor(&mut self, id: Identity, state: &ActorState) -> Result<(), HostError> {
         let limit = self
             .actors
@@ -1828,7 +2056,21 @@ impl<E: Engine> Run<E> {
             return Err(HostError::Malformed("memory above the actor's limit"));
         }
         self.drop_instance(id);
-        self.instantiate(id)?;
+        if self.pool.is_some() {
+            if let Some(s) = self.actors.get_mut(&id) {
+                s.swapped = Some(compact(state.clone()));
+            }
+        } else {
+            self.instantiate(id)?;
+            self.write_state(id, state)?;
+        }
+        self.kernel.restore_actor(id, state.kernel.clone());
+        Ok(())
+    }
+
+    /// Write exported state into the actor's fresh instance: the memory, the globals, the
+    /// tables verified; the Host-owned stack height reset.
+    fn write_state(&mut self, id: Identity, state: &ActorState) -> Result<(), HostError> {
         let slot = self.actors.get_mut(&id).expect("checked");
         let inst = slot.instance.as_mut().expect("instantiated");
         let size = u32::try_from(state.memory.len()).map_err(|_| HostError::Malformed("memory"))?;
@@ -1859,7 +2101,6 @@ impl<E: Engine> Run<E> {
         }
         self.engine
             .global_set(inst, None, STACK_EXPORT, GlobalValue::I32(0))?;
-        self.kernel.restore_actor(id, state.kernel.clone());
         Ok(())
     }
 
@@ -2238,7 +2479,10 @@ impl<E: Engine> Run<E> {
         let ids: Vec<Identity> = self.actors.keys().copied().collect();
         let mut actors = BTreeMap::new();
         for id in ids {
-            if self.actors[&id].instance.is_some() {
+            // A non-resident actor's state as it is (RFC 009 rule 15): nothing is restored to be
+            // exported again.
+            let s = &self.actors[&id];
+            if s.instance.is_some() || s.swapped.is_some() {
                 actors.insert(id, self.export_actor(id)?);
             }
         }
@@ -2313,6 +2557,7 @@ impl<E: Engine> Run<E> {
         for (id, state) in &checkpoint.actors {
             run.restore_actor(*id, state)?;
         }
+        run.say_swapping(platform)?;
         // The start (RFC 009 rule 2) is the run before `init`: initialised, as a fresh run is.
         if checkpoint.kernel.handled == 0 && checkpoint.kernel.trace.records == 0 {
             run.init_all();
@@ -2422,6 +2667,7 @@ impl<E: Engine> Run<E> {
         // A branch's provenance travels with its replay (RFC 009 rule 12: compared by nothing).
         run.parent = record.parent.clone();
         run.instantiate_all()?;
+        run.say_swapping(platform)?;
         run.keep_start();
         run.init_all();
         Ok(run)
@@ -2455,6 +2701,19 @@ impl<E: Engine> Run<E> {
             run_id: self.run_id.clone(),
             created_ms: self.created_ms,
         }
+    }
+
+    /// The resident set's size when the run swaps (RFC 009 rule 13); `None` for a resident run.
+    pub fn pool(&self) -> Option<u64> {
+        self.pool
+    }
+    /// The actors resident now.
+    pub fn resident(&self) -> u64 {
+        self.resident_count()
+    }
+    /// The swaps in so far: actors restored into a fresh instance before an activation.
+    pub fn swaps(&self) -> u64 {
+        self.swaps
     }
 
     /// The parent of a branch (RFC 009 rule 12), when this run is one.
@@ -2535,6 +2794,25 @@ impl<E: Engine> Run<E> {
     pub fn actor_chain(&self, id: Identity) -> Option<Digest> {
         self.kernel.trace.actor_chain(id)
     }
+}
+
+/// A swapped actor's state with the memory cut at its last non-zero byte, the full length beside.
+fn compact(mut state: ActorState) -> (ActorState, usize) {
+    let len = state.memory.len();
+    let used = state
+        .memory
+        .iter()
+        .rposition(|b| *b != 0)
+        .map_or(0, |i| i + 1);
+    state.memory.truncate(used);
+    state.memory.shrink_to_fit();
+    (state, len)
+}
+
+/// The full memory again: zeros to the length it had.
+fn expand((mut state, len): (ActorState, usize)) -> ActorState {
+    state.memory.resize(len, 0);
+    state
 }
 
 /// The activation itself, over disjoint borrows of the run.

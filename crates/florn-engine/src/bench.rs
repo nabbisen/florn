@@ -81,7 +81,7 @@ impl<E: Engine> Driver<E> {
         spec: &ImportSpec,
     ) -> Result<Self, String> {
         let module = engine.compile(bytes).map_err(|e| e.to_string())?;
-        let inst = engine
+        let mut inst = engine
             .instantiate(&module, spec)
             .map_err(|e| e.to_string())?;
         let mut funcs = Vec::with_capacity(3);
@@ -92,7 +92,7 @@ impl<E: Engine> Driver<E> {
         ] {
             funcs.push(
                 engine
-                    .func(&inst, name, shape)
+                    .func(&mut inst, name, shape)
                     .ok_or_else(|| format!("export {name}"))?,
             );
         }

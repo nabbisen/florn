@@ -241,6 +241,7 @@ fn through_the_control_interface_with_the_transport_s_notice_and_its_drops() {
         &mut c,
         Message::Command(Command::NewRun {
             seed: SeedChoice::Given(1),
+            residency: florn_control::Residency::Resident,
         }),
     );
     let transport = out.iter().find_map(|m| match m {
@@ -324,6 +325,7 @@ fn through_the_control_interface_with_the_transport_s_notice_and_its_drops() {
         &mut c,
         Message::Command(Command::NewRun {
             seed: SeedChoice::Given(1),
+            residency: florn_control::Residency::Resident,
         }),
     );
     assert!(codes(&out).contains(&"telemetry.transport".to_string()));
@@ -365,6 +367,7 @@ fn a_paced_slice_advances_from_the_tick_reached() {
         &mut c,
         Message::Command(Command::NewRun {
             seed: SeedChoice::Given(1),
+            residency: florn_control::Residency::Resident,
         }),
     );
     send(

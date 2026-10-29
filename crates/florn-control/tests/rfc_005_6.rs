@@ -54,9 +54,11 @@ fn every_message_round_trips() {
         Command::Admit { bytes: vec![1] },
         Command::NewRun {
             seed: SeedChoice::Given(u64::MAX),
+            residency: florn_control::Residency::Resident,
         },
         Command::NewRun {
             seed: SeedChoice::Choose,
+            residency: florn_control::Residency::Swap,
         },
         Command::EndRun,
         Command::Advance {

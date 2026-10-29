@@ -259,6 +259,33 @@ for (const name of browsers) {
     }
   }
 
+  // RFC 009 rules 13 and 14 (checklist C27): the lab through a pool of one, of two and of the
+  // full capacity gives the recorded digest, each run saying it swaps; the scenario beyond the
+  // renderer's ceiling, refused above, runs through a pool when swapping is asked for.
+  for (const s of ["ospf-lab"].filter((x) => digests.runs[x])) {
+    const rec = digests.runs[s];
+    for (const resident of [1, 2, 0]) {
+      try {
+        const r = await open(`scenario=${s}&seed=${rec.seed}&residency=swap${resident ? `&resident=${resident}` : ""}`);
+        const said = (r.events || []).find((x) => x.code === "host.swapping");
+        const pool = said ? said.params.resident.value : null;
+        const ok = r.chain === rec.chain && r.records === rec.records && Boolean(said) && (resident === 0 || pool === resident);
+        check(ok, `${name}: ${s} through a pool of ${resident || "the full capacity"} gives the recorded digest and says it swaps`, { chain: r.chain, records: r.records, expected: rec.chain, swapping: said ? { resident: pool, actors: said.params.actors.value, cost: said.params.cost.value } : null });
+      } catch (err) {
+        check(false, `${name}: swapping (${s}, pool ${resident})`, { error: String(err).split("\n")[0] });
+      }
+    }
+  }
+  if (name !== "webkit") {
+    try {
+      const r = await open("overflow=1500&residency=swap&resident=8", 600000);
+      const said = (r.events || []).find((x) => x.code === "host.swapping");
+      check(r.state === "ended" && Boolean(said) && said.params.resident.value === 8 && said.params.actors.value === 1500, `${name}: 1,500 actors beyond the renderer's ceiling run through a pool of eight when swapping is asked for`, { state: r.state, swapping: said ? { resident: said.params.resident.value, actors: said.params.actors.value } : null, error: r.error });
+    } catch (err) {
+      check(false, `${name}: swapping beyond the ceiling`, { error: String(err).split("\n")[0] });
+    }
+  }
+
   // RFC 009 rule 6 (checklist C23): a checkpoint crosses the Hosts both ways. The native
   // runner writes one at the lab's half and the page resumes it to the recorded digest; the
   // page writes one and the runner resumes it. Skipped with a notice where the runner is not

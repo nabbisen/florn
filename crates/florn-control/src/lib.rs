@@ -16,7 +16,8 @@ pub use catalogue::{CATALOGUE, Code, Entry, FaultCode, ParamType, ScopeKind};
 pub use display::{DisplayPath, Record as DisplayRecord, Reduced, Transport};
 pub use message::{
     Answer, CONTROL_VERSION, ChangeSummary, ChannelSummary, Command, DecodeError, Envelope,
-    ExportKind, FieldValue, FileKind, Message, Pacing, Progress, Query, RunState, SeedChoice,
-    SendSummary, Subscription, SubscriptionKind, Unit, decode, encode, intervention_content,
+    ExportKind, FieldValue, FileKind, Message, Pacing, Progress, Query, Residency, RunState,
+    SeedChoice, SendSummary, Subscription, SubscriptionKind, Unit, decode, encode,
+    intervention_content,
 };
 pub use notification::{At, Ends, Notification, Scope, Severity, Value};

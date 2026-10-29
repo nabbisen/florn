@@ -538,7 +538,11 @@ impl Engine for WebEngine {
             tags: module.1.clone(),
             imports,
         };
-        inst.realloc = self.func(&inst, florn_abi::core_world::EXPORT_REALLOC, Shape::REALLOC);
+        inst.realloc = self.func(
+            &mut inst,
+            florn_abi::core_world::EXPORT_REALLOC,
+            Shape::REALLOC,
+        );
         Ok(inst)
     }
 
@@ -551,7 +555,7 @@ impl Engine for WebEngine {
         unsafe { engine_drop(inst.js) }
     }
 
-    fn func(&mut self, inst: &Inst, name: &str, shape: Shape) -> Option<Func> {
+    fn func(&mut self, inst: &mut Inst, name: &str, shape: Shape) -> Option<Func> {
         // SAFETY: `name` is a live string.
         let index = with_name(name, |p, n| unsafe { engine_func(inst.js, p, n) });
         (index >= 0).then_some(Func {

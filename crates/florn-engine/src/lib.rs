@@ -171,7 +171,7 @@ pub trait Engine {
     /// The reference to an exported function, or `None` if absent.
     /// An export resolved once into a typed reference (RFC 005 rule 7), with the flat shape
     /// admission established for it (RFC 008 rule 6); `None` when the instance lacks it.
-    fn func(&mut self, inst: &Self::Instance, name: &str, shape: Shape) -> Option<Self::Func>;
+    fn func(&mut self, inst: &mut Self::Instance, name: &str, shape: Shape) -> Option<Self::Func>;
     /// Call an export. Imports the guest calls go to `handler` for the duration of the call.
     fn call(
         &mut self,

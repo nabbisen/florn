@@ -28,12 +28,14 @@ florn help
 | Command | What it does | Prints |
 |---|---|---|
 | `run` | Admits the modules, starts a run with the seed given (or one the machine chooses, which is then printed), runs to the scenario's end, writes the run record | `state`, `seed`, `handled`, `records`, `chain`, `ended`, `run-record` |
-| `resume` | Starts a run from a checkpoint file (RFC 009 rule 6) with the scenario and its modules, to the scenario's end or to `--to`, and writes the run record | the same as `run`, with `handled` and `records` counted from the start of the run the checkpoint came from |
+| `resume` | Starts a run from a checkpoint file (RFC 009 rule 6) with the scenario and its modules, to the scenario's end or to `--to`, and writes the run record; `--residency swap` as for `run` | the same as `run`, with `handled` and `records` counted from the start of the run the checkpoint came from |
 | `replay` | Starts a run from the record's inputs, applies the recorded interventions, compares the chain at every stored point | the same, plus `replay = matched` or `diverged` |
 | `admit` | The admission step alone | `module`, `source`, `admitted`, `contract`, `kind`, `description`, `port-kind`, `param`, `channel`, `needs` lines |
 | `probe` | The capacity and the build | `instances`, `memory`, `engine`, `arch`, `florn`, `control` |
 
 Modules are found by the hash the scenario names: give each file with `--module` or a directory with `--modules`; a module the scenario does not reference is reported, and a missing one is an error. A replay needs the scenario and the modules again, since a run record carries neither (it carries their hashes, and refuses a different module).
+
+`run --residency swap` asks for actor swapping (RFC 009 rule 14): the run holds fewer resident instances than guest-backed actors, the probed capacity less one, and brings an actor into a fresh instance before its activation from the state it exported when it left the pool; the trace and the digest are the resident run's, and the log says `host.swapping` with the resident count, the actor count and the measured cost per kilobyte. Without it, `resident`, a scenario beyond the capacity is refused with the need and the capacity. `replay` and `resume` take the option too.
 
 `run --cost-model N` admits the modules under cost-model version `N` (1, the library's pass; 2, florn's own, RFC 010, the default): the version is a run input, recorded in the run record, and a replay or a resume uses its file's version whatever the default. The two versions count the same units, so a run gives the same digest under both; they differ in speed. `run --checkpoint-at TICK --checkpoint-out <file>` writes one checkpoint at the boundary before the tick and goes on to the end; `resume` of that file on the other Host, or in another process, ends with the same `chain` as the uninterrupted run (DATA-005). A checkpoint file, `.florn-checkpoint`, holds the kernel's state, every actor's state and every domain's, with the identity it must agree on (the scenario's hash, the modules' hashes, the admission and cost-model versions, the seed); a mismatch is refused with the field named.
 

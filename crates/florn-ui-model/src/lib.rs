@@ -226,6 +226,7 @@ impl ViewModel {
     pub fn new_run(&mut self, seed: Option<u64>) {
         self.command(Command::NewRun {
             seed: seed.map_or(SeedChoice::Choose, SeedChoice::Given),
+            residency: florn_control::Residency::Resident,
         });
         self.query(Query::RunState);
     }

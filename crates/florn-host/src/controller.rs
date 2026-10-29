@@ -419,11 +419,11 @@ impl<E: Engine> Controller<E> {
                     }
                 }
             }
-            Command::NewRun { seed } => {
+            Command::NewRun { seed, residency } => {
                 if !matches!(self.state, RunState::Ready | RunState::Ended) {
                     return self.notify(out, self.not_now(name));
                 }
-                self.new_run(seed, None, out);
+                self.new_run(seed, residency, None, out);
             }
             Command::EndRun => {
                 if !matches!(self.state, RunState::Running | RunState::Paused) {
@@ -659,6 +659,7 @@ impl<E: Engine> Controller<E> {
                 match record::read(&record) {
                     Ok(read) => self.new_run(
                         SeedChoice::Given(read.run.inputs.root_seed),
+                        florn_control::Residency::Resident,
                         Some(read.run),
                         out,
                     ),
@@ -820,9 +821,15 @@ impl<E: Engine> Controller<E> {
         self.started(result, out);
     }
 
+    /// A cap on the resident set of swapping runs (the conformance kit's pools of one and two).
+    pub fn set_resident_limit(&mut self, limit: Option<u64>) {
+        self.options.resident_limit = limit;
+    }
+
     fn new_run(
         &mut self,
         seed: SeedChoice,
+        residency: florn_control::Residency,
         replay: Option<crate::identity::RunToml>,
         out: &mut Vec<Message>,
     ) {
@@ -848,6 +855,13 @@ impl<E: Engine> Controller<E> {
         let manifest = loaded.manifest.clone();
         let mut options = self.options.clone();
         options.display = self.subs.display;
+        // Swapping is asked for with the run (RFC 009 rule 14); a replay keeps the Host's option.
+        if replay.is_none() {
+            options.residency = match residency {
+                florn_control::Residency::Resident => crate::run::Residency::Resident,
+                florn_control::Residency::Swap => crate::run::Residency::Swap,
+            };
+        }
         let result = match replay {
             Some(record) => Run::replay(
                 engine,
@@ -1371,6 +1385,7 @@ impl<E: Engine> Controller<E> {
                         "checkpoint".into(),
                         "cost-model-2".into(),
                         "branch".into(),
+                        "swap".into(),
                     ],
                 })
             }

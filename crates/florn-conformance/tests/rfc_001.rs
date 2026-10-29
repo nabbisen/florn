@@ -173,6 +173,7 @@ fn observation_changes_nothing() {
         &mut c,
         Message::Command(Command::NewRun {
             seed: SeedChoice::Given(s.seed),
+            residency: florn_control::Residency::Resident,
         }),
     );
     send(&mut c, Message::Subscribe(Subscription::Events));

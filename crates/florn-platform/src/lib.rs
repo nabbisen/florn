@@ -24,6 +24,12 @@ pub trait Platform {
     fn new_seed(&mut self) -> u64;
     /// The wall clock, in milliseconds since the Unix epoch: metadata only (RFC 001 rule 42).
     fn wall_clock_ms(&mut self) -> u64;
+    /// A monotonic clock in microseconds, for the Host's own measurements (RFC 009 rule 14: the
+    /// cost of a swap); never a run input. The wall clock's milliseconds where nothing finer
+    /// exists.
+    fn monotonic_us(&mut self) -> u64 {
+        self.wall_clock_ms().saturating_mul(1_000)
+    }
 }
 
 /// A platform for tests: fixed capacity, a seed sequence, a clock that only moves when told.

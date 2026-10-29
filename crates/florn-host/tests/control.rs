@@ -106,6 +106,7 @@ fn a_journey_through_the_interface() {
         &mut c,
         Command::NewRun {
             seed: SeedChoice::Given(1),
+            residency: florn_control::Residency::Resident,
         },
     );
     assert_eq!(codes(&r), ["control.invalid"]);
@@ -160,6 +161,7 @@ fn a_journey_through_the_interface() {
         &mut c,
         Command::NewRun {
             seed: SeedChoice::Given(7),
+            residency: florn_control::Residency::Resident,
         },
     );
     assert_eq!(answer(&r), Some(&Answer::Done));
@@ -394,7 +396,8 @@ fn a_journey_through_the_interface() {
         answer(&command(
             &mut d,
             Command::NewRun {
-                seed: SeedChoice::Given(7)
+                seed: SeedChoice::Given(7),
+                residency: florn_control::Residency::Resident,
             }
         )),
         Some(&Answer::Done)
@@ -430,6 +433,7 @@ fn c8_an_invalid_parameter_or_state_produces_its_code_and_changes_nothing() {
     for cmd in [
         Command::NewRun {
             seed: SeedChoice::Choose,
+            residency: florn_control::Residency::Resident,
         },
         Command::EndRun,
         Command::Advance {
@@ -499,6 +503,7 @@ fn c8_an_invalid_parameter_or_state_produces_its_code_and_changes_nothing() {
         &mut c,
         Command::NewRun {
             seed: SeedChoice::Given(1),
+            residency: florn_control::Residency::Resident,
         },
     );
     command(
@@ -594,6 +599,7 @@ fn c8_an_invalid_parameter_or_state_produces_its_code_and_changes_nothing() {
         },
         Command::NewRun {
             seed: SeedChoice::Choose,
+            residency: florn_control::Residency::Resident,
         },
         Command::Pause,
         Command::Replay { record: vec![1] },
@@ -690,6 +696,7 @@ fn a_branch_through_the_interface() {
         &mut c,
         Command::NewRun {
             seed: SeedChoice::Given(1),
+            residency: florn_control::Residency::Resident,
         },
     );
     command(
@@ -827,5 +834,70 @@ fn a_branch_through_the_interface() {
                 confirmed: true,
             },
         )) == ["control.not-now"]
+    );
+}
+
+/// RFC 009 rule 14 over the interface: `new-run { residency: swap }` says `host.swapping` with
+/// the resident count, under the Host's cap on the pool; the digest is the resident run's.
+#[test]
+fn a_run_asked_to_swap_says_so_and_gives_the_resident_digest() {
+    let mut c = controller();
+    let s = spec();
+    command(
+        &mut c,
+        Command::LoadScenario {
+            bytes: s.text().into_bytes(),
+        },
+    );
+    for m in s.modules().values() {
+        command(&mut c, Command::LoadModule { bytes: m.clone() });
+    }
+    assert!(matches!(
+        answer(&send(&mut c, Message::Query(Query::Support))),
+        Some(Answer::Support(i)) if i.features.iter().any(|f| f == "swap")
+    ));
+    let r = command(
+        &mut c,
+        Command::NewRun {
+            seed: SeedChoice::Given(1),
+            residency: florn_control::Residency::Resident,
+        },
+    );
+    assert!(!codes(&r).iter().any(|c| c == "host.swapping"));
+    command(
+        &mut c,
+        Command::Advance {
+            unit: Unit::ToTick(u64::MAX),
+        },
+    );
+    let plain = run_state(&mut c);
+    c.set_resident_limit(Some(1));
+    let r = command(
+        &mut c,
+        Command::NewRun {
+            seed: SeedChoice::Given(1),
+            residency: florn_control::Residency::Swap,
+        },
+    );
+    let said = r
+        .iter()
+        .find_map(|m| match m {
+            Message::Notification(n) if n.code == "host.swapping" => Some(n.clone()),
+            _ => None,
+        })
+        .expect("host.swapping");
+    said.check().unwrap();
+    assert_eq!(said.params[0], ("resident".into(), Value::Count(1)));
+    assert_eq!(said.params[1], ("actors".into(), Value::Count(2)));
+    command(
+        &mut c,
+        Command::Advance {
+            unit: Unit::ToTick(u64::MAX),
+        },
+    );
+    let swapped = run_state(&mut c);
+    assert_eq!(
+        (swapped.chain, swapped.records),
+        (plain.chain, plain.records)
     );
 }

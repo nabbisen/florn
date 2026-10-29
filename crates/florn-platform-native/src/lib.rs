@@ -67,6 +67,13 @@ impl Platform for NativePlatform {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0)
     }
+    fn monotonic_us(&mut self) -> u64 {
+        static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        START
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_micros() as u64
+    }
 }
 
 #[cfg(test)]

@@ -23,6 +23,8 @@ let hostView = null;
 let table = null;
 const modules = [];
 const instances = [];
+// Table slots freed by dropped instances, for the next exports resolved.
+const freeSlots = [];
 const importObjects = new Map();
 let lastError = "";
 let lastErrorKind = 0;
@@ -38,14 +40,22 @@ function hostBytes() {
   return hostView;
 }
 
+// A pointer or length the Host passes is an i32 to JavaScript: unsigned again, since the Host's
+// memory may stand beyond 2 GiB (the exported state of thousands of swapped actors).
+function u(x) {
+  return x >>> 0;
+}
+
 function text(ptr, len) {
+  ptr = u(ptr);
+  len = u(len);
   return decoder.decode(hostBytes().subarray(ptr, ptr + len));
 }
 
 function putText(s, dst, cap) {
   const b = encoder.encode(s);
   const n = Math.min(b.length, cap);
-  hostBytes().set(b.subarray(0, n), dst);
+  hostBytes().set(b.subarray(0, n), u(dst));
   return n;
 }
 
@@ -104,7 +114,7 @@ function importsFor(bindings) {
 const florn = {
   engine_compile(ptr, len) {
     try {
-      modules.push(new WebAssembly.Module(hostBytes().subarray(ptr, ptr + len)));
+      modules.push(new WebAssembly.Module(hostBytes().subarray(u(ptr), u(ptr) + u(len))));
       return modules.length - 1;
     } catch (e) {
       fail(e, 0);
@@ -125,7 +135,7 @@ const florn = {
         fail("no memory export", 0);
         return -1;
       }
-      instances.push({ instance, memory, exports: instance.exports, view: new Uint8Array(memory.buffer) });
+      instances.push({ instance, memory, exports: instance.exports, view: new Uint8Array(memory.buffer), funcs: [] });
       viewsCreated += 1;
       return instances.length - 1;
     } catch (e) {
@@ -134,13 +144,25 @@ const florn = {
     }
   },
   engine_drop(i) {
+    // The table's references to the instance's exports go with it, else they would keep the
+    // instance and its memory alive (RFC 009 rule 13: a swapped-out actor gives its memory
+    // back); their slots serve the next instance.
+    const x = instances[i];
+    if (x) {
+      for (const index of x.funcs) {
+        table.set(index, null);
+        freeSlots.push(index);
+      }
+    }
     instances[i] = null;
   },
   engine_func(i, namePtr, nameLen) {
-    const f = inst(i).exports[text(namePtr, nameLen)];
+    const x = inst(i);
+    const f = x.exports[text(namePtr, nameLen)];
     if (typeof f !== "function") return -1;
-    const index = table.grow(1);
+    const index = freeSlots.length > 0 ? freeSlots.pop() : table.grow(1);
     table.set(index, f);
+    x.funcs.push(index);
     return index;
   },
   engine_call(i, sig, func, args, results) {
@@ -160,13 +182,13 @@ const florn = {
   engine_memory_read(i, addr, len, dst) {
     const v = view(inst(i));
     if (addr + len > v.length) return -1;
-    hostBytes().set(v.subarray(addr, addr + len), dst);
+    hostBytes().set(v.subarray(addr, addr + len), u(dst));
     return 0;
   },
   engine_memory_write(i, addr, src, len) {
     const v = view(inst(i));
     if (addr + len > v.length) return -1;
-    v.set(hostBytes().subarray(src, src + len), addr);
+    v.set(hostBytes().subarray(u(src), u(src) + len), addr);
     return 0;
   },
   engine_memory_grow_to(i, bytes) {
@@ -229,20 +251,21 @@ const florn = {
 };
 
 function out() {
-  const s = text(host.exports.florn_out_ptr(), host.exports.florn_out_len());
+  const s = text(u(host.exports.florn_out_ptr()), u(host.exports.florn_out_len()));
   return s.length ? JSON.parse(s) : null;
 }
 
 // Hand bytes to the Host: a buffer of its allocator, which the call takes back.
 function give(bytes) {
-  const p = host.exports.florn_alloc(bytes.length);
+  const p = u(host.exports.florn_alloc(bytes.length));
   hostBytes().set(bytes, p);
   return p;
 }
 
 // The bytes the worker left in its out buffer (a file, not JSON), and their base64.
 function outBytes() {
-  return hostBytes().slice(host.exports.florn_out_ptr(), host.exports.florn_out_ptr() + host.exports.florn_out_len());
+  const p = u(host.exports.florn_out_ptr());
+  return hostBytes().slice(p, p + u(host.exports.florn_out_len()));
 }
 function base64Of(bytes) {
   let s = "";
@@ -289,7 +312,7 @@ function flush() {
 function writeDisplay() {
   if (!display) return;
   const n = host.exports.florn_take_display();
-  let bytes = n > 0 ? hostBytes().slice(host.exports.florn_display_ptr(), host.exports.florn_display_ptr() + n) : new Uint8Array(0);
+  let bytes = n > 0 ? hostBytes().slice(u(host.exports.florn_display_ptr()), u(host.exports.florn_display_ptr()) + n) : new Uint8Array(0);
   if (display.pad > 0) {
     const padded = new Uint8Array(bytes.length + display.pad * RECORD);
     padded.set(bytes, 0);
@@ -349,7 +372,9 @@ async function runScenario(m) {
     // A run from a checkpoint file (RFC 009 rule 6): the other Host's, or this one's.
     host.exports.florn_load_checkpoint(give(m.resume), m.resume.length);
   } else {
-    host.exports.florn_new_run(lo, hi, m.seed === null ? 0 : 1);
+    // Swapping asked for with the run (RFC 009 rule 14), under a cap for the kit's pools.
+    if (m.resident) host.exports.florn_set_resident_limit(m.resident);
+    host.exports.florn_new_run(lo, hi, m.seed === null ? 0 : 1, m.residency === "swap" ? 1 : 0);
   }
   collect(out());
   let checkpoint = null;
@@ -422,7 +447,7 @@ async function runScenario(m) {
     // Export the record and replay it in this same worker: the comparison must match.
     const n = host.exports.florn_export_record();
     if (n > 0) {
-      const record = hostBytes().slice(host.exports.florn_out_ptr(), host.exports.florn_out_ptr() + host.exports.florn_out_len());
+      const record = outBytes();
       host.exports.florn_replay(give(record), record.length);
       const started = out() || [];
       host.exports.florn_advance(0xffffffff, 0xffffffff);
@@ -508,7 +533,7 @@ let shellPace = 1;
 let shellTimer = null;
 
 function postReplies() {
-  const bytes = hostBytes().subarray(host.exports.florn_out_ptr(), host.exports.florn_out_ptr() + host.exports.florn_out_len());
+  const bytes = hostBytes().subarray(u(host.exports.florn_out_ptr()), u(host.exports.florn_out_ptr()) + u(host.exports.florn_out_len()));
   let at = 0;
   while (at + 4 <= bytes.length) {
     const len = new DataView(bytes.buffer, bytes.byteOffset + at, 4).getUint32(0, true);

@@ -108,6 +108,8 @@ fn trace_records_encode_as_recorded() {
 }
 
 const NEW_RUN: &str = "010000000003002a00000000000000";
+/// RFC 009 rule 14 (0.3): `swap` is one byte more; `resident` is the form above, unchanged.
+const NEW_RUN_SWAP: &str = "010000000003002a0000000000000001";
 const ADVANCE: &str = "01000000000503e803000000000000";
 const RUN_STATE: &str = "010000000101";
 const EVENTS: &str = "010000000201";
@@ -130,8 +132,17 @@ fn control_messages_encode_as_recorded() {
             "new-run",
             Message::Command(Command::NewRun {
                 seed: SeedChoice::Given(42),
+                residency: florn_control::Residency::Resident,
             }),
             NEW_RUN,
+        ),
+        (
+            "new-run swap",
+            Message::Command(Command::NewRun {
+                seed: SeedChoice::Given(42),
+                residency: florn_control::Residency::Swap,
+            }),
+            NEW_RUN_SWAP,
         ),
         (
             "advance",

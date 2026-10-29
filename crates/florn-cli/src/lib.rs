@@ -49,10 +49,12 @@ struct Args {
     to: Option<u64>,
     /// `run --cost-model N` (RFC 010 rule 9).
     cost_model: Option<u32>,
+    /// `--residency resident|swap` (RFC 009 rule 14): swapping asked for.
+    residency: florn_host::Residency,
 }
 
 fn usage() -> &'static str {
-    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads] [--cost-model N] [--checkpoint-at TICK --checkpoint-out <file>]\n  florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--to TICK] [--out <file>] [--trace] [--payloads]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done; 1 refused or failed; 2 the replay diverged; 3 the run ended with a run fault"
+    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads] [--cost-model N] [--residency resident|swap] [--checkpoint-at TICK --checkpoint-out <file>]\n  florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--to TICK] [--out <file>] [--trace] [--payloads] [--residency resident|swap]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--residency resident|swap]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done; 1 refused or failed; 2 the replay diverged; 3 the run ended with a run fault"
 }
 
 fn parse_args(argv: &[String]) -> Result<Args, String> {
@@ -72,6 +74,7 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         checkpoint_out: None,
         to: None,
         cost_model: None,
+        residency: florn_host::Residency::Resident,
     };
     let mut i = 1;
     let value = |i: &mut usize, name: &str| -> Result<String, String> {
@@ -128,6 +131,10 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
                         .map_err(|_| "--to needs a tick".to_string())?,
                 )
             }
+            "--residency" => {
+                a.residency = florn_host::Residency::parse(&value(&mut i, "--residency")?)
+                    .ok_or_else(|| "--residency is resident or swap".to_string())?
+            }
             "--cost-model" => {
                 a.cost_model = Some(
                     value(&mut i, "--cost-model")?
@@ -181,6 +188,7 @@ fn controller(args: &Args) -> Result<Controller<WasmtimeEngine>, String> {
         Options {
             keep_records: args.trace || args.keep_records,
             keep_payloads: args.payloads,
+            residency: args.residency,
             ..Options::default()
         },
     ))
@@ -291,7 +299,14 @@ fn cmd_run(args: &Args) -> Result<ExitCode, String> {
         }
     }
     let seed = args.seed.map_or(SeedChoice::Choose, SeedChoice::Given);
-    let (_, error) = send(&mut c, Message::Command(Command::NewRun { seed }));
+    let residency = match args.residency {
+        florn_host::Residency::Resident => florn_control::Residency::Resident,
+        florn_host::Residency::Swap => florn_control::Residency::Swap,
+    };
+    let (_, error) = send(
+        &mut c,
+        Message::Command(Command::NewRun { seed, residency }),
+    );
     if error {
         return Err("the run was not started".into());
     }

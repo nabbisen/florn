@@ -89,4 +89,7 @@ impl Platform for WebPlatform {
     fn wall_clock_ms(&mut self) -> u64 {
         clock_ms()
     }
+    fn monotonic_us(&mut self) -> u64 {
+        (now_seconds() * 1_000_000.0).max(0.0) as u64
+    }
 }

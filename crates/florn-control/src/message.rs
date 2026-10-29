@@ -35,6 +35,30 @@ pub enum Pacing {
     TicksPerSecond(u64),
 }
 
+/// `enum(residency)` of RFC 009 rule 14: every actor resident, or swapping asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Residency {
+    #[default]
+    Resident,
+    Swap,
+}
+
+impl Residency {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Resident => "resident",
+            Self::Swap => "swap",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "resident" => Self::Resident,
+            "swap" => Self::Swap,
+            _ => return None,
+        })
+    }
+}
+
 /// `enum(file-kind)` of RFC 007.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileKind {
@@ -114,6 +138,9 @@ pub enum Command {
     },
     NewRun {
         seed: SeedChoice,
+        /// Where the actors live (RFC 009 rule 14; 0.3): `resident` unless `swap` is asked
+        /// for. Absent in a 0.2 front end's message, which means `resident`.
+        residency: Residency,
     },
     EndRun,
     Advance {
@@ -803,7 +830,7 @@ fn command_w(e: &mut Encoder, c: &Command) {
             e.u8(2);
             e.bytes(bytes);
         }
-        Command::NewRun { seed } => {
+        Command::NewRun { seed, residency } => {
             e.u8(3);
             match seed {
                 SeedChoice::Given(s) => {
@@ -811,6 +838,10 @@ fn command_w(e: &mut Encoder, c: &Command) {
                     e.u64(*s);
                 }
                 SeedChoice::Choose => e.u8(1),
+            }
+            // `resident` is the 0.2 form, unchanged; `swap` is one byte more (RFC 009 rule 14).
+            if *residency == Residency::Swap {
+                e.u8(1);
             }
         }
         Command::EndRun => e.u8(4),
@@ -890,6 +921,15 @@ fn command_r(d: &mut Decoder) -> Option<Command> {
                 0 => SeedChoice::Given(d.u64()?),
                 1 => SeedChoice::Choose,
                 _ => return None,
+            },
+            // The 0.2 form ends here and means `resident`; `swap` is one byte more (0.3).
+            residency: if d.remaining() == 0 {
+                Residency::Resident
+            } else {
+                match d.u8()? {
+                    1 => Residency::Swap,
+                    _ => return None,
+                }
             },
         },
         4 => Command::EndRun,

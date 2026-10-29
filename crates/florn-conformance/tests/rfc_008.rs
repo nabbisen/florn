@@ -407,6 +407,7 @@ fn interventions_of_a_domain_kind_through_the_control_interface() {
         &mut c,
         Command::NewRun {
             seed: SeedChoice::Given(9),
+            residency: florn_control::Residency::Resident,
         },
     );
     assert!(done(&out), "{out:?}");
