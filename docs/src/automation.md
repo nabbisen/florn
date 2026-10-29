@@ -52,13 +52,15 @@ Modules are found by the hash the scenario names: give each file with `--module`
 
 | Entry | Content |
 |---|---|
-| `run.toml` | The run identity and inputs: florn version, Host build, engine, architecture, scenario hash, module hashes (source and admitted), admission and cost-model versions, root seed, the interventions applied, the stored chain points, how the run ended, whether it is reproducible |
+| `run.toml` | The run identity and inputs: florn version, Host build, engine, architecture, scenario hash, module hashes (source and admitted), admission and cost-model versions, root seed, the interventions applied, the stored chain points, how the run ended, whether it is reproducible; for a branch, a `[parent]` table with the parent's chain value, record count and instant at the branching (RFC 009 rule 12: provenance, needed by nothing) |
 | `trace/N.bin` | The trace records, with `--trace`: length-prefixed records in the canonical encoding |
 | `payloads/<digest>` | The payload bytes by digest, with `--payloads` |
 | `diagnostic.log`, `diagnostic.bin` | The diagnostic log as JSON lines and in the canonical encoding |
 | `README.md` | What the archive is |
 
 The `chain` is the digest of the whole trace: two runs with the same inputs give the same chain, on every supported engine. A record is enough to replay; it is not enough to display payloads unless they were kept.
+
+A branch (RFC 009 section 4) is a new run from the current instant of the current run, started by the `branch` command of the control interface: its inputs are the parent's up to that instant, its own after; the parent ends there and its record, with the trace it kept, is held by the Host until the next run starts (`export { kind: parent-record }`). The branch's record carries the `[parent]` table and the chain point of the branching; `florn replay` of either record needs nothing of the other. A branch begins at its instant: moving back stops there.
 
 ## Scenarios with recorded digests
 

@@ -240,6 +240,16 @@ function give(bytes) {
   return p;
 }
 
+// The bytes the worker left in its out buffer (a file, not JSON), and their base64.
+function outBytes() {
+  return hostBytes().slice(host.exports.florn_out_ptr(), host.exports.florn_out_ptr() + host.exports.florn_out_len());
+}
+function base64Of(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
 function words(n) {
   const b = BigInt(n);
   return [Number(b & 0xffffffffn), Number(b >> 32n)];
@@ -351,12 +361,26 @@ async function runScenario(m) {
     // The out buffer holds the file's bytes, not JSON: read them before anything else.
     const n = host.exports.florn_checkpoint();
     if (n > 0) {
-      const bytes = hostBytes().slice(host.exports.florn_out_ptr(), host.exports.florn_out_ptr() + host.exports.florn_out_len());
-      let s = "";
-      for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-      checkpoint = { bytes: n, base64: btoa(s) };
+      checkpoint = { bytes: n, base64: base64Of(outBytes()) };
     } else {
       checkpoint = { error: "no checkpoint" };
+    }
+  }
+  let branch = null;
+  if (m.branch_at !== null && m.branch_at !== undefined) {
+    // To the tick, a branch there (RFC 009 rule 10): the parent's record for the page (rule 11).
+    const [tlo, thi] = words(m.branch_at);
+    host.exports.florn_advance(tlo, thi);
+    collect(out());
+    host.exports.florn_branch();
+    const replies = out() || [];
+    collect(replies);
+    const branched = replies.find((x) => x.code === "run.branched");
+    const n = host.exports.florn_export_parent();
+    if (n > 0 && branched) {
+      branch = { instant: branched.params.instant.value, parent: branched.params.parent.value, parent_bytes: n, parent_base64: base64Of(outBytes()) };
+    } else {
+      branch = { error: n > 0 ? "no run.branched" : "no parent record" };
     }
   }
   const t0 = performance.now();
@@ -388,6 +412,11 @@ async function runScenario(m) {
   const state = (out() || []).find((x) => x.kind === "run-state") || {};
   host.exports.florn_support();
   const support = (out() || []).find((x) => x.kind === "support") || {};
+  if (branch && !branch.error) {
+    // The branch's own record beside the parent's: both replay natively in the kit's check.
+    const n = host.exports.florn_export_record();
+    branch.record_base64 = n > 0 ? base64Of(outBytes()) : null;
+  }
   let replay = null;
   if (m.replay) {
     // Export the record and replay it in this same worker: the comparison must match.
@@ -411,7 +440,7 @@ async function runScenario(m) {
     written = { transport: display.writer.kind, batches: display.batches, produced: display.produced, dropped_by_writer: display.dropped, produced_digest: await sha256Hex(display.chunks) };
     display = null;
   }
-  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay, written, checkpoint };
+  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay, written, checkpoint, branch };
 }
 
 function runBench(m) {

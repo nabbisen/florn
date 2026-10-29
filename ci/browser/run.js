@@ -291,9 +291,32 @@ for (const name of browsers) {
         check(false, `${name}: checkpoint across the Hosts (${s})`, { error: String(err).split("\n")[0] });
       }
     }
+    // RFC 009 rules 10 to 12 (checklist C26): a branch in the browser at the lab's half runs on
+    // to the recorded digest, and the two records it leaves, the parent's and its own, each
+    // replay natively to a match on their own.
+    for (const s of ["ospf-lab"].filter((x) => digests.runs[x])) {
+      const rec = digests.runs[s];
+      const end = parseInt((/^end = "(\d+)/m.exec(await readFile(join(root, `scenarios/${s}.toml`), "utf8")) || [])[1] || "0", 10);
+      const at = Math.floor(end / 2);
+      try {
+        const b = await open(`scenario=${s}&seed=${rec.seed}&branch-at=${at}`);
+        const ok = b.branch && !b.branch.error && b.branch.parent_bytes > 0 && b.branch.record_base64 && b.chain === rec.chain;
+        check(ok, `${name}: a branch of ${s} at ${at} runs on to the recorded digest and leaves both records`, { branch: b.branch && { instant: b.branch.instant, parent: b.branch.parent, parent_bytes: b.branch.parent_bytes, error: b.branch.error }, chain: b.chain, expected: rec.chain });
+        if (ok) {
+          for (const [which, base64] of [["parent", b.branch.parent_base64], ["branch", b.branch.record_base64]]) {
+            const file = join(checkpoints, `${s}-${name}-${which}.florn-run`);
+            await writeFile(file, Buffer.from(base64, "base64"));
+            const { stdout } = await run(runner, ["replay", file, join(root, `scenarios/${s}.toml`), "--modules", join(root, "scenarios/modules")]);
+            check(/^replay = matched$/m.test(stdout), `${name}: the ${which}'s record of a branch made in the browser replays natively to a match`, { tail: stdout.trim().split("\n").slice(-2) });
+          }
+        }
+      } catch (err) {
+        check(false, `${name}: branching across the Hosts (${s})`, { error: String(err).split("\n")[0] });
+      }
+    }
     await rm(checkpoints, { recursive: true, force: true });
   } else {
-    console.log(JSON.stringify({ notice: `${name}: the runner is not built; the cross-Host checkpoint check is skipped` }));
+    console.log(JSON.stringify({ notice: `${name}: the runner is not built; the cross-Host checkpoint and branch checks are skipped` }));
   }
 
   // Rules 32 and 35: a start from the service worker's cache, offline, with the headers. The

@@ -69,11 +69,23 @@ impl EndReason {
     }
 }
 
-/// `run.toml`: the identity, the inputs, the stored chain, and the metadata.
+/// The parent of a branch (RFC 001 rule 54; RFC 009 rules 10 and 12): the parent's chain value,
+/// record count and instant at the branching. Provenance: compared by nothing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Parent {
+    pub chain: Digest,
+    pub records: u64,
+    pub instant: Instant,
+}
+
+/// `run.toml`: the identity, the inputs, the stored chain, the parent of a branch, and the
+/// metadata.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RunToml {
     pub environment: Environment,
     pub inputs: RunInputs,
+    /// `[parent]` when the run is a branch (RFC 009 rule 12).
+    pub parent: Option<Parent>,
     /// (records, chain value) at every stored point, the end included.
     pub chain: Vec<(u64, Digest)>,
     pub chain_interval: u64,
@@ -194,6 +206,17 @@ impl RunToml {
             ),
         );
         root.insert("chain".into(), Value::Table(chain));
+        if let Some(p) = &self.parent {
+            let mut parent = Table::new();
+            parent.insert("chain".into(), Value::String(hex(&p.chain)));
+            parent.insert("records".into(), Value::String(p.records.to_string()));
+            parent.insert("instant".into(), Value::String(p.instant.tick.to_string()));
+            parent.insert(
+                "microstep".into(),
+                Value::Integer(p.instant.microstep as i64),
+            );
+            root.insert("parent".into(), Value::Table(parent));
+        }
         let mut meta = Table::new();
         meta.insert("run-id".into(), Value::String(self.run_id.clone()));
         meta.insert(
@@ -281,10 +304,25 @@ impl RunToml {
                 Some((u(t, "records")?, digest_of(&s(t, "digest")?)?))
             })
             .collect::<Option<Vec<_>>>()?;
+        let parent = match root.get("parent") {
+            Some(v) => {
+                let t = v.as_table()?;
+                Some(Parent {
+                    chain: digest_of(&s(t, "chain")?)?,
+                    records: u(t, "records")?,
+                    instant: Instant::new(
+                        u(t, "instant")?,
+                        u32::try_from(t.get("microstep")?.as_integer()?).ok()?,
+                    ),
+                })
+            }
+            None => None,
+        };
         let m = root.get("metadata")?.as_table()?;
         Some(Self {
             environment,
             inputs,
+            parent,
             chain,
             chain_interval: u(c, "interval")?,
             records: u(c, "records")?,

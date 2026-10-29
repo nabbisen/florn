@@ -155,6 +155,8 @@ async function request(worker) {
     const resumePath = query.get("resume");
     const resume = resumePath ? await fetchBytes(resumePath) : null;
     const checkpointAt = query.get("checkpoint-at");
+    // `branch-at=T`: a branch at the tick (RFC 009 rule 10); both records in the result.
+    const branchAt = query.get("branch-at");
     // `cost-model=N`: the version new runs admit under (RFC 010 rule 9).
     const costModel = query.get("cost-model");
     let display = null;
@@ -180,6 +182,7 @@ async function request(worker) {
         display,
         resume,
         checkpoint_at: checkpointAt === null ? null : checkpointAt,
+        branch_at: branchAt === null ? null : branchAt,
         cost_model: costModel === null ? null : parseInt(costModel, 10),
       },
       transfer: [...modules.map((m) => m.bytes.buffer), ...(resume ? [resume.buffer] : [])],

@@ -66,6 +66,9 @@ pub struct Controller<E: Engine> {
     dropped_seen: u64,
     /// The display transport of this Host, when its front end draws (RFC 005 rule 14).
     transport: Option<Transport>,
+    /// The record of the run the current one branched from (RFC 009 rule 11), until the next
+    /// run starts.
+    parent_record: Option<Contents>,
 }
 
 impl<E: Engine> Controller<E> {
@@ -96,6 +99,7 @@ impl<E: Engine> Controller<E> {
             log_seen: 0,
             dropped_seen: 0,
             transport: None,
+            parent_record: None,
         }
     }
 
@@ -445,6 +449,11 @@ impl<E: Engine> Controller<E> {
                 if let Unit::ToTick(t) = unit
                     && t < run.kernel().now().tick
                 {
+                    // A branch begins at its instant (RFC 009 rule 10): nothing before it is its
+                    // to move to.
+                    if run.kept().first().is_none_or(|k| k.instant.tick > t) {
+                        return self.notify(out, control_invalid(name, "out-of-range", "tick"));
+                    }
                     let paced = matches!(self.pacing, Pacing::TicksPerSecond(_));
                     let result = if paced {
                         let index = run
@@ -604,6 +613,44 @@ impl<E: Engine> Controller<E> {
                 }
                 self.options.cost_model = version;
                 out.push(Message::Answer(Answer::Done));
+            }
+            Command::Branch => {
+                if !matches!(self.state, RunState::Paused | RunState::Ended) {
+                    return self.notify(out, self.not_now(name));
+                }
+                let Some(run) = &mut self.run else {
+                    return self.notify(out, self.not_now(name));
+                };
+                run.set_wall_clock(self.platform.wall_clock_ms());
+                match run.branch(self.platform.as_mut()) {
+                    Ok(parent) => {
+                        // The parent's last entries, then the branch's log from its first.
+                        let entries = parent.log.entries();
+                        for e in &entries[self.log_seen.min(entries.len())..] {
+                            out.push(Message::Notification(e.notification.clone()));
+                        }
+                        self.log_seen = 0;
+                        self.parent_record = Some(parent);
+                        self.state = RunState::Paused;
+                        self.target = None;
+                        self.after_advance(out, true);
+                        out.push(Message::Answer(Answer::Done));
+                    }
+                    // Within an instant (RFC 001 rule 51): at the next boundary.
+                    Err(HostError::MidInstant) => {
+                        self.drain_log(out);
+                        self.notify(out, self.not_now(name));
+                    }
+                    Err(e) => {
+                        self.drain_log(out);
+                        out.push(Message::Notification(
+                            Code::HostInstanceFailed.notification(
+                                Scope::run(),
+                                vec![Value::Identity(0), Value::Text(e.to_string())],
+                            ),
+                        ));
+                    }
+                }
             }
             Command::Replay { record } => {
                 if !matches!(self.state, RunState::Ready | RunState::Ended) {
@@ -852,6 +899,7 @@ impl<E: Engine> Controller<E> {
                     );
                 }
                 self.run = Some(run);
+                self.parent_record = None;
                 self.state = RunState::Paused;
                 self.target = None;
                 self.drain_log(out);
@@ -990,6 +1038,26 @@ impl<E: Engine> Controller<E> {
                         ))
                     }
                 },
+            },
+            ExportKind::ParentRecord => match &self.parent_record {
+                None => return self.notify(out, self.not_now("export")),
+                Some(contents) => {
+                    let run = contents.run.as_ref().expect("a kept record has run.toml");
+                    let modules = run
+                        .inputs
+                        .modules
+                        .iter()
+                        .map(|m| (m.name.clone(), hex(&m.source_sha256)))
+                        .collect();
+                    record::write(contents).map(|b| {
+                        (
+                            format!("{}.{}", run.run_id, file_kind.extension()),
+                            b,
+                            false,
+                            modules,
+                        )
+                    })
+                }
             },
             ExportKind::Package => match &self.scenario {
                 None => return self.notify(out, self.not_now("export")),
@@ -1302,6 +1370,7 @@ impl<E: Engine> Controller<E> {
                         "export-state".into(),
                         "checkpoint".into(),
                         "cost-model-2".into(),
+                        "branch".into(),
                     ],
                 })
             }

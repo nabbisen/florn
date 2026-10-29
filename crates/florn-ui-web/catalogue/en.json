@@ -82,6 +82,7 @@
  "code.checkpoint.taken": "A checkpoint was taken at tick {instant} ({bytes}); {kept} are kept.",
  "code.checkpoint.budget": "The checkpoints' memory budget dropped {dropped} older checkpoints; {kept} are kept ({bytes}).",
  "code.run.rewound": "The run went back to tick {to}; {undone} interventions after it were undone.",
+ "code.run.branched": "A branch from tick {instant} of run {parent}; the parent's record is kept.",
  "code.storage.cache": "{items} items are kept in this browser; export to keep them.",
  "code.message.unknown": "An unknown message {code} arrived with the parameters {params}.",
  "enum.element.actor": "actor",

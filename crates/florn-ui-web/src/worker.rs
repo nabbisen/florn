@@ -531,6 +531,37 @@ pub extern "C" fn florn_checkpoint() -> i32 {
     })
 }
 
+/// A branch from the current instant (RFC 009 rule 10, `branch`): the replies as JSON.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_branch() -> i32 {
+    send(Message::Command(Command::Branch))
+}
+
+/// The parent's record of a branch (RFC 009 rule 11; `export { kind: parent-record }`,
+/// confirmed): the bytes in `OUT`, or -1.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_export_parent() -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        let replies = c.handle(Envelope::new(Message::Command(Command::Export {
+            kind: florn_control::ExportKind::ParentRecord,
+            confirmed: true,
+        })));
+        for m in replies {
+            if let Message::Answer(Answer::Exported { bytes, .. }) = m {
+                let n = bytes.len() as i32;
+                set_out(bytes);
+                return n;
+            }
+        }
+        set_out(Vec::new());
+        -1
+    })
+}
+
 /// A run from a checkpoint file (RFC 009 rule 6, `load-checkpoint`): the replies as JSON.
 ///
 /// # Safety

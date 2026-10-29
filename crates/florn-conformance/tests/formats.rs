@@ -119,6 +119,9 @@ const RESTORE: &str = "01000000000c03000000";
 const LOAD_CHECKPOINT: &str = "01000000000d03000000020000";
 const EXPORT_CHECKPOINT: &str = "010000000009030100000000";
 const CHECKPOINTS: &str = "010000000108";
+// RFC 009 section 4 (0.3): the branch command and the parent's record, within control version 1.
+const BRANCH: &str = "01000000000f";
+const EXPORT_PARENT: &str = "0100000000090401";
 
 #[test]
 fn control_messages_encode_as_recorded() {
@@ -174,6 +177,15 @@ fn control_messages_encode_as_recorded() {
             Message::Query(Query::Checkpoints),
             CHECKPOINTS,
         ),
+        ("branch", Message::Command(Command::Branch), BRANCH),
+        (
+            "export parent-record",
+            Message::Command(Command::Export {
+                kind: ExportKind::ParentRecord,
+                confirmed: true,
+            }),
+            EXPORT_PARENT,
+        ),
     ] {
         let env = Envelope::new(m);
         let bytes = florn_control::encode(&env);
@@ -187,6 +199,8 @@ const RUN_TOML: &str = "b5067636665393f4946d6091605a1e4bcfe27ad83a17e32a4f700112
 // Version 2 since 0.3.0 (RFC 009 rule 1): the origins' sequence counters joined the layout.
 const CHECKPOINT: &str = "6dd48fef2cf8dbd71519b2a5439b7da9a3eb603958a0144e7bb59c6da5da89c6";
 const ENTRIES: &str = "README.md diagnostic.bin diagnostic.log payloads/<64-hex-digest> run.toml trace/0.bin trace/1.bin";
+/// The same run branched at tick 100 (RFC 009 rule 12): `run.toml` with its `[parent]` table.
+const RUN_TOML_BRANCH: &str = "a72bbb516195aee4be4d25d70fc212dbf93e557933e9d7119d176c68ac261eb4";
 
 /// A fixed run of the hand-written guests under a fixed platform: its `run.toml` (with the
 /// environment, which names the machine, replaced by a fixed one), its checkpoint at the end,
@@ -270,5 +284,40 @@ fn the_run_record_and_the_checkpoint_of_a_fixed_run_are_recorded() {
     entries.dedup();
     frozen("entries", &entries.join(" "), ENTRIES);
     let _: BTreeMap<String, String> = BTreeMap::new();
+    // The branch: the same run to tick 100, branched there, run to the end.
+    let mut platform = FixedPlatform::default();
+    let mut run = Run::new(
+        florn_engine_wasmtime::WasmtimeEngine::new(florn_engine_wasmtime::Limits::default())
+            .unwrap(),
+        florn_admission::Admission::default(),
+        &mut platform,
+        &host::domains(),
+        spec.manifest(),
+        &spec.modules(),
+        Seed::Given(1),
+        Options {
+            keep_records: true,
+            chain_interval: 50,
+            ..Options::default()
+        },
+    )
+    .unwrap();
+    run.advance(florn_host::Advance::ToTick(100));
+    let parent = run.branch(&mut platform).unwrap();
+    assert_eq!(
+        parent.run.as_ref().unwrap().records,
+        run.parent().unwrap().records
+    );
+    run.run_to_end();
+    let mut branch = run.run_toml();
+    branch.environment = toml.environment.clone();
+    let text = branch.to_toml();
+    assert!(text.contains("[parent]"));
+    assert_eq!(florn_host::RunToml::parse(&text).as_ref(), Some(&branch));
+    frozen(
+        "run.toml of a branch (blake3 of the text)",
+        blake3::hash(text.as_bytes()).to_hex().as_ref(),
+        RUN_TOML_BRANCH,
+    );
     complete();
 }

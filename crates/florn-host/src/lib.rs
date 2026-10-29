@@ -18,7 +18,7 @@ pub mod world;
 pub use controller::Controller;
 pub use domain::{Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, Domains};
 pub use florn_kernel::Advance;
-pub use identity::{EndReason, Environment, ModuleInput, RunInputs, RunToml};
+pub use identity::{EndReason, Environment, ModuleInput, Parent, RunInputs, RunToml};
 pub use log::DiagnosticLog;
 pub use run::{FaultPolicy, HostError, Kept, Options, Run, Seed, Telemetry};
 pub use snapshot::{ActorState, Checkpoint};

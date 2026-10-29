@@ -309,6 +309,10 @@ pub const TABLE: &[(&str, &str)] = &[
         "The run went back to tick {to}; {undone} interventions after it were undone.",
     ),
     (
+        "run.branched",
+        "A branch from tick {instant} of run {parent}; the parent's record is kept.",
+    ),
+    (
         "checkpoint.mismatch",
         "The record's {what} is {expected}; this run's is {found}.",
     ),

@@ -83,12 +83,15 @@ pub enum ExportKind {
     Checkpoint {
         index: u32,
     },
+    /// The record of the run the current one branched from, as the Host kept it at the
+    /// branching (RFC 009 rule 11; 0.3): with the trace it kept, without payloads.
+    ParentRecord,
 }
 
 impl ExportKind {
     pub fn file_kind(self) -> FileKind {
         match self {
-            Self::RunRecord { .. } => FileKind::RunRecord,
+            Self::RunRecord { .. } | Self::ParentRecord => FileKind::RunRecord,
             Self::DiagnosticLog => FileKind::DiagnosticLog,
             Self::Package => FileKind::Package,
             Self::Checkpoint { .. } => FileKind::Checkpoint,
@@ -151,6 +154,9 @@ pub enum Command {
     SetCostModel {
         version: u32,
     },
+    /// A new run from the current instant of the current run, which ends (RFC 009 rules 10 to
+    /// 12; 0.3).
+    Branch,
 }
 
 impl Command {
@@ -171,6 +177,7 @@ impl Command {
             Self::Restore { .. } => "restore",
             Self::LoadCheckpoint { .. } => "load-checkpoint",
             Self::SetCostModel { .. } => "set-cost-model",
+            Self::Branch => "branch",
         }
     }
 
@@ -848,6 +855,7 @@ fn command_w(e: &mut Encoder, c: &Command) {
                     e.u8(3);
                     e.u32(*index);
                 }
+                ExportKind::ParentRecord => e.u8(4),
             }
             bool_w(e, *confirmed);
         }
@@ -868,6 +876,7 @@ fn command_w(e: &mut Encoder, c: &Command) {
             e.u8(14);
             e.u32(*version);
         }
+        Command::Branch => e.u8(15),
     }
 }
 
@@ -911,6 +920,7 @@ fn command_r(d: &mut Decoder) -> Option<Command> {
                 1 => ExportKind::DiagnosticLog,
                 2 => ExportKind::Package,
                 3 => ExportKind::Checkpoint { index: d.u32()? },
+                4 => ExportKind::ParentRecord,
                 _ => return None,
             },
             confirmed: bool_r(d)?,
@@ -922,6 +932,7 @@ fn command_r(d: &mut Decoder) -> Option<Command> {
         },
         13 => Command::LoadCheckpoint { bytes: d.bytes()? },
         14 => Command::SetCostModel { version: d.u32()? },
+        15 => Command::Branch,
         _ => return None,
     })
 }

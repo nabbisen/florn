@@ -82,6 +82,7 @@
  "code.checkpoint.taken": "ティック{instant}でチェックポイントを取りました（{bytes}）。{kept}個を保持しています。",
  "code.checkpoint.budget": "チェックポイントのメモリ予算により古いチェックポイント{dropped}個を破棄しました。{kept}個を保持しています（{bytes}）。",
  "code.run.rewound": "実行はティック{to}へ戻りました。それ以降の介入{undone}個は取り消されました。",
+ "code.run.branched": "実行{parent}のティック{instant}から分岐しました。親の記録は保持されています。",
  "code.storage.cache": "{items}個の項目がこのブラウザーに保存されています。残すにはエクスポートしてください。",
  "code.message.unknown": "未知のメッセージ{code}がパラメーター{params}とともに届きました。",
  "enum.element.actor": "アクター",

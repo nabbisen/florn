@@ -36,6 +36,7 @@ use crate::domain::{
 };
 use crate::identity::{EndReason, Environment, ModuleInput, RunInputs, RunToml};
 use crate::log::DiagnosticLog;
+use crate::record::Contents;
 use crate::snapshot::{ActorState, Checkpoint, CheckpointIdentity};
 use crate::world::{CLASS_TIMER, Intervention};
 
@@ -216,6 +217,9 @@ pub enum HostError {
     },
     /// The run has ended.
     Ended,
+    /// The run stands within an instant, where no checkpoint and no branch is possible (RFC 001
+    /// rule 51).
+    MidInstant,
     /// A checkpoint does not match this run's inputs: `checkpoint.mismatch` with the field.
     CheckpointMismatch {
         what: &'static str,
@@ -250,6 +254,7 @@ impl std::fmt::Display for HostError {
                 write!(f, "host.instance-failed: actor {actor}: {text}")
             }
             HostError::Ended => write!(f, "the run has ended"),
+            HostError::MidInstant => write!(f, "the run is within an instant"),
             HostError::CheckpointMismatch {
                 what,
                 expected,
@@ -500,6 +505,8 @@ pub struct Run<E: Engine> {
     checkpoint_requested: bool,
     /// Detail by replay in progress (rule 9): nothing is logged, kept or displayed meanwhile.
     detail: bool,
+    /// The parent, when this run is a branch (RFC 009 rule 12).
+    parent: Option<crate::identity::Parent>,
 }
 
 impl<E: Engine> Run<E> {
@@ -827,6 +834,7 @@ impl<E: Engine> Run<E> {
             last_checkpoint_handled: 0,
             checkpoint_requested: false,
             detail: false,
+            parent: None,
         };
         // The slots, without instances yet.
         let tick = run.scenario.time.tick;
@@ -2411,17 +2419,24 @@ impl<E: Engine> Run<E> {
             .trace
             .watch(record.chain.iter().map(|(n, _)| *n).collect());
         run.replay_against = Some(record.chain.clone());
+        // A branch's provenance travels with its replay (RFC 009 rule 12: compared by nothing).
+        run.parent = record.parent.clone();
         run.instantiate_all()?;
         run.keep_start();
         run.init_all();
         Ok(run)
     }
 
-    /// The comparison of a replay with its record, once the run has ended.
+    /// The comparison of a replay with its record, once the run has ended: at every point the
+    /// record holds (RFC 001 rule 50; a record exported before its run ended, or a branch's
+    /// parent, holds fewer than the scenario's end), as `replay.matched` says it.
     pub fn comparison(&self) -> Option<Comparison> {
         let stored = self.replay_against.as_ref()?;
         self.ended?;
-        Some(self.kernel.trace.compare(stored))
+        Some(florn_kernel::trace::compare_reference(
+            &self.kernel.trace.stored(),
+            stored,
+        ))
     }
 
     /// `run.toml` of the run record (RFC 005 rule 29).
@@ -2431,6 +2446,7 @@ impl<E: Engine> Run<E> {
         RunToml {
             environment: self.environment.clone(),
             inputs,
+            parent: self.parent.clone(),
             chain: self.kernel.trace.stored(),
             chain_interval: self.kernel.trace.interval(),
             records: self.kernel.trace.records(),
@@ -2439,6 +2455,75 @@ impl<E: Engine> Run<E> {
             run_id: self.run_id.clone(),
             created_ms: self.created_ms,
         }
+    }
+
+    /// The parent of a branch (RFC 009 rule 12), when this run is one.
+    pub fn parent(&self) -> Option<&crate::identity::Parent> {
+        self.parent.as_ref()
+    }
+
+    /// A branch (RFC 001 rule 54; RFC 009 rules 10 to 12): this run ends at the current instant
+    /// `T`, at a boundary, and becomes a new run from the checkpoint there, with the inputs so
+    /// far as its own and an identity naming the parent. The parent's record is returned for
+    /// keeping and export (rule 11). The branch begins at `T`: the checkpoint there is its start,
+    /// kept whatever the budget, and the parent's earlier ones leave with the parent; the point
+    /// `T` is stored in the branch's own chain, so that its replay compares there too.
+    pub fn branch(&mut self, platform: &mut dyn Platform) -> Result<Contents, HostError> {
+        if self.detail || !self.kernel.at_boundary() {
+            return Err(HostError::MidInstant);
+        }
+        self.kernel.trace.mark();
+        let c = self.checkpoint()?;
+        let start = Kept {
+            instant: c.kernel.now,
+            records: c.kernel.trace.records,
+            handled: c.kernel.handled,
+            bytes: size_of_checkpoint(&c),
+            checkpoint: c,
+        };
+        // The parent ends here (rule 11); its record is the Host's to offer.
+        self.end(EndReason::User);
+        let parent_record = Contents {
+            run: Some(self.run_toml()),
+            trace: self.records().map(|r| r.to_vec()),
+            payloads: None,
+            log: self.log.clone(),
+            readme: None,
+        };
+        let parent = crate::identity::Parent {
+            chain: self.chain(),
+            records: self.kernel.trace.records(),
+            instant: self.kernel.now(),
+        };
+        let parent_id = std::mem::take(&mut self.run_id);
+        // The branch: its own identity and log; the parent's inputs after `T` are nobody's
+        // (rule 10), so a replay's remaining interventions and watched points leave.
+        self.kernel.set_replay(Vec::new());
+        self.kernel.trace.watch(Vec::new());
+        self.replay_against = None;
+        self.ended = None;
+        self.created_ms = platform.wall_clock_ms();
+        self.wall_ms = self.created_ms;
+        self.run_id = format!(
+            "{:x}-{:x}-{:x}",
+            self.created_ms, self.inputs.root_seed, parent.records
+        );
+        self.kept = vec![start];
+        self.last_checkpoint_handled = self.kernel.handled();
+        self.checkpoint_requested = false;
+        self.log = DiagnosticLog::default();
+        self.notify(
+            Notification::new("host.capacity", Severity::Info, Scope::run(), Ends::Nothing)
+                .with("instances", Value::Count(self.capacity.instances))
+                .with("memory", Value::Bytes(self.capacity.memory_bytes)),
+        );
+        let n = Notification::new("run.branched", Severity::Info, Scope::run(), Ends::Nothing)
+            .with("instant", Value::Tick(parent.instant.tick))
+            .with("parent", Value::Text(parent_id))
+            .at(at(parent.instant));
+        self.notify(n);
+        self.parent = Some(parent);
+        Ok(parent_record)
     }
 
     /// The kept trace records, when `keep_records` is on.

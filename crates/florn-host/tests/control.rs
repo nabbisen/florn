@@ -449,6 +449,11 @@ fn c8_an_invalid_parameter_or_state_produces_its_code_and_changes_nothing() {
             confirmed: false,
         },
         Command::Replay { record: vec![1] },
+        Command::Branch,
+        Command::Export {
+            kind: ExportKind::ParentRecord,
+            confirmed: true,
+        },
     ] {
         let r = command(&mut c, cmd.clone());
         assert_eq!(codes(&r), ["control.not-now"], "{cmd:?}");
@@ -658,4 +663,169 @@ fn c8_an_invalid_parameter_or_state_produces_its_code_and_changes_nothing() {
             .check()
             .unwrap_or_else(|err| panic!("{:?}: {err:?}", e.notification));
     }
+}
+
+/// RFC 009 rules 10 to 12 over the interface: `branch` ends the run and starts the branch in one
+/// command, says both, keeps the parent's record for `export { kind: parent-record }`, and the
+/// branch moves back no further than its instant.
+#[test]
+fn a_branch_through_the_interface() {
+    let mut c = controller();
+    let s = spec();
+    command(
+        &mut c,
+        Command::LoadScenario {
+            bytes: s.text().into_bytes(),
+        },
+    );
+    for m in s.modules().values() {
+        command(&mut c, Command::LoadModule { bytes: m.clone() });
+    }
+    // Nothing to branch from yet.
+    assert_eq!(
+        codes(&command(&mut c, Command::Branch)),
+        ["control.not-now"]
+    );
+    command(
+        &mut c,
+        Command::NewRun {
+            seed: SeedChoice::Given(1),
+        },
+    );
+    command(
+        &mut c,
+        Command::Advance {
+            unit: Unit::ToTick(1_000),
+        },
+    );
+    let before = run_state(&mut c);
+    let parent_id = before.run_id.clone().unwrap();
+    assert!(matches!(
+        answer(&send(&mut c, Message::Query(Query::Support))),
+        Some(Answer::Support(i)) if i.features.iter().any(|f| f == "branch")
+    ));
+    let r = command(&mut c, Command::Branch);
+    assert_eq!(answer(&r), Some(&Answer::Done));
+    let seen = codes(&r);
+    let pos = |code: &str| {
+        seen.iter()
+            .position(|c| c == code)
+            .unwrap_or_else(|| panic!("{code}: {seen:?}"))
+    };
+    assert!(pos("run.ended") < pos("host.capacity") && pos("host.capacity") < pos("run.branched"));
+    let branched = r
+        .iter()
+        .find_map(|m| match m {
+            Message::Notification(n) if n.code == "run.branched" => Some(n.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(
+        branched.params[1],
+        ("parent".into(), Value::Text(parent_id.clone()))
+    );
+    branched.check().unwrap();
+    let after = run_state(&mut c);
+    assert_eq!(after.state, RunState::Paused);
+    assert_eq!(after.ended, None);
+    assert_ne!(after.run_id, before.run_id);
+    assert_eq!(
+        (&after.chain, after.records, after.now),
+        (&before.chain, before.records, before.now)
+    );
+    // The parent's record: previewed, then written; a run record whose run ended on the branch.
+    let r = command(
+        &mut c,
+        Command::Export {
+            kind: ExportKind::ParentRecord,
+            confirmed: false,
+        },
+    );
+    assert_eq!(codes(&r), ["export.preview"]);
+    assert!(
+        matches!(answer(&r), Some(Answer::Preview(p)) if p.kind == FileKind::RunRecord && !p.payloads)
+    );
+    let (name, bytes) = match answer(&command(
+        &mut c,
+        Command::Export {
+            kind: ExportKind::ParentRecord,
+            confirmed: true,
+        },
+    )) {
+        Some(Answer::Exported {
+            kind: FileKind::RunRecord,
+            name,
+            bytes,
+        }) => (name.clone(), bytes.clone()),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(name, format!("{parent_id}.florn-run"));
+    let parent = florn_host::record::read(&bytes).unwrap();
+    assert_eq!(parent.run.run_id, parent_id);
+    assert_eq!(parent.run.ended, Some(florn_host::EndReason::User));
+    assert_eq!(parent.run.records, after.records);
+    assert!(parent.run.parent.is_none());
+    assert!(parent.trace.is_some(), "the trace it kept");
+    // The branch begins at its instant: one checkpoint kept, and nothing earlier to move to.
+    assert!(matches!(
+        answer(&send(&mut c, Message::Query(Query::Checkpoints))),
+        Some(Answer::Checkpoints(list)) if list.len() == 1 && list[0].records == after.records
+    ));
+    let r = command(
+        &mut c,
+        Command::Advance {
+            unit: Unit::ToTick(500),
+        },
+    );
+    assert_eq!(codes(&r), ["control.invalid"]);
+    assert_eq!(run_state(&mut c).now, after.now);
+    // On to the end: the branch's record names the parent and replays on its own.
+    command(
+        &mut c,
+        Command::Advance {
+            unit: Unit::ToTick(u64::MAX),
+        },
+    );
+    assert_eq!(run_state(&mut c).state, RunState::Ended);
+    let record = match answer(&command(
+        &mut c,
+        Command::Export {
+            kind: ExportKind::RunRecord {
+                trace: false,
+                payloads: false,
+            },
+            confirmed: true,
+        },
+    )) {
+        Some(Answer::Exported { bytes, .. }) => bytes.clone(),
+        other => panic!("{other:?}"),
+    };
+    let branch = florn_host::record::read(&record).unwrap();
+    let p = branch.run.parent.clone().unwrap();
+    assert_eq!(p.records, after.records);
+    assert_eq!(Some(florn_model::canonical::hex(&p.chain)), after.chain);
+    assert!(branch.run.chain.contains(&(p.records, p.chain)));
+    // A branch of the ended branch is possible: a paused run at the end. After the next run
+    // starts, the parent's record is gone.
+    let r = command(&mut c, Command::Branch);
+    assert_eq!(answer(&r), Some(&Answer::Done), "{:?}", codes(&r));
+    assert_eq!(run_state(&mut c).state, RunState::Paused);
+    command(&mut c, Command::EndRun);
+    let r = command(&mut c, Command::Replay { record });
+    assert_eq!(answer(&r), Some(&Answer::Done));
+    command(
+        &mut c,
+        Command::Advance {
+            unit: Unit::ToTick(u64::MAX),
+        },
+    );
+    assert!(
+        codes(&command(
+            &mut c,
+            Command::Export {
+                kind: ExportKind::ParentRecord,
+                confirmed: true,
+            },
+        )) == ["control.not-now"]
+    );
 }

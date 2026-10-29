@@ -385,6 +385,14 @@ impl Trace {
         }
     }
 
+    /// Store the chain's value now, as a point of the record, when the count is not stored yet
+    /// (RFC 009 rule 10: a branch's record holds the point it branched at).
+    pub fn mark(&mut self) {
+        if self.stored.last().map(|(n, _)| *n) != Some(self.records) {
+            self.stored.push((self.records, self.chain));
+        }
+    }
+
     /// The chain's state at a boundary, for a checkpoint (RFC 001 rule 51).
     pub fn snapshot(&self) -> TraceSnapshot {
         TraceSnapshot {
