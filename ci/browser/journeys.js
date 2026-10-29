@@ -294,6 +294,9 @@ for (const name of browsers) {
     for (let i = 0; i < 3; i++) await page.click('button.place[data-module="distance-vector"]');
     await sleep(200);
     for (const id of [1, 2, 3]) {
+      // The options appear as the placed actors reach the draft; WebKit has selected before
+      // they did and waited for nothing.
+      await page.waitForSelector(`#attr-target option[value="${id}"]`, { state: "attached" });
       await page.selectOption("#attr-target", String(id));
       await page.fill("#attr-key", "period");
       await page.fill("#attr-value", "100ns");
@@ -301,6 +304,8 @@ for (const name of browsers) {
     }
     const pairs = [["1.0", "2.0"], ["2.1", "3.0"], ["3.1", "1.1"]];
     for (const [a, b] of pairs) {
+      await page.waitForSelector(`#connect-from option[value="${a}"]`, { state: "attached" });
+      await page.waitForSelector(`#connect-to option[value="${b}"]`, { state: "attached" });
       await page.selectOption("#connect-from", a);
       await page.selectOption("#connect-to", b);
       await page.click("#connect");
