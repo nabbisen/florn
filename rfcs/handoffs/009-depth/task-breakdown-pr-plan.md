@@ -22,7 +22,7 @@ Independent of the order above: PR-24 depends on nothing of Phase 3 and may be f
 | PR-23 | merged | `275ff55 with the follow-up dabc1b2`, 2026-10-29; CI run 40804086981 green | C23 pending |
 | PR-24 | merged | `9f22729 with the follow-ups 9c89b56 and 177d202`, 2026-10-29; CI run 40814572599 green | C24 pending; the step-4 decision on the figures: dispatched run 40813232757 (10,000 activations), version 2 metered over unmetered: protocol-style x86-64 1.27, AArch64 1.16, Apple Silicon 1.07, Chromium 1.25, Firefox 1.32, WebKit 1.03 (target 1.5 met everywhere); compute-style x86-64 1.07, AArch64 0.99, Apple Silicon 1.05, Chromium 2.99 (version 1: 8.31), Firefox 1.42, WebKit 1.42 (target 2 met everywhere but Chromium). Per rule 9 the default stays version 1 until the owner's decision on the one miss (RFC 010 open question 1) |
 | PR-25 | merged | `198bee8`, 2026-10-29; CI run 40823915883 green | C25 pending |
-| PR-26 | not started | | |
+| PR-26 | merged | `f5312e7`, 2026-10-29; CI run 40866743099 green | C26 pending |
 | PR-27 | not started | | |
 | PR-28 | not started | | |
 | PR-29 | not started | | |
