@@ -97,7 +97,9 @@ for (const name of browsers) {
     });
     page.on("pageerror", (e) => consoleErrors.push(String(e)));
     try {
-      await page.goto(`${at}/kit.html?${query}`);
+      // Navigation under a loaded runner (WebKit on the shared macOS runner has taken longer
+      // than Playwright's 30 s to start a page) gets two minutes; the work has `timeout`.
+      await page.goto(`${at}/kit.html?${query}`, { timeout: 120000 });
       await page.waitForSelector("#out[data-done='1']", { timeout });
       return JSON.parse(await page.textContent("#out"));
     } finally {
