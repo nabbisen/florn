@@ -440,6 +440,40 @@ impl<E: Engine> Controller<E> {
                     return self.notify(out, self.not_now(name));
                 };
                 run.set_wall_clock(self.platform.wall_clock_ms());
+                // Backward (RFC 009 rule 7): the nearest kept checkpoint at or before the tick,
+                // then forward to it, at once; paced, the way forward from the checkpoint is paced.
+                if let Unit::ToTick(t) = unit
+                    && t < run.kernel().now().tick
+                {
+                    let paced = matches!(self.pacing, Pacing::TicksPerSecond(_));
+                    let result = if paced {
+                        let index = run
+                            .kept()
+                            .iter()
+                            .rposition(|k| k.instant.tick <= t)
+                            .expect("the start is kept");
+                        run.restore_kept(index)
+                    } else {
+                        run.go_back(t)
+                    };
+                    if let Err(e) = result {
+                        self.drain_log(out);
+                        return self.notify(
+                            out,
+                            Code::FileUnreadable.notification(
+                                Scope::file("checkpoint"),
+                                vec![Value::Enum("checkpoint".into()), Value::Text(e.to_string())],
+                            ),
+                        );
+                    }
+                    if paced && run.kernel().now().tick < t {
+                        self.target = Some(t);
+                        self.state = RunState::Running;
+                    }
+                    self.after_advance(out, true);
+                    out.push(Message::Answer(Answer::Done));
+                    return;
+                }
                 match (unit, self.pacing) {
                     (Unit::OneEvent, _) => {
                         run.advance(Advance::OneEvent);
@@ -1207,15 +1241,14 @@ impl<E: Engine> Controller<E> {
                         }
                     }),
             ),
+            // The window from the kept records, or by re-execution when they do not hold it
+            // (RFC 009 rule 9); nothing of the way is logged or displayed.
             Query::TraceWindow { from, count } => Answer::TraceWindow(
                 self.run
-                    .as_ref()
-                    .and_then(|r| r.records())
-                    .map(|records| {
-                        records
+                    .as_mut()
+                    .map(|r| {
+                        r.trace_window(*from, *count)
                             .iter()
-                            .skip(*from as usize)
-                            .take(*count as usize)
                             .map(trace_entry)
                             .collect()
                     })

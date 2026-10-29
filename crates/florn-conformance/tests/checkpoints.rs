@@ -52,10 +52,10 @@ fn a_checkpoint_of_every_ladder_scenario_restores_to_the_recorded_digest() {
         assert!(
             a.request_checkpoint() || {
                 a.advance(Advance::OneInstant);
-                a.kept().len() == 1
+                a.kept().len() == 2
             }
         );
-        let kept = &a.kept()[0];
+        let kept = a.kept().last().unwrap();
         let bytes = kept.checkpoint().encode();
         let decoded = Checkpoint::decode_file(&bytes, u64::MAX).unwrap();
         assert_eq!(
@@ -85,9 +85,9 @@ fn a_checkpoint_of_every_ladder_scenario_restores_to_the_recorded_digest() {
         // and the continuation gives the same digest (RFC 001 rule 52, RFC 009 rule 7).
         a.run_to_end();
         assert_eq!(a.chain(), reference.chain());
-        a.restore_kept(0).unwrap();
+        a.restore_kept(1).unwrap();
         assert_eq!(a.kernel().trace.records(), decoded.kernel.trace.records);
-        assert_eq!(a.kept().len(), 1, "the kept set ends at the restored one");
+        assert_eq!(a.kept().len(), 2, "the kept set ends at the restored one");
         a.run_to_end();
         assert_eq!(a.chain(), reference.chain(), "{}: in place", s.name);
         assert_eq!(
@@ -160,7 +160,7 @@ fn the_kept_set_follows_the_interval_and_the_budget() {
 
     // Under a budget of a few checkpoints: the newest eight survive; the rest is thinned,
     // dense at the end and sparse at the start.
-    let one = r.kept()[0].bytes;
+    let one = r.kept()[1].bytes;
     let mut t = host::try_start(&s, with_checkpoints(50, one * 12)).unwrap();
     t.run_to_end();
     let kept = t.kept();
@@ -199,7 +199,7 @@ fn a_file_over_a_maximum_is_refused_and_a_corrupt_one_is_unreadable() {
     let mut r = host::try_start(&s, no_checkpoints()).unwrap();
     r.advance(Advance::ToTick(500));
     assert!(r.request_checkpoint());
-    let bytes = r.kept()[0].checkpoint().encode();
+    let bytes = r.kept()[1].checkpoint().encode();
     assert_eq!(
         Checkpoint::decode_file(&bytes, bytes.len() as u64 - 1).err(),
         Some("file.too-large")
@@ -230,7 +230,7 @@ fn a_file_over_a_maximum_is_refused_and_a_corrupt_one_is_unreadable() {
     let other = shipped::dv_triangle(200);
     let mut o = host::try_start(&other, no_checkpoints()).unwrap();
     let err = o
-        .restore_in_place(r.kept()[0].checkpoint())
+        .restore_in_place(r.kept()[1].checkpoint())
         .expect_err("refused");
     assert!(matches!(
         err,
@@ -274,7 +274,7 @@ fn interventions_after_a_restored_instant_are_undone_and_a_replay_reapplies_them
     r.intervene_map(Some(1_500), 1001, &cut(false)).unwrap();
     r.advance(Advance::ToTick(2_000));
     assert_eq!(r.kernel().applied_interventions().len(), 1);
-    r.restore_kept(0).unwrap();
+    r.restore_kept(1).unwrap();
     assert!(r.kernel().applied_interventions().is_empty());
     let rewound = r
         .log()
@@ -290,7 +290,7 @@ fn interventions_after_a_restored_instant_are_undone_and_a_replay_reapplies_them
     assert_eq!(r.chain(), plain.chain(), "undone");
 
     // Re-applied at its instant after another restore: the digest with it.
-    r.restore_kept(0).unwrap();
+    r.restore_kept(1).unwrap();
     r.advance(Advance::ToTick(1_500));
     r.intervene_map(Some(1_500), 1001, &cut(false)).unwrap();
     r.run_to_end();
@@ -313,7 +313,7 @@ fn interventions_after_a_restored_instant_are_undone_and_a_replay_reapplies_them
     replay.advance(Advance::ToTick(1_000));
     assert!(replay.request_checkpoint());
     replay.advance(Advance::ToTick(2_000));
-    replay.restore_kept(0).unwrap();
+    replay.restore_kept(1).unwrap();
     replay.run_to_end();
     assert_eq!(replay.chain(), cut_run.chain(), "a replay re-applies");
     assert!(matches!(

@@ -434,6 +434,20 @@ impl Trace {
     pub fn watched(&self) -> &[u64] {
         &self.watched
     }
+    /// Keep every record from here on (RFC 001 rule 55: detail for a window by replay with
+    /// recording switched on); `stop_recording` drops them and switches it off again.
+    pub fn start_recording(&mut self) {
+        if self.recording.is_none() {
+            self.recording = Some(Vec::new());
+        }
+    }
+    pub fn stop_recording(&mut self) {
+        self.recording = None;
+    }
+    /// Whether records are kept.
+    pub fn is_recording(&self) -> bool {
+        self.recording.is_some()
+    }
     /// The kept records after a restore in place (RFC 009 rule 7): the prefix up to the
     /// snapshot's count, when records are kept at all.
     pub fn set_kept(&mut self, mut records: Vec<Record>) {

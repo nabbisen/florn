@@ -1,6 +1,6 @@
 # RFC 001 — Determinism contract
 
-**Status.** Implemented (0.1.0, 2026-10-20); accepted 2026-10-13. Open questions 1 to 5 are deferred as stated in their table; none blocks implementation. Open questions 3 and 4 resolved 2026-10-20 by PR-13. Amended 2026-10-29 by PR-23 (RFC 009): rule 17's order among events with one key, the several deliveries of one send (a lan's frame reaches every other port), is by the target's identity; the queue's own order had decided it, which stepping and restoring exposed; the shipped `net-lan` digest, recorded from a run straight through, stands under the rule.
+**Status.** Implemented (0.1.0, 2026-10-20); accepted 2026-10-13. Open questions 1 to 5 are deferred as stated in their table; none blocks implementation. Open questions 3 and 4 resolved 2026-10-20 by PR-13. Amended 2026-10-29 by PR-23 (RFC 009): rule 17's order among events with one key, the several deliveries of one send (a lan's frame reaches every other port), is by the target's identity; the queue's own order had decided it, which stepping and restoring exposed; the shipped `net-lan` digest, recorded from a run straight through, stands under the rule. Rules 53 and 55 implemented 2026-10-29 by PR-25 (RFC 009 rules 7 and 9); the phasing table's later row is 0.3.0.
 **Tracks.** Requirements DES-001 to DES-010, BUS-002, BUS-004, BUS-007, FIN-004, FIN-006, NUM-002, NUM-006, NFR-001, NFR-011, DATA-002, DATA-005, AUTO-003, AUTO-004, AUTO-006. Requirement IDs refer to the florn requirements specification, which will be published under `docs/`.
 **Touches.** The kernel, every guest contract, the scenario format, replay, and the conformance tests.
 
@@ -311,7 +311,7 @@ This rule has three parts.
 | Release | Implements |
 |---|---|
 | 0.1.0 | Rules 49, 50, 55. Moving backward by execution from the start. |
-| Later | Rules 51 to 54. |
+| 0.3.0 | Rules 51 to 55 as RFC 009 implements them: checkpoints (PR-23), moving backward and detail by replay (PR-25), branching (PR-26). |
 
 Nothing in 0.1.0 may prevent the later rules. Rule 52 is the reason that guest state must be exportable from the first release, even though no checkpoint is taken yet.
 

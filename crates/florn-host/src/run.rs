@@ -498,6 +498,8 @@ pub struct Run<E: Engine> {
     last_checkpoint_handled: u64,
     /// A `checkpoint` command waiting for the next boundary (rule 2).
     checkpoint_requested: bool,
+    /// Detail by replay in progress (rule 9): nothing is logged, kept or displayed meanwhile.
+    detail: bool,
 }
 
 impl<E: Engine> Run<E> {
@@ -549,6 +551,7 @@ impl<E: Engine> Run<E> {
             let (engine, admission) = run.into_parts();
             return Err(Box::new((e, engine, admission)));
         }
+        run.keep_start();
         run.init_all();
         Ok(run)
     }
@@ -823,6 +826,7 @@ impl<E: Engine> Run<E> {
             kept: Vec::new(),
             last_checkpoint_handled: 0,
             checkpoint_requested: false,
+            detail: false,
         };
         // The slots, without instances yet.
         let tick = run.scenario.time.tick;
@@ -1073,6 +1077,9 @@ impl<E: Engine> Run<E> {
     }
 
     fn notify(&mut self, n: Notification) {
+        if self.detail {
+            return;
+        }
         self.log.push(self.wall_ms, &self.run_id, n);
     }
 
@@ -1858,6 +1865,9 @@ impl<E: Engine> Run<E> {
     /// A checkpoint when one is due at this boundary: requested, or the interval of rule 2
     /// since the Host's last. Returns whether one was taken.
     fn checkpoint_if_due(&mut self) -> bool {
+        if self.detail {
+            return false;
+        }
         let interval = self.options.checkpoint_interval;
         let due_by_interval = interval > 0
             && self
@@ -1914,14 +1924,15 @@ impl<E: Engine> Run<E> {
                 .kept
                 .len()
                 .saturating_sub(Options::CHECKPOINTS_ALWAYS_KEPT);
-            if old == 0 {
+            if old <= 1 {
                 break;
             }
-            // The even positions of the old part, oldest first: half of it in one pass.
+            // The even positions of the old part but the start, oldest first: half of it in one
+            // pass. The start (rule 2) is kept whatever the budget: moving back always has it.
             let mut i = 0;
             let mut keep = Vec::with_capacity(self.kept.len());
             for (n, k) in self.kept.drain(..).enumerate() {
-                if n < old && n % 2 == 0 {
+                if n > 0 && n < old && n % 2 == 0 {
                     dropped += 1;
                     i += 1;
                 } else {
@@ -1959,9 +1970,124 @@ impl<E: Engine> Run<E> {
         }
     }
 
-    /// The kept checkpoints, oldest first.
+    /// The kept checkpoints, oldest first; the first is the start (rule 2).
     pub fn kept(&self) -> &[Kept] {
         &self.kept
+    }
+
+    /// The start as a kept checkpoint (rule 2): the instances before `init`, so that a restore of
+    /// it runs `init` again and the run begins as a fresh one, records and all; what moving back
+    /// to the beginning restores. Never dropped by the budget; not said in the log.
+    fn keep_start(&mut self) {
+        if let Ok(c) = self.checkpoint() {
+            let bytes = size_of_checkpoint(&c);
+            self.kept.insert(
+                0,
+                Kept {
+                    instant: c.kernel.now,
+                    records: c.kernel.trace.records,
+                    handled: c.kernel.handled,
+                    bytes,
+                    checkpoint: c,
+                },
+            );
+            self.last_checkpoint_handled = 0;
+        }
+    }
+
+    /// Move to an earlier tick (RFC 001 rule 53; RFC 009 rule 7): restore the nearest kept
+    /// checkpoint at or before it, then execute forward to it. The interventions after it leave
+    /// the inputs and are said (`run.rewound`); a replay re-applies them at their instants.
+    pub fn go_back(&mut self, to: u64) -> Result<(), HostError> {
+        let index = self
+            .kept
+            .iter()
+            .rposition(|k| k.instant.tick <= to)
+            .ok_or(HostError::Malformed("no checkpoint at or before the tick"))?;
+        self.restore_kept(index)?;
+        if self.kernel.now().tick < to {
+            self.advance(Advance::ToTick(to));
+        }
+        Ok(())
+    }
+
+    /// The records of a window (RFC 001 rule 55; RFC 009 rule 9): from the kept records when
+    /// they hold it, else by re-execution through this run's own instances: the present is
+    /// checkpointed, the nearest kept checkpoint at or before the window is restored with
+    /// recording on, the run executes to the window's end, and the present is restored. The
+    /// run's instant, inputs, trace and kept set are as before; nothing of the way is logged,
+    /// kept or displayed. Needs a boundary (RFC 001 rule 51); mid-instant, the kept records
+    /// alone answer.
+    pub fn trace_window(&mut self, from: u64, count: u32) -> Vec<florn_kernel::Record> {
+        let end = from.saturating_add(u64::from(count));
+        let from_kept =
+            |records: &[florn_kernel::Record], first: u64| -> Vec<florn_kernel::Record> {
+                let lo = from.saturating_sub(first) as usize;
+                let hi = end.saturating_sub(first) as usize;
+                records
+                    .get(lo.min(records.len())..hi.min(records.len()))
+                    .map(|r| r.to_vec())
+                    .unwrap_or_default()
+            };
+        // The kept records cover the window: the Host keeps them from the start, or from the
+        // last checkpoint (the browser), so the first kept record's index is known.
+        let total = self.kernel.trace.records();
+        if let Some(records) = self.kernel.trace.kept_records() {
+            let first = total.saturating_sub(records.len() as u64);
+            if from >= first {
+                return from_kept(records, first);
+            }
+        }
+        if !self.kernel.at_boundary() {
+            return self
+                .kernel
+                .trace
+                .kept_records()
+                .map(|r| from_kept(r, total.saturating_sub(r.len() as u64)))
+                .unwrap_or_default();
+        }
+        let Some(index) = self.kept.iter().rposition(|k| k.records <= from) else {
+            return Vec::new();
+        };
+        let Ok(present) = self.checkpoint() else {
+            return Vec::new();
+        };
+        let own_records = self.kernel.trace.kept_records().map(|r| r.to_vec());
+        // The present's own pending replay list, as it was: the detail run's leftover is not it.
+        let own_replay = self.kernel.replay_pending().to_vec();
+        let ended = self.ended;
+        let reached = self.reached;
+        self.detail = true;
+        let start = self.kept[index].checkpoint.clone();
+        let mut out = Vec::new();
+        if self.restore_quietly(&start).is_ok() {
+            while self.ended.is_none() && self.kernel.trace.records() < end {
+                if self.advance(Advance::OneInstant) == 0 && !self.kernel.has_next() {
+                    break;
+                }
+            }
+            let first = self.kept[index].records;
+            if let Some(records) = self.kernel.trace.kept_records() {
+                out = from_kept(records, first);
+            }
+        }
+        let _ = self.restore_quietly(&present);
+        self.kernel.set_replay(own_replay);
+        // The Host's own kept records, as they were; none when it kept none.
+        match own_records {
+            Some(records) => self.kernel.trace.set_kept(records),
+            None => self.kernel.trace.stop_recording(),
+        }
+        self.ended = ended;
+        self.reached = reached;
+        self.detail = false;
+        out
+    }
+
+    /// A restore for detail by replay (rule 9): the undone interventions are re-applied at their
+    /// instants whatever the run, nothing is said, and the kept set is untouched.
+    fn restore_quietly(&mut self, checkpoint: &Checkpoint) -> Result<(), HostError> {
+        self.restore_with(checkpoint, true)
     }
 
     /// Restore a kept checkpoint in this run (RFC 009 rules 5 and 7).
@@ -1983,6 +2109,10 @@ impl<E: Engine> Run<E> {
     /// and everything after the checkpoint's instant discarded, and the interventions applied
     /// after it leave the inputs (rule 8; a replay re-applies them at their instants).
     pub fn restore_in_place(&mut self, checkpoint: &Checkpoint) -> Result<(), HostError> {
+        self.restore_with(checkpoint, false)
+    }
+
+    fn restore_with(&mut self, checkpoint: &Checkpoint, detail: bool) -> Result<(), HostError> {
         self.check_identity(&checkpoint.identity)?;
         let scenario_actors = self.actors.len() + self.builtins.len();
         if checkpoint.actors.len() > scenario_actors
@@ -2010,7 +2140,9 @@ impl<E: Engine> Run<E> {
             .kept_records()
             .map(|r| r.to_vec())
             .unwrap_or_default();
-        let config = self.kernel.config().clone();
+        let mut config = self.kernel.config().clone();
+        // Detail by replay records from the restore on, the start's `init` included.
+        config.keep_records |= detail;
         self.kernel = Kernel::restore(config, checkpoint.kernel.clone());
         self.kernel.trace.set_kept(kept_records);
         self.kernel.trace.watch(watched);
@@ -2027,8 +2159,9 @@ impl<E: Engine> Run<E> {
         for (id, state) in &checkpoint.actors {
             self.restore_actor(*id, state)?;
         }
-        if self.replay_against.is_some() {
-            // A replay: what was undone is still to come at its instant (RFC 001 rule 36).
+        if self.replay_against.is_some() || detail {
+            // A replay, or detail by replay: what was undone is still to come at its instant
+            // (RFC 001 rule 36).
             let mut again = undone;
             again.extend(replay_pending);
             self.kernel.set_replay(again);
@@ -2041,6 +2174,10 @@ impl<E: Engine> Run<E> {
         }
         self.ended = None;
         self.reached = checkpoint.kernel.now.tick;
+        // The start (rule 2) is the run before `init`: initialised again, as a fresh run is.
+        if checkpoint.kernel.handled == 0 && checkpoint.kernel.trace.records == 0 {
+            self.init_all();
+        }
         self.telemetry.clear();
         if let Some(a) = &mut self.activity {
             a.clear();
@@ -2168,6 +2305,10 @@ impl<E: Engine> Run<E> {
         for (id, state) in &checkpoint.actors {
             run.restore_actor(*id, state)?;
         }
+        // The start (RFC 009 rule 2) is the run before `init`: initialised, as a fresh run is.
+        if checkpoint.kernel.handled == 0 && checkpoint.kernel.trace.records == 0 {
+            run.init_all();
+        }
         // The built-in actors' kernel state is in the kernel's snapshot; the dead ones too.
         for (id, a) in &checkpoint.kernel.actors {
             if !a.alive {
@@ -2271,6 +2412,7 @@ impl<E: Engine> Run<E> {
             .watch(record.chain.iter().map(|(n, _)| *n).collect());
         run.replay_against = Some(record.chain.clone());
         run.instantiate_all()?;
+        run.keep_start();
         run.init_all();
         Ok(run)
     }
