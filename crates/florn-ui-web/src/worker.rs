@@ -232,7 +232,8 @@ pub unsafe extern "C" fn florn_admit_kit(ptr: *mut u8, len: u32) -> i32 {
     let bytes = unsafe { take(ptr, len) };
     let mut limits = Options::default().class_defaults;
     limits.memory_bytes = 2 * 1024 * 1024;
-    match florn_host::run::default_admission().admit("module", &bytes, &limits) {
+    let cost_model = COST_MODEL.with(|c| c.get());
+    match florn_host::run::default_admission().admit_under("module", &bytes, &limits, cost_model) {
         Ok(a) => {
             set_out(
                 format!(
@@ -573,11 +574,28 @@ pub unsafe extern "C" fn florn_bench_crossing(ptr: *mut u8, len: u32, scale: u32
     }
 }
 
+thread_local! {
+    /// The cost-model version the kit's benches admit under (RFC 010 rule 9).
+    static COST_MODEL: std::cell::Cell<u32> = const { std::cell::Cell::new(florn_host::run::COST_MODEL_VERSION) };
+}
+
+/// The cost-model version new runs and the benches admit under (`set-cost-model`): the
+/// replies as JSON, -1 for a version this Host lacks.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_set_cost_model(version: u32) -> i32 {
+    if florn_host::run::cost_table(version).is_none() {
+        set_out(b"[]".to_vec());
+        return -1;
+    }
+    COST_MODEL.with(|c| c.set(version));
+    send(Message::Command(Command::SetCostModel { version }))
+}
+
 fn admit(name: &str, raw: &[u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
     let mut limits = Options::default().class_defaults;
     limits.memory_bytes = 2 * 1024 * 1024;
     let admitted = florn_host::run::default_admission()
-        .admit(name, raw, &limits)
+        .admit_under(name, raw, &limits, COST_MODEL.with(|c| c.get()))
         .map_err(|e| format!("{:?}", e.codes()))?;
     let config =
         florn_host::run::default_config(&admitted).map_err(|e| format!("{:?}", e.codes()))?;
@@ -706,8 +724,9 @@ fn bench_cost(name: &str, raw: &[u8], activations: u64) -> Result<String, String
         &clock,
     )?;
     Ok(format!(
-        "{{\"guest\":{},\"activations\":{},\"unmetered_micros\":{},\"metered_micros\":{},\"units_per_activation\":{}}}",
+        "{{\"guest\":{},\"cost_model\":{},\"activations\":{},\"unmetered_micros\":{},\"metered_micros\":{},\"units_per_activation\":{}}}",
         json_str(&c.guest),
+        COST_MODEL.with(|c| c.get()),
         c.activations,
         c.unmetered_micros,
         c.metered_micros,

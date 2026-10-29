@@ -85,6 +85,8 @@ The defaults, which a scenario may lower and the Host's maxima bound (RFC 003 ru
 
 Memory growth past the limit is not a fault: `memory.grow` returns −1 and the guest decides. The SDK's own sharp edges are traps by design: `below(0)`, an empty range, a config shorter than declared, a report on an undeclared channel, a panic under either profile. Use `host::log` before a risky step while developing.
 
+The budget is counted by florn's metering pass (RFC 003 section 4; RFC 010): one unit per instruction. Under cost-model version 2 the pass checks the budget before every call, before a loop's back-edge, at every return and at the end, so a function is refused at admission when its length exceeds the class's budget (`module.segment-too-long`): the budget must exceed the longest function, which `florn admit` reports.
+
 ## Running your guest
 
 A scenario names your module by its hash and places actors over it. For one actor with a timer, this is enough:

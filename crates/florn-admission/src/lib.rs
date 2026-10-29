@@ -9,7 +9,8 @@ pub mod config;
 pub mod error;
 pub mod estimate;
 pub mod manifest;
-pub mod transform;
+pub mod meter;
+mod transform;
 pub mod validate;
 pub mod world;
 
@@ -28,8 +29,21 @@ pub use world::WorldSpec;
 /// The admission version (RFC 003 rule 10): the passes of rule 7 in their order with
 /// `fvm-wasm-instrument` 0.4.
 pub const ADMISSION_VERSION: u32 = 1;
-/// The cost-model version (RFC 003 rules 14 and 15).
+/// The cost-model version new runs default to (RFC 003 rules 14 and 15; RFC 010 rule 9): the
+/// Host keeps every published version, and a run names its own.
 pub const COST_MODEL_VERSION: u32 = 1;
+/// The published cost-model versions.
+pub const COST_MODEL_VERSIONS: [u32; 2] = [1, 2];
+pub use meter::COST_MODEL_V2_TABLE;
+
+/// The table of a cost-model version (rule 14), or `None` for a version this Host lacks.
+pub fn cost_table(version: u32) -> Option<&'static str> {
+    match version {
+        1 => Some(COST_MODEL_V1_TABLE),
+        2 => Some(COST_MODEL_V2_TABLE),
+        _ => None,
+    }
+}
 /// The cost model's table, recorded with the version in the run record (rule 14).
 pub const COST_MODEL_V1_TABLE: &str = "\
 cost-model = 1
@@ -66,6 +80,9 @@ pub struct Admitted {
     pub limits: ClassLimits,
     pub admission_version: u32,
     pub cost_model_version: u32,
+    /// The longest check-free path of any function, as instructions (RFC 010 rule 3): what the
+    /// class's budget must exceed under version 2; reported under version 1 too.
+    pub longest_path: u64,
 }
 
 impl Admitted {
@@ -138,11 +155,23 @@ impl Admission {
         source: &[u8],
         limits: &ClassLimits,
     ) -> Result<Arc<Admitted>, Errors> {
+        self.admit_under(name, source, limits, COST_MODEL_VERSION)
+    }
+
+    /// `admit` under a named cost-model version (RFC 003 rule 15: the Host keeps every published
+    /// version; a replay or a restored checkpoint admits under the run's).
+    pub fn admit_under(
+        &mut self,
+        name: &str,
+        source: &[u8],
+        limits: &ClassLimits,
+        cost_model: u32,
+    ) -> Result<Arc<Admitted>, Errors> {
         let source_sha256 = sha256(source);
         let key = CacheKey {
             source: source_sha256,
             admission: ADMISSION_VERSION,
-            cost_model: COST_MODEL_VERSION,
+            cost_model,
             limits: *limits,
         };
         if let Some(a) = self.cache.get(&key) {
@@ -177,7 +206,8 @@ impl Admission {
             (Ok(_), Some(Ok(p))) => p,
             (Ok(_), None) => unreachable!("read_manifest runs whenever the sections were read"),
         };
-        let bytes = transform::transform(source, limits)?;
+        let transformed = transform::transform(source, limits, cost_model)?;
+        let bytes = transformed.bytes;
         let layout = transform::state_layout(&bytes)?;
         self.transformed += 1;
         let admitted = Arc::new(Admitted {
@@ -190,7 +220,8 @@ impl Admission {
             memory_initial_pages: info.memory_initial_pages,
             limits: *limits,
             admission_version: ADMISSION_VERSION,
-            cost_model_version: COST_MODEL_VERSION,
+            cost_model_version: cost_model,
+            longest_path: transformed.longest_path,
         });
         self.cache.insert(key, admitted.clone());
         Ok(admitted)

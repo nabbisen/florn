@@ -146,6 +146,11 @@ pub enum Command {
     LoadCheckpoint {
         bytes: Vec<u8>,
     },
+    /// The cost-model version new runs admit under (RFC 010 rule 9; 0.3): one the Host
+    /// publishes, else `control.invalid`.
+    SetCostModel {
+        version: u32,
+    },
 }
 
 impl Command {
@@ -165,6 +170,7 @@ impl Command {
             Self::Checkpoint => "checkpoint",
             Self::Restore { .. } => "restore",
             Self::LoadCheckpoint { .. } => "load-checkpoint",
+            Self::SetCostModel { .. } => "set-cost-model",
         }
     }
 
@@ -858,6 +864,10 @@ fn command_w(e: &mut Encoder, c: &Command) {
             e.u8(13);
             e.bytes(bytes);
         }
+        Command::SetCostModel { version } => {
+            e.u8(14);
+            e.u32(*version);
+        }
     }
 }
 
@@ -911,6 +921,7 @@ fn command_r(d: &mut Decoder) -> Option<Command> {
             checkpoint: d.u32()?,
         },
         13 => Command::LoadCheckpoint { bytes: d.bytes()? },
+        14 => Command::SetCostModel { version: d.u32()? },
         _ => return None,
     })
 }

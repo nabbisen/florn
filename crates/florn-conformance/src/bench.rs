@@ -22,8 +22,13 @@ fn engine() -> WasmtimeEngine {
 
 /// Admit under the kit's limits: the admitted bytes and the config of the defaults.
 fn admitted(name: &str, bytes: &[u8]) -> (Vec<u8>, Vec<u8>) {
+    admitted_under(name, bytes, florn_admission::COST_MODEL_VERSION)
+}
+
+/// `admitted` under a cost-model version (RFC 010 rule 9: the figures of both).
+fn admitted_under(name: &str, bytes: &[u8], cost_model: u32) -> (Vec<u8>, Vec<u8>) {
     let a = Admission::default()
-        .admit(name, bytes, &crate::host::kit_limits())
+        .admit_under(name, bytes, &crate::host::kit_limits(), cost_model)
         .unwrap_or_else(|e| panic!("{name}: {:?}", e.codes()));
     let config = florn_host::run::default_config(&a).expect("the defaults fill the config");
     (a.bytes.clone(), config)
@@ -55,12 +60,16 @@ pub fn crossing(scale: u64) -> Vec<Crossing> {
     .expect("the crossing benchmark runs")
 }
 
-/// The cost benchmark (RFC 003 §7 step 2): the two guests, `activations` each, run-only time.
+/// The cost benchmark (RFC 003 §7 step 2): the two guests, `activations` each, run-only time,
+/// under every published cost-model version (RFC 010 rule 9).
 pub fn cost(activations: u64) -> Vec<Cost> {
     let mut out = Vec::new();
-    for guest in ["bench_protocol", "bench_compute"] {
+    for (guest, version) in ["bench_protocol", "bench_compute"]
+        .into_iter()
+        .flat_map(|g| florn_admission::COST_MODEL_VERSIONS.map(|v| (g, v)))
+    {
         let raw = guests::bytes(guest);
-        let (metered, config) = admitted(guest, &raw);
+        let (metered, config) = admitted_under(guest, &raw, version);
         let protocol = guest == "bench_protocol";
         let payload = move |ordinal: u64| {
             if protocol {
@@ -85,6 +94,7 @@ pub fn cost(activations: u64) -> Vec<Cost> {
             )
             .expect("the cost benchmark runs"),
         );
+        out.last_mut().expect("pushed").cost_model = version;
     }
     out
 }
@@ -371,11 +381,12 @@ impl Figures {
                 get(true)
             ));
         }
-        t.push_str("\n### Cost (RFC 003 section 7, step 2), microseconds per activation\n\n| Guest | Activations | Unmetered | Metered | Ratio | Units per activation |\n|---|---|---|---|---|---|\n");
+        t.push_str("\n### Cost (RFC 003 section 7, step 2), microseconds per activation\n\n| Guest | Cost model | Activations | Unmetered | Metered | Ratio | Units per activation |\n|---|---|---|---|---|---|---|\n");
         for c in &self.cost {
             t.push_str(&format!(
-                "| {} | {} | {:.1} | {:.1} | {:.2}× | {:.0} |\n",
+                "| {} | {} | {} | {:.1} | {:.1} | {:.2}× | {:.0} |\n",
                 c.guest,
+                c.cost_model,
                 c.activations,
                 c.unmetered_micros,
                 c.metered_micros,

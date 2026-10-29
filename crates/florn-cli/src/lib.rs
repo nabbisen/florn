@@ -47,10 +47,12 @@ struct Args {
     checkpoint_out: Option<PathBuf>,
     /// `resume --to TICK`: stop there instead of at the scenario's end.
     to: Option<u64>,
+    /// `run --cost-model N` (RFC 010 rule 9).
+    cost_model: Option<u32>,
 }
 
 fn usage() -> &'static str {
-    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads] [--checkpoint-at TICK --checkpoint-out <file>]\n  florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--to TICK] [--out <file>] [--trace] [--payloads]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done; 1 refused or failed; 2 the replay diverged; 3 the run ended with a run fault"
+    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads] [--cost-model N] [--checkpoint-at TICK --checkpoint-out <file>]\n  florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--to TICK] [--out <file>] [--trace] [--payloads]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done; 1 refused or failed; 2 the replay diverged; 3 the run ended with a run fault"
 }
 
 fn parse_args(argv: &[String]) -> Result<Args, String> {
@@ -69,6 +71,7 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         checkpoint_at: None,
         checkpoint_out: None,
         to: None,
+        cost_model: None,
     };
     let mut i = 1;
     let value = |i: &mut usize, name: &str| -> Result<String, String> {
@@ -123,6 +126,13 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
                     value(&mut i, "--to")?
                         .parse()
                         .map_err(|_| "--to needs a tick".to_string())?,
+                )
+            }
+            "--cost-model" => {
+                a.cost_model = Some(
+                    value(&mut i, "--cost-model")?
+                        .parse()
+                        .map_err(|_| "--cost-model needs a version".to_string())?,
                 )
             }
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
@@ -271,6 +281,15 @@ fn cmd_run(args: &Args) -> Result<ExitCode, String> {
     }
     let mut c = controller(args)?;
     load(&mut c, &scenario, args)?;
+    if let Some(v) = args.cost_model {
+        let (_, error) = send(
+            &mut c,
+            Message::Command(Command::SetCostModel { version: v }),
+        );
+        if error {
+            return Err("the cost-model version was not accepted".into());
+        }
+    }
     let seed = args.seed.map_or(SeedChoice::Choose, SeedChoice::Given);
     let (_, error) = send(&mut c, Message::Command(Command::NewRun { seed }));
     if error {

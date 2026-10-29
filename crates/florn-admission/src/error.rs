@@ -69,6 +69,14 @@ pub enum Kind {
     },
     /// `admission.transform-failed`: a defect of florn, never an expected outcome.
     TransformFailed { reason: String },
+    /// `module.segment-too-long` (RFC 010 rule 3): a function whose longest check-free path
+    /// exceeds the class's budget, so that an activation could run past the budget by more
+    /// than one path.
+    SegmentTooLong {
+        function: u32,
+        cost: u64,
+        budget: u64,
+    },
     /// `host.capacity-exceeded`: `what` is an `enum(capacity-kind)`: instances, memory.
     CapacityExceeded {
         need: u64,
@@ -130,6 +138,7 @@ impl Error {
             PortCount { .. } => "module.port-count",
             LimitBelowNeed { .. } => "limit.below-need",
             TransformFailed { .. } => "admission.transform-failed",
+            SegmentTooLong { .. } => "module.segment-too-long",
             CapacityExceeded { .. } => "host.capacity-exceeded",
             ConfigMissingParameter { .. } => "config.missing-parameter",
             ConfigUnknownParameter { .. } => "config.unknown-parameter",
@@ -146,6 +155,15 @@ impl Error {
             Invalid { reason } | ManifestSchema { reason } | TransformFailed { reason } => {
                 vec![("reason", Text(reason.clone()))]
             }
+            SegmentTooLong {
+                function,
+                cost,
+                budget,
+            } => vec![
+                ("function", Text(function.to_string())),
+                ("cost", Count(*cost)),
+                ("budget", Count(*budget)),
+            ],
             TooLarge {
                 what,
                 found,

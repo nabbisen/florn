@@ -10,6 +10,7 @@ use wasmparser::{ExternalKind, Parser, Payload, TypeRef, ValType, Validator};
 
 use crate::error::{Error, Kind};
 use crate::estimate::ClassLimits;
+use crate::meter;
 use crate::validate::admitted_features;
 use crate::{BUDGET_IMPORT_MODULE, GLOBAL_EXPORT_PREFIX, STACK_EXPORT, TABLE_EXPORT_PREFIX};
 
@@ -134,10 +135,22 @@ fn rewrite_exports(
     Ok(module.finish())
 }
 
-/// Passes 2 and 3: the library's stack limiter, then its metering with the budget as an imported
-/// global of `env`. The library leaves exported globals' indices unshifted after it inserts the
-/// imported global at index 0; florn corrects them and exports the height global as `florn.stack`.
-fn limit_and_meter(bytes: &[u8], limits: &ClassLimits) -> Result<Vec<u8>, Error> {
+/// The transformed module and the bound of RFC 010 rule 3 (the longest check-free path of any
+/// function, as instructions), reported for both versions.
+pub struct Transformed {
+    pub bytes: Vec<u8>,
+    pub longest_path: u64,
+}
+
+/// Passes 2 and 3: the library's stack limiter, then the metering of the cost-model version
+/// with the budget as an imported global of `env`: version 1 is the library's pass, version 2
+/// florn's own (RFC 010). Both leave exported globals' indices unshifted after the imported
+/// global takes index 0; florn corrects them and exports the height global as `florn.stack`.
+fn limit_and_meter(
+    bytes: &[u8],
+    limits: &ClassLimits,
+    cost_model: u32,
+) -> Result<Transformed, Error> {
     let before = shape(bytes)?;
     if before.imported_globals != 0 {
         return Err(failed("limit stack", "the source imports a global"));
@@ -147,12 +160,30 @@ fn limit_and_meter(bytes: &[u8], limits: &ClassLimits) -> Result<Vec<u8>, Error>
     let limited =
         stack_limiter::inject(bytes, stack).map_err(|e| failed("limit stack", format!("{e:#}")))?;
     let height_global = before.defined_globals.len() as u32; // appended as the last defined global
-    let metered = gas_metering::inject(
-        &limited,
-        &ConstantCostRules::new(1, 0),
-        BUDGET_IMPORT_MODULE,
-    )
-    .map_err(|e| failed("meter", format!("{e:#}")))?;
+    let (metered, longest_path) = match cost_model {
+        1 => {
+            let bytes = gas_metering::inject(
+                &limited,
+                &ConstantCostRules::new(1, 0),
+                BUDGET_IMPORT_MODULE,
+            )
+            .map_err(|e| failed("meter", format!("{e:#}")))?;
+            (bytes, longest_function(&limited)?)
+        }
+        2 => {
+            let m = meter::meter(&limited).map_err(|e| failed("meter", e))?;
+            if m.longest_path > limits.budget {
+                return Err(Error::new(Kind::SegmentTooLong {
+                    function: m.longest_function,
+                    cost: m.longest_path,
+                    budget: limits.budget,
+                }));
+            }
+            (m.bytes, m.longest_path)
+        }
+        other => return Err(failed("meter", format!("unknown cost model {other}"))),
+    };
+    let bytes =
     // The budget global is import 0 of the global index space: every other global moved up by one.
     rewrite_exports(
         &metered,
@@ -162,7 +193,31 @@ fn limit_and_meter(bytes: &[u8], limits: &ClassLimits) -> Result<Vec<u8>, Error>
             ExportKind::Global,
             height_global + 1,
         )],
-    )
+    )?;
+    Ok(Transformed {
+        bytes,
+        longest_path,
+    })
+}
+
+/// The longest function of a module, as instructions: the bound of RFC 010 rule 3 under
+/// version 1 too, where it is reported and never enforced.
+fn longest_function(bytes: &[u8]) -> Result<u64, Error> {
+    let mut longest = 0u64;
+    for payload in Parser::new(0).parse_all(bytes) {
+        if let Payload::CodeSectionEntry(body) = payload.map_err(|e| failed("longest", e))? {
+            let mut n = 0u64;
+            let mut r = body
+                .get_operators_reader()
+                .map_err(|e| failed("longest", e))?;
+            while !r.eof() {
+                r.read().map_err(|e| failed("longest", e))?;
+                n += 1;
+            }
+            longest = longest.max(n);
+        }
+    }
+    Ok(longest)
 }
 
 /// Pass 4: every defined mutable global except the height global as `florn.global.<n>`, every
@@ -219,11 +274,16 @@ fn split_custom(bytes: &[u8]) -> Result<(Vec<u8>, CustomSections), Error> {
 }
 
 /// The whole transformation of RFC 003 rule 7, validated. Custom sections pass through every pass.
-pub fn transform(source: &[u8], limits: &ClassLimits) -> Result<Vec<u8>, Error> {
+pub fn transform(
+    source: &[u8],
+    limits: &ClassLimits,
+    cost_model: u32,
+) -> Result<Transformed, Error> {
     let (stripped, custom) = split_custom(source)?;
     let capped = cap_memory(&stripped, limits.memory_pages())?;
-    let metered = limit_and_meter(&capped, limits)?;
-    let mut exported = export_state(&metered)?;
+    let metered = limit_and_meter(&capped, limits, cost_model)?;
+    let longest_path = metered.longest_path;
+    let mut exported = export_state(&metered.bytes)?;
     for (name, data) in &custom {
         CustomSection {
             name: name.as_str().into(),
@@ -234,7 +294,10 @@ pub fn transform(source: &[u8], limits: &ClassLimits) -> Result<Vec<u8>, Error> 
     Validator::new_with_features(admitted_features())
         .validate_all(&exported)
         .map_err(|e| failed("validate", e))?;
-    Ok(exported)
+    Ok(Transformed {
+        bytes: exported,
+        longest_path,
+    })
 }
 
 /// A global's core type, for the state layout.

@@ -155,6 +155,8 @@ async function request(worker) {
     const resumePath = query.get("resume");
     const resume = resumePath ? await fetchBytes(resumePath) : null;
     const checkpointAt = query.get("checkpoint-at");
+    // `cost-model=N`: the version new runs admit under (RFC 010 rule 9).
+    const costModel = query.get("cost-model");
     let display = null;
     let reader = null;
     if (query.get("display") === "1") {
@@ -178,6 +180,7 @@ async function request(worker) {
         display,
         resume,
         checkpoint_at: checkpointAt === null ? null : checkpointAt,
+        cost_model: costModel === null ? null : parseInt(costModel, 10),
       },
       transfer: [...modules.map((m) => m.bytes.buffer), ...(resume ? [resume.buffer] : [])],
       reader,
@@ -222,7 +225,7 @@ async function request(worker) {
     for (const name of ["bench_protocol", "bench_compute"]) {
       guests.push({ name, bytes: await fetchBytes(`scenarios/modules/${name}.wasm`) });
     }
-    return plain({ kind: "cost", guests, activations: parseInt(query.get("activations") || "10000", 10) }, guests.map((g) => g.bytes.buffer));
+    return plain({ kind: "cost", guests, activations: parseInt(query.get("activations") || "10000", 10), cost_model: query.get("cost-model") === null ? null : parseInt(query.get("cost-model"), 10) }, guests.map((g) => g.bytes.buffer));
   }
   if (bench === "hash") {
     return plain({ kind: "hash", scale: parseInt(query.get("scale") || "1", 10) }, []);

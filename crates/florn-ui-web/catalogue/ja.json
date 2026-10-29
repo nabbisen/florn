@@ -45,6 +45,7 @@
  "code.admission.transform-failed": "アドミッションの変換に失敗しました：{reason}。",
  "code.admission.result": "モジュール{module}は{admitted}として受け入れられました。受け入れ後のハッシュは{hash}です。",
  "code.module.export-unsupported": "モジュールのワールドの関数{name}は、どのホストも呼べないシグネチャです。",
+ "code.module.segment-too-long": "モジュールの関数{function}は予算の検査と検査のあいだに{cost}命令を実行しますが、クラスの予算は{budget}です。",
  "code.host.capacity-exceeded": "シナリオには{what}が{need}必要ですが、このホストが保持できるのは{capacity}です。",
  "code.host.capacity-warning": "実行は{what}を{capacity}のうち{used}使っています。",
  "code.host.capacity": "このホストはインスタンス{instances}個とメモリ{memory}を保持できます。",

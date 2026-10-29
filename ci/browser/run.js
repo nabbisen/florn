@@ -25,9 +25,10 @@ const quick = process.argv.includes("--quick");
 const engines = { chromium, firefox, webkit };
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
-/// The digests file: `[modules]`, `[admitted]`, and one `[runs."name"]` table per scenario.
+/// The digests file: `[modules]`, `[admitted]`, `[admitted-2]`, and one `[runs."name"]` table
+/// per scenario.
 function parseDigests(text) {
-  const d = { modules: {}, admitted: {}, runs: {} };
+  const d = { modules: {}, admitted: {}, "admitted-2": {}, runs: {} };
   let table = null;
   for (const raw of text.split("\n")) {
     const line = raw.trim();
@@ -35,7 +36,7 @@ function parseDigests(text) {
     let m;
     if ((m = /^\[runs\."([^"]+)"\]$/.exec(line))) {
       table = d.runs[m[1]] = {};
-    } else if ((m = /^\[(\w+)\]$/.exec(line))) {
+    } else if ((m = /^\[([\w-]+)\]$/.exec(line))) {
       table = d[m[1]] = d[m[1]] || {};
     } else if ((m = /^([\w-]+) = (.*)$/.exec(line)) && table) {
       const v = m[2];
@@ -229,13 +230,31 @@ for (const name of browsers) {
     check(false, `${name}: crossing benchmark`, { error: String(err).split("\n")[0] });
   }
   try {
-    const c = await open(`bench=cost&activations=${quick ? 200 : 10000}`);
-    for (const f of c.figures || []) {
-      check(f.status === 0, `${name}: the cost benchmark runs for ${f.guest}`);
-      console.log(JSON.stringify({ figure: "cost", browser: name, engine: c.engine, ...f, ratio: f.metered_micros / f.unmetered_micros }));
+    // Both cost-model versions (RFC 010 rule 9): the figures the owner decides on.
+    for (const version of [1, 2]) {
+      const c = await open(`bench=cost&activations=${quick ? 200 : 10000}&cost-model=${version}`);
+      for (const f of c.figures || []) {
+        check(f.status === 0 && f.cost_model === version, `${name}: the cost benchmark runs for ${f.guest} under cost-model ${version}`);
+        console.log(JSON.stringify({ figure: "cost", browser: name, engine: c.engine, ...f, ratio: f.metered_micros / f.unmetered_micros }));
+      }
     }
   } catch (err) {
     check(false, `${name}: cost benchmark`, { error: String(err).split("\n")[0] });
+  }
+
+  // RFC 010 rule 1 (checklist C24): under cost-model version 2 a scenario gives its recorded
+  // digest, the hostile ones included, and its modules admit to the recorded version-2 hashes.
+  for (const s of ["echo-pair", "hostile-loop", "hostile-recurse", "ospf-lab", "net-lan"].filter((x) => digests.runs[x])) {
+    const rec = digests.runs[s];
+    try {
+      const r = await open(`scenario=${s}&seed=${rec.seed}&cost-model=2`);
+      check(r.chain === rec.chain && r.records === rec.records, `${name}: ${s} under cost-model 2 gives the recorded digest`, { chain: r.chain, records: r.records });
+      for (const [mod, hash] of Object.entries(r.admitted || {})) {
+        check(hash === digests["admitted-2"][mod], `${name}: ${s}: admitted hash of ${mod} under cost-model 2`, { hash });
+      }
+    } catch (err) {
+      check(false, `${name}: ${s} under cost-model 2`, { error: String(err).split("\n")[0] });
+    }
   }
 
   // RFC 009 rule 6 (checklist C23): a checkpoint crosses the Hosts both ways. The native

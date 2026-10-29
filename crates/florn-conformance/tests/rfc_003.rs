@@ -148,7 +148,8 @@ fn a_checkpoint_of_another_version_is_refused_naming_the_field() {
         if bump == 0 {
             other.identity.admission_version += 1;
         } else {
-            other.identity.cost_model_version += 1;
+            // A version no Host publishes (RFC 010 rule 8: version 2 is one this Host has).
+            other.identity.cost_model_version += 99;
         }
         let err = Run::from_checkpoint(
             host::engine(),
@@ -172,7 +173,16 @@ fn a_checkpoint_of_another_version_is_refused_naming_the_field() {
 #[test]
 fn the_cost_benchmark_produces_its_figures() {
     let figures = bench::cost(20);
-    assert_eq!(figures.len(), 2);
+    // Both guests under both cost-model versions (RFC 010 rule 9), with the same units.
+    assert_eq!(figures.len(), 4);
+    assert_eq!(
+        figures[0].units_per_activation,
+        figures[1].units_per_activation
+    );
+    assert_eq!(
+        figures[2].units_per_activation,
+        figures[3].units_per_activation
+    );
     for f in &figures {
         assert!(
             f.unmetered_micros.is_finite() && f.unmetered_micros > 0.0,
@@ -183,15 +193,30 @@ fn the_cost_benchmark_produces_its_figures() {
             "{f:?}"
         );
         eprintln!(
-            "{}: unmetered {:.1} µs, metered {:.1} µs, {:.2}×",
+            "{} (cost model {}): unmetered {:.1} µs, metered {:.1} µs, {:.2}×",
             f.guest,
+            f.cost_model,
             f.unmetered_micros,
             f.metered_micros,
             f.ratio()
         );
     }
-    assert_eq!(figures[0].guest, "bench_protocol");
-    assert_eq!(figures[1].guest, "bench_compute");
+    assert_eq!(
+        (figures[0].guest.as_str(), figures[0].cost_model),
+        ("bench_protocol", 1)
+    );
+    assert_eq!(
+        (figures[1].guest.as_str(), figures[1].cost_model),
+        ("bench_protocol", 2)
+    );
+    assert_eq!(
+        (figures[2].guest.as_str(), figures[2].cost_model),
+        ("bench_compute", 1)
+    );
+    assert_eq!(
+        (figures[3].guest.as_str(), figures[3].cost_model),
+        ("bench_compute", 2)
+    );
 }
 
 #[test]

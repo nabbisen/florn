@@ -264,6 +264,8 @@ pub fn crossing<E: Engine>(
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cost {
     pub guest: String,
+    /// The cost-model version the metered module was admitted under (RFC 010).
+    pub cost_model: u32,
     pub activations: u64,
     pub unmetered_micros: f64,
     pub metered_micros: f64,
@@ -317,6 +319,7 @@ pub fn cost<E: Engine>(
         }
     }
     Ok(Cost {
+        cost_model: 1,
         guest: subject.name.to_string(),
         activations,
         unmetered_micros: micros[0],

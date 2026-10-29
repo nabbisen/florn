@@ -177,6 +177,10 @@ pub const TABLE: &[(&str, &str)] = &[
         "The function {name} of the module's world has a signature no Host can call.",
     ),
     (
+        "module.segment-too-long",
+        "Function {function} of the module runs {cost} instructions between two budget checks; the class's budget is {budget}.",
+    ),
+    (
         "host.capacity-exceeded",
         "The scenario needs {need} {what}; this Host holds {capacity}.",
     ),

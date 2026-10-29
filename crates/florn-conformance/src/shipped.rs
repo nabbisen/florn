@@ -372,6 +372,8 @@ pub struct Digests {
     pub runs: BTreeMap<String, Recorded>,
     pub modules: BTreeMap<String, String>,
     pub admitted: BTreeMap<String, String>,
+    /// The admitted hashes under cost-model version 2 (RFC 010), beside the default's.
+    pub admitted_2: BTreeMap<String, String>,
 }
 
 impl Digests {
@@ -386,6 +388,10 @@ impl Digests {
         }
         t.push_str("\n[admitted]\n");
         for (k, v) in &self.admitted {
+            t.push_str(&format!("{k} = \"{v}\"\n"));
+        }
+        t.push_str("\n[admitted-2]\n");
+        for (k, v) in &self.admitted_2 {
             t.push_str(&format!("{k} = \"{v}\"\n"));
         }
         for (name, r) in &self.runs {
@@ -434,6 +440,7 @@ impl Digests {
             runs,
             modules: strings("modules"),
             admitted: strings("admitted"),
+            admitted_2: strings("admitted-2"),
         })
     }
 
@@ -454,10 +461,14 @@ pub fn record() -> Digests {
         ..Default::default()
     };
     for name in guests::SDK {
-        if let Ok(a) =
-            crate::host::admission().admit(name, &module_bytes(name), &crate::host::kit_limits())
-        {
+        let mut admission = crate::host::admission();
+        if let Ok(a) = admission.admit(name, &module_bytes(name), &crate::host::kit_limits()) {
             d.admitted.insert(name.to_string(), a.admitted_hex());
+        }
+        if let Ok(a) =
+            admission.admit_under(name, &module_bytes(name), &crate::host::kit_limits(), 2)
+        {
+            d.admitted_2.insert(name.to_string(), a.admitted_hex());
         }
     }
     for s in all() {

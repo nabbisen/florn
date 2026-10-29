@@ -381,7 +381,8 @@ impl<E: Engine> Controller<E> {
                     ),
                     None => self.options.class_defaults,
                 };
-                match admission.admit("module", &bytes, &limits) {
+                let cost_model = self.options.cost_model;
+                match admission.admit_under("module", &bytes, &limits, cost_model) {
                     Ok(a) => {
                         // A module from a file has no `[modules]` name yet: its kind names it.
                         let summary =
@@ -559,6 +560,16 @@ impl<E: Engine> Controller<E> {
                         )))
                     }
                 }
+            }
+            Command::SetCostModel { version } => {
+                if matches!(self.state, RunState::Running | RunState::Paused) {
+                    return self.notify(out, self.not_now(name));
+                }
+                if florn_admission::cost_table(version).is_none() {
+                    return self.notify(out, control_invalid(name, "out-of-range", "version"));
+                }
+                self.options.cost_model = version;
+                out.push(Message::Answer(Answer::Done));
             }
             Command::Replay { record } => {
                 if !matches!(self.state, RunState::Ready | RunState::Ended) {
@@ -1036,14 +1047,17 @@ impl<E: Engine> Controller<E> {
                 classes.sort();
                 let had_admission = self.admission.is_some();
                 let mut admission = self.admission.take().unwrap_or_default();
+                // The summary's admitted hashes are those of the Host's cost-model setting.
+                let cost_model = self.options.cost_model;
                 let modules = manifest
                     .modules
                     .iter()
                     .map(|(name, m)| {
-                        match found
-                            .get(name)
-                            .and_then(|b| admission.admit(name, b, &ClassLimits::defaults()).ok())
-                        {
+                        match found.get(name).and_then(|b| {
+                            admission
+                                .admit_under(name, b, &ClassLimits::defaults(), cost_model)
+                                .ok()
+                        }) {
                             Some(a) => module_summary(name, &a.manifest, &m.sha256),
                             None => ModuleSummary {
                                 name: name.clone(),
@@ -1254,6 +1268,7 @@ impl<E: Engine> Controller<E> {
                         "replay".into(),
                         "export-state".into(),
                         "checkpoint".into(),
+                        "cost-model-2".into(),
                     ],
                 })
             }

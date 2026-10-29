@@ -41,8 +41,13 @@ fn faults(run: &Run<florn_engine_wasmtime::WasmtimeEngine>) -> Vec<(u32, FaultKi
         .collect()
 }
 
-#[test]
-fn ac_002_hostile_guests_fault_at_one_point_and_the_neighbour_continues() {
+/// AC-002 under a cost-model version: the same five faults, one point each, the neighbour
+/// untouched; under version 2 (RFC 010 rule 1) with the same metered work as under version 1.
+fn ac_002_under(cost_model: u32) -> Vec<(u32, FaultKind, u64)> {
+    let o = || Options {
+        cost_model,
+        ..options()
+    };
     let expected = [
         (Guest::Loop, FaultKind::Budget),
         (Guest::Recurse, FaultKind::Stack),
@@ -58,9 +63,10 @@ fn ac_002_hostile_guests_fault_at_one_point_and_the_neighbour_continues() {
         connections: vec![],
         seed: 1,
     };
-    let mut reference = new_run(&alone, options());
+    let mut reference = new_run(&alone, o());
     assert_eq!(reference.run_to_end(), EndReason::EndReached);
     let reference_chain = reference.actor_chain(2).unwrap();
+    let mut all = Vec::new();
     for (guest, kind) in expected {
         let spec = ScenarioSpec {
             end: 1_000,
@@ -69,7 +75,7 @@ fn ac_002_hostile_guests_fault_at_one_point_and_the_neighbour_continues() {
             connections: vec![],
             seed: 1,
         };
-        let mut a = new_run(&spec, options());
+        let mut a = new_run(&spec, o());
         assert_eq!(
             a.run_to_end(),
             EndReason::EndReached,
@@ -93,11 +99,24 @@ fn ac_002_hostile_guests_fault_at_one_point_and_the_neighbour_continues() {
         let codes = a.log().codes();
         assert!(codes.contains(&"actor.faulted"), "{codes:?}");
         // The same point again: the metered work is a property of the inputs.
-        let mut b = new_run(&spec, options());
+        let mut b = new_run(&spec, o());
         b.run_to_end();
         assert_eq!(faults(&b), f, "{guest:?}: same fault, same metered work");
         assert_eq!(a.chain(), b.chain());
+        all.extend(f);
     }
+    all
+}
+
+#[test]
+fn ac_002_hostile_guests_fault_at_one_point_and_the_neighbour_continues() {
+    let v1 = ac_002_under(1);
+    // Version 2 charges where version 1 charges: the same metered work at every fault.
+    let v2 = ac_002_under(2);
+    assert_eq!(
+        v1, v2,
+        "the same faults with the same metered work under both versions"
+    );
 }
 
 #[test]

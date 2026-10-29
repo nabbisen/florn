@@ -45,6 +45,7 @@
  "code.admission.transform-failed": "The admission transformation failed: {reason}.",
  "code.admission.result": "The module {module} was admitted as {admitted}; its admitted hash is {hash}.",
  "code.module.export-unsupported": "The function {name} of the module's world has a signature no Host can call.",
+ "code.module.segment-too-long": "Function {function} of the module runs {cost} instructions between two budget checks; the class's budget is {budget}.",
  "code.host.capacity-exceeded": "The scenario needs {need} {what}; this Host holds {capacity}.",
  "code.host.capacity-warning": "The run uses {used} of {capacity} {what}.",
  "code.host.capacity": "This Host holds {instances} instances and {memory} of memory.",

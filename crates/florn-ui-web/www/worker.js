@@ -316,6 +316,11 @@ async function runScenario(m) {
     for (const x of r || []) if (x.code) events.push(x);
     return r || [];
   };
+  if (m.cost_model !== null && m.cost_model !== undefined) {
+    // The cost-model version the modules are admitted under, before any is (RFC 010 rule 9).
+    host.exports.florn_set_cost_model(m.cost_model);
+    collect(out());
+  }
   const scenario = encoder.encode(m.text);
   host.exports.florn_load_scenario(give(scenario), scenario.length);
   collect(out());
@@ -415,6 +420,7 @@ function runBench(m) {
     return { kind: "crossing", status: r, figures: out(), views_created: viewsCreated, engine: family() };
   }
   if (m.kind === "cost") {
+    if (m.cost_model !== null && m.cost_model !== undefined) host.exports.florn_set_cost_model(m.cost_model);
     const figures = [];
     for (const g of m.guests) {
       const name = encoder.encode(g.name);

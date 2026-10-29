@@ -13,9 +13,8 @@ use florn_abi::{
 use florn_admission::config::{NoUnits, encode_config};
 use florn_admission::estimate::{Capacity as EstimateCapacity, ModuleFacts, estimate};
 use florn_admission::{
-    ADMISSION_VERSION, Admission, Admitted, BUDGET_IMPORT_MODULE, BUDGET_IMPORT_NAME,
-    COST_MODEL_V1_TABLE, COST_MODEL_VERSION, ClassLimits, Errors, FaultClass, STACK_EXPORT,
-    classify,
+    ADMISSION_VERSION, Admission, Admitted, BUDGET_IMPORT_MODULE, BUDGET_IMPORT_NAME, ClassLimits,
+    Errors, FaultClass, STACK_EXPORT, classify,
 };
 use florn_control::display::Record as DisplayRecord;
 use florn_control::{At, Ends, Notification, Scope, Severity, Value};
@@ -41,6 +40,9 @@ use crate::snapshot::{ActorState, Checkpoint, CheckpointIdentity};
 use crate::world::{CLASS_TIMER, Intervention};
 
 /// The SHA-256 of module bytes as hexadecimal: the module identity (RFC 004 rule 16).
+/// The cost-model versions this Host publishes (RFC 003 rule 15; RFC 010), for a front end.
+pub use florn_admission::{COST_MODEL_VERSION, COST_MODEL_VERSIONS, cost_table};
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     florn_model::canonical::hex(&florn_admission::sha256(bytes))
 }
@@ -111,6 +113,9 @@ pub struct Options {
     /// The memory the kept checkpoints may use before the older ones are thinned (RFC 009
     /// rule 3); the newest eight are kept whatever the budget.
     pub checkpoint_memory: u64,
+    /// The cost-model version new runs admit under (RFC 003 rule 15; RFC 010 rule 9): a replay
+    /// or a restored checkpoint uses its record's version instead.
+    pub cost_model: u32,
 }
 
 impl Default for Options {
@@ -127,6 +132,7 @@ impl Default for Options {
             display: false,
             checkpoint_interval: Self::DEFAULT_CHECKPOINT_INTERVAL,
             checkpoint_memory: 256 * 1024 * 1024,
+            cost_model: COST_MODEL_VERSION,
         }
     }
 }
@@ -624,7 +630,7 @@ impl<E: Engine> Run<E> {
                 ));
                 continue;
             };
-            match admission.admit(name, bytes, &limits) {
+            match admission.admit_under(name, bytes, &limits, options.cost_model) {
                 Ok(a) => {
                     if !facts.contains_key(name) {
                         facts.insert(
@@ -780,8 +786,8 @@ impl<E: Engine> Run<E> {
             scenario_sha256: scenario.scenario_hash(),
             modules: inputs_modules,
             admission_version: ADMISSION_VERSION,
-            cost_model_version: COST_MODEL_VERSION,
-            cost_table: COST_MODEL_V1_TABLE.to_string(),
+            cost_model_version: options.cost_model,
+            cost_table: cost_table(options.cost_model).unwrap_or("").to_string(),
             contracts,
             root_seed: seed,
             interventions: Vec::new(),
@@ -2072,11 +2078,11 @@ impl<E: Engine> Run<E> {
                 ADMISSION_VERSION.to_string(),
             ));
         }
-        if id.cost_model_version != COST_MODEL_VERSION {
+        if id.cost_model_version != self.inputs.cost_model_version {
             return Err(self.mismatch(
                 "cost-model",
                 id.cost_model_version.to_string(),
-                COST_MODEL_VERSION.to_string(),
+                self.inputs.cost_model_version.to_string(),
             ));
         }
         Ok(())
@@ -2101,7 +2107,7 @@ impl<E: Engine> Run<E> {
                     .map(|m| (m.name.clone(), m.source_sha256))
                     .collect(),
                 admission_version: ADMISSION_VERSION,
-                cost_model_version: COST_MODEL_VERSION,
+                cost_model_version: self.inputs.cost_model_version,
                 root_seed: self.inputs.root_seed,
             },
             kernel: self.kernel.snapshot(),
@@ -2125,12 +2131,22 @@ impl<E: Engine> Run<E> {
         checkpoint: &Checkpoint,
         options: Options,
     ) -> Result<Self, HostError> {
-        // The root seed is an input the checkpoint carries (RFC 001 rule 40, item 5).
+        // The root seed and the cost-model version are inputs the checkpoint carries (RFC 001
+        // rule 40, items 3 and 5): the run admits under them, or names the version it lacks.
         let seed = checkpoint.identity.root_seed;
+        let wanted = checkpoint.identity.cost_model_version;
+        let mut options = options;
+        let known = cost_table(wanted).is_some();
+        if known {
+            options.cost_model = wanted;
+        }
         let mut run = Self::prepare(
             engine, admission, platform, domains, scenario, modules, seed, options,
         )
         .map_err(|parts| parts.0)?;
+        if !known {
+            return Err(run.mismatch("cost-model", wanted.to_string(), "none".to_string()));
+        }
         run.check_identity(&checkpoint.identity)?;
         if checkpoint
             .actors
@@ -2196,10 +2212,18 @@ impl<E: Engine> Run<E> {
     ) -> Result<Self, HostError> {
         options.chain_interval = record.chain_interval;
         let seed = record.inputs.root_seed;
+        let wanted = record.inputs.cost_model_version;
+        let known = cost_table(wanted).is_some();
+        if known {
+            options.cost_model = wanted;
+        }
         let mut run = Self::prepare(
             engine, admission, platform, domains, scenario, modules, seed, options,
         )
         .map_err(|parts| parts.0)?;
+        if !known {
+            return Err(run.mismatch("cost-model", wanted.to_string(), "none".to_string()));
+        }
         let hex = florn_model::canonical::hex;
         let i = &record.inputs;
         if i.scenario_sha256 != run.inputs.scenario_sha256 {
@@ -2232,11 +2256,11 @@ impl<E: Engine> Run<E> {
                 ADMISSION_VERSION.to_string(),
             ));
         }
-        if i.cost_model_version != COST_MODEL_VERSION {
+        if i.cost_model_version != run.inputs.cost_model_version {
             return Err(run.mismatch(
                 "cost-model",
                 i.cost_model_version.to_string(),
-                COST_MODEL_VERSION.to_string(),
+                run.inputs.cost_model_version.to_string(),
             ));
         }
         run.kernel.set_replay(i.interventions.clone());
