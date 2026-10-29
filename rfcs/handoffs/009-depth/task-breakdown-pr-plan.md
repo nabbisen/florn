@@ -19,7 +19,7 @@ Independent of the order above: PR-24 depends on nothing of Phase 3 and may be f
 
 | PR | State | Merged | Verifier record |
 |---|---|---|---|
-| PR-23 | not started | | |
+| PR-23 | merged | `275ff55 with the follow-up dabc1b2`, 2026-10-29; CI run 40804086981 green | C23 pending |
 | PR-24 | not started | | |
 | PR-25 | not started | | |
 | PR-26 | not started | | |
