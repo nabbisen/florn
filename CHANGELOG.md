@@ -4,6 +4,9 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+- RFC 009 (checkpoints, backward navigation, branching, actor swapping, and the application's depth), RFC 010 (cost model version 2: florn's own metering pass) and RFC 011 (the BGP subset and its learning lab) proposed on 2026-10-29 for release 0.3.0, Phase 3 of the roadmap.
+
 ## [0.2.0] - 2026-10-29
 
 The network learning lab (Phase 2 of the roadmap): the network domain, the router contract, the guest ladder ending in an OSPF subset, and the browser application in English and Japanese. The release notes with the figures, the security review and the file hashes are `docs/src/releases/0.2.0.md` and the GitHub release.

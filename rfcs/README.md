@@ -37,7 +37,11 @@ RFC enters it.
 
 ### Proposed
 
-_None at present._
+| ID | Title | Proposed | For |
+|----|-------|----------|-----|
+| 009 | [Checkpoints, backward navigation, branching, actor swapping, and the application's depth](./proposed/009-checkpoints-navigation-branching.md) | 2026-10-29 | Release 0.3 |
+| 010 | [Cost model version 2: florn's own metering pass](./proposed/010-cost-model-version-2.md) | 2026-10-29 | Release 0.3 |
+| 011 | [The BGP subset and its learning lab](./proposed/011-bgp-subset.md) | 2026-10-29 | Release 0.3 |
 
 ### Accepted
 
