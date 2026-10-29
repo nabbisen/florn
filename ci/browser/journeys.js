@@ -238,7 +238,10 @@ for (const name of browsers) {
     await chooser.setFiles(recordPath);
     s = await until(page, (x) => x.state === "paused" && x.interventions === 0, 20000, "replay started");
     await page.click("#run");
-    s = await until(page, (x) => x.state === "ended", 120000, "replay ended");
+    // The verdict arrives with the end; the chain the state shows settles a message later.
+    s = await until(page, (x) => x.state === "ended" && x.replay, 120000, "replay ended");
+    await sleep(500);
+    s = await state(page);
     check(s.replay === "replay.matched" && s.applied === 1, `${name}: J3 the replay matches at every stored point and applies the intervention`, { replay: s.replay, applied: s.applied });
     // J4 (AC-010): save the scenario; reload it; replay the saved run: the same digest.
     const [save] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click("#save-scenario")]);
@@ -252,8 +255,10 @@ for (const name of browsers) {
     await chooser3.setFiles(recordPath);
     await until(page, (x) => x.state === "paused", 20000, "replay of the saved run started");
     await page.click("#run");
-    s = await until(page, (x) => x.state === "ended", 120000, "replay ended");
-    check(s.replay === "replay.matched" && s.chain === j3chain, `${name}: J4 the saved scenario reloads and replays the saved run with its intervention to the same digest`, { chain: s.chain, replay: s.replay });
+    s = await until(page, (x) => x.state === "ended" && x.replay, 120000, "replay ended");
+    await sleep(500);
+    s = await state(page);
+    check(s.replay === "replay.matched" && s.chain === j3chain, `${name}: J4 the saved scenario reloads and replays the saved run with its intervention to the same digest`, { chain: s.chain, replay: s.replay, expected: j3chain });
     await consoleCheck(page, errors, `${name}: J3/J4 no error of the application in the console`);
     await page.close();
   } catch (err) {
