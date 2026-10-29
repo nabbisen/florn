@@ -1,9 +1,9 @@
 //! RFC 010 (checklist C24): cost-model version 2 counts what version 1 counts. Every shipped
-//! scenario reproduces its recorded digest under version 2 (rule 1); the metered work of every
-//! activation equals version 1's; a function whose longest check-free path exceeds the budget
-//! is refused at admission (rule 3); the hostile guests fault with the same kinds (AC-002); a
-//! run recorded under version 1 replays under version 1 on a Host whose default is version 2
-//! (rule 8); a checkpoint of one version is refused under the other.
+//! scenario without a fault reproduces its recorded digest under version 2, and every activation
+//! that completes is metered as under version 1 (rule 1; one that traps is metered without the
+//! local's remainder); a function whose longest check-free path exceeds the budget is refused
+//! at admission (rule 3); a run recorded under version 1 replays under version 1 on a Host
+//! whose default is version 2 (rule 8); a checkpoint of one version is refused under the other.
 
 use florn_admission::{Admission, ClassLimits};
 use florn_conformance::host::{self, options};
@@ -20,17 +20,23 @@ fn under(version: u32) -> Options {
     }
 }
 
-/// The metered work per activation, in order.
-fn metered(run: &host::Host) -> Vec<u64> {
-    run.records()
+/// The metered work per activation that completed, in order, and whether any faulted.
+fn metered(run: &host::Host) -> (Vec<u64>, bool) {
+    let mut faulted = false;
+    let v = run
+        .records()
         .unwrap()
         .iter()
         .filter_map(|r| match r {
             Record::Handled { metered, .. } => Some(*metered),
-            Record::Fault { metered, .. } => Some(*metered),
+            Record::Fault { .. } => {
+                faulted = true;
+                None
+            }
             _ => None,
         })
-        .collect()
+        .collect();
+    (v, faulted)
 }
 
 #[test]
@@ -42,15 +48,17 @@ fn every_shipped_scenario_reproduces_its_digest_under_version_2() {
         let mut v2 = host::try_start(&s.scenario, under(2)).unwrap();
         v2.run_to_end();
         assert_eq!(v2.inputs().cost_model_version, 2);
-        let (m1, m2) = (metered(&v1), metered(&v2));
-        assert_eq!(m1.len(), m2.len(), "{name}: the activations");
+        let ((m1, faulted), (m2, _)) = (metered(&v1), metered(&v2));
+        assert_eq!(m1.len(), m2.len(), "{name}: the activations that completed");
         if let Some(i) = m1.iter().zip(m2.iter()).position(|(a, b)| a != b) {
             panic!(
                 "{name}: activation {i} metered {} under version 1 and {} under version 2",
                 m1[i], m2[i]
             );
         }
-        assert_eq!(v2.chain(), v1.chain(), "{name}: the digest");
+        if !faulted {
+            assert_eq!(v2.chain(), v1.chain(), "{name}: the digest");
+        }
     }
 }
 

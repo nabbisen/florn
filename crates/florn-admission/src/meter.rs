@@ -1,20 +1,23 @@
 //! Cost-model version 2 (RFC 010): florn's own metering pass. It charges the units of version 1
-//! (one per instruction, nothing for `end` and `else`) at the same points as version 1 (the
-//! metered blocks of the library pass, whose partition this module reproduces), so that the
-//! budget global holds the same value after every instruction under both versions and every
-//! activation, faulting or not, is metered alike. What differs is the cost of charging and
-//! checking: a charge is four inline instructions on the global where the library calls a
-//! function, and the comparison that traps is made only at the checks of rule 3: before every
-//! `call` and `call_indirect` (which covers every function's entry), before a branch to a
-//! `loop` label (a back-edge), before `return` and at the function's end. Between two checks a
-//! function executes each of its instructions at most once, so the budget is overrun by at most
-//! the function's length, which admission bounds by the class's budget.
+//! (one per instruction, nothing for `end` and `else`) at the charge points of version 1 (the
+//! metered blocks of the library pass, whose partition this module reproduces), but into a local
+//! of the function (rule 2), four instructions that touch no global; the budget global is
+//! touched only at the checks of rule 3: before every `call` and `call_indirect` (which covers
+//! the callee's entry), before a branch to a `loop` label (a back-edge), before `return` and at
+//! the function's end, where the local is subtracted from the global, reset, and the global
+//! compared with zero. An activation that does not fault is therefore metered as under version
+//! 1, instruction for instruction; one that traps between two checks is metered without the
+//! local's remainder, which version 1 had charged at the block's start (rule 1). Between two
+//! checks a function executes each of its instructions at most once, so the budget is overrun
+//! by at most the function's length, which admission bounds by the class's budget.
 //!
 //! The budget global is version 1's import (`env.gas_counter`, index 0 of the global index
 //! space; every other global moves up by one), so that neither Host changes its plumbing; a
 //! trap leaves the global below zero, which the Host classifies as the `budget` fault (RFC 003
 //! rule 13). An effect reaches the Host only through a call, and a check precedes every call,
-//! so nothing is committed past the budget.
+//! so nothing is committed past the budget. The library pass and an inline charge on the global
+//! cost the same in the browsers' engines, where an imported mutable global is reached through
+//! an indirection; the local is what makes the difference there.
 
 use std::collections::BTreeMap;
 
@@ -34,7 +37,7 @@ pass = \"florn-admission meter\"
 instruction = 1          # units per instruction, every instruction alike; end and else 0
 memory-grow = 1          # units per memory.grow call; nothing per page
 charge = 0               # units for the charge itself
-blocks = \"the metered blocks of cost-model 1, charged inline on the global\"
+blocks = \"the metered blocks of cost-model 1, charged into a local of the function\"
 checks = \"before call and call_indirect, before a branch to a loop, before return, at the end\"
 stack-unit = \"max operand stack and locals of a function, summed along the call chain\"
 budget-global = \"env.gas_counter\"
@@ -71,30 +74,49 @@ pub fn meter(bytes: &[u8]) -> Result<Metered, String> {
     })
 }
 
-/// What the pass knows before it reads a body: the imported functions, and that the module
-/// imports no global.
+/// What the pass knows before it reads a body: each type's parameter count, the imported
+/// functions, each defined function's type (the accumulator's local index follows), and that
+/// the module imports no global.
 struct Facts {
+    params: Vec<u32>,
     imported_functions: u32,
+    function_types: Vec<u32>,
 }
 
 impl Facts {
     fn of(bytes: &[u8]) -> Result<Self, String> {
         let mut f = Facts {
+            params: Vec::new(),
             imported_functions: 0,
+            function_types: Vec::new(),
         };
         for payload in Parser::new(0).parse_all(bytes) {
-            if let Payload::ImportSection(r) = payload.map_err(|e| e.to_string())? {
-                for i in r {
-                    if let wasmparser::Imports::Single(_, imp) = i.map_err(|e| e.to_string())? {
-                        match imp.ty {
-                            TypeRef::Func(_) => f.imported_functions += 1,
-                            TypeRef::Global(_) => {
-                                return Err("the source imports a global".into());
+            match payload.map_err(|e| e.to_string())? {
+                Payload::TypeSection(r) => {
+                    for t in r.into_iter_err_on_gc_types() {
+                        f.params
+                            .push(t.map_err(|e| e.to_string())?.params().len() as u32);
+                    }
+                }
+                Payload::FunctionSection(r) => {
+                    for t in r {
+                        f.function_types.push(t.map_err(|e| e.to_string())?);
+                    }
+                }
+                Payload::ImportSection(r) => {
+                    for i in r {
+                        if let wasmparser::Imports::Single(_, imp) = i.map_err(|e| e.to_string())? {
+                            match imp.ty {
+                                TypeRef::Func(_) => f.imported_functions += 1,
+                                TypeRef::Global(_) => {
+                                    return Err("the source imports a global".into());
+                                }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
                 }
+                _ => {}
             }
         }
         Ok(f)
@@ -312,7 +334,25 @@ impl Reencode for Pass {
     ) -> Result<(), reencode::Error<Self::Error>> {
         let index = self.body;
         self.body += 1;
-        let mut f = self.new_function_with_parsed_locals(&func)?;
+        // The locals, then one more: the accumulator of rule 2.
+        let type_index =
+            *self.facts.function_types.get(index).ok_or_else(|| {
+                reencode::Error::UserError("a body without a function".to_string())
+            })?;
+        let params =
+            *self.facts.params.get(type_index as usize).ok_or_else(|| {
+                reencode::Error::UserError("a function without a type".to_string())
+            })?;
+        let mut locals = Vec::new();
+        let mut local_count = 0u32;
+        for pair in func.get_locals_reader()? {
+            let (count, ty) = pair?;
+            local_count = local_count.saturating_add(count);
+            locals.push((count, self.val_type(ty)?));
+        }
+        locals.push((1, ValType::I64));
+        let acc = params.saturating_add(local_count);
+        let mut f = Function::new(locals);
 
         // Every operator of the body: the partition needs them all before the first is emitted.
         let mut ops = Vec::new();
@@ -327,19 +367,28 @@ impl Reencode for Pass {
         }
         let charges = metered_blocks(&ops).map_err(reencode::Error::UserError)?;
 
+        // A charge adds to the local; a check moves the local into the global, resets it, and
+        // traps when the global is below zero.
         let charge = |f: &mut Function, cost: u64| {
-            f.instruction(&Instruction::GlobalGet(0));
+            f.instruction(&Instruction::LocalGet(acc));
             f.instruction(&Instruction::I64Const(cost as i64));
-            f.instruction(&Instruction::I64Sub);
-            f.instruction(&Instruction::GlobalSet(0));
+            f.instruction(&Instruction::I64Add);
+            f.instruction(&Instruction::LocalSet(acc));
         };
         let check = |f: &mut Function| {
             f.instruction(&Instruction::GlobalGet(0));
+            f.instruction(&Instruction::LocalGet(acc));
+            f.instruction(&Instruction::I64Sub);
+            f.instruction(&Instruction::LocalTee(acc));
+            f.instruction(&Instruction::GlobalSet(0));
+            f.instruction(&Instruction::LocalGet(acc));
             f.instruction(&Instruction::I64Const(0));
             f.instruction(&Instruction::I64LtS);
             f.instruction(&Instruction::If(BlockType::Empty));
             f.instruction(&Instruction::Unreachable);
             f.instruction(&Instruction::End);
+            f.instruction(&Instruction::I64Const(0));
+            f.instruction(&Instruction::LocalSet(acc));
         };
         let to_loop = |depth: u32, labels: &[Label]| {
             labels

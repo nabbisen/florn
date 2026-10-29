@@ -111,12 +111,16 @@ fn ac_002_under(cost_model: u32) -> Vec<(u32, FaultKind, u64)> {
 #[test]
 fn ac_002_hostile_guests_fault_at_one_point_and_the_neighbour_continues() {
     let v1 = ac_002_under(1);
-    // Version 2 charges where version 1 charges: the same metered work at every fault.
+    // Version 2 faults with the same kinds at the same activations; a budget fault is metered
+    // the whole budget under both, a trap without the local's remainder (RFC 010 rule 1).
     let v2 = ac_002_under(2);
-    assert_eq!(
-        v1, v2,
-        "the same faults with the same metered work under both versions"
-    );
+    assert_eq!(v1.len(), v2.len());
+    for (a, b) in v1.iter().zip(v2.iter()) {
+        assert_eq!((a.0, a.1), (b.0, b.1), "the same fault");
+        if a.1 == FaultKind::Budget {
+            assert_eq!(a.2, b.2, "the whole budget under both");
+        }
+    }
 }
 
 #[test]

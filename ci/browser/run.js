@@ -242,9 +242,11 @@ for (const name of browsers) {
     check(false, `${name}: cost benchmark`, { error: String(err).split("\n")[0] });
   }
 
-  // RFC 010 rule 1 (checklist C24): under cost-model version 2 a scenario gives its recorded
-  // digest, the hostile ones included, and its modules admit to the recorded version-2 hashes.
-  for (const s of ["echo-pair", "hostile-loop", "hostile-recurse", "ospf-lab", "net-lan"].filter((x) => digests.runs[x])) {
+  // RFC 010 rule 1 (checklist C24): under cost-model version 2 a scenario without a trap gives
+  // its recorded digest (a budget fault is metered the whole budget under both versions; a
+  // stack fault or a trap is metered without the local's remainder, so those scenarios differ),
+  // and its modules admit to the recorded version-2 hashes.
+  for (const s of ["echo-pair", "hostile-loop", "ospf-lab", "net-lan"].filter((x) => digests.runs[x])) {
     const rec = digests.runs[s];
     try {
       const r = await open(`scenario=${s}&seed=${rec.seed}&cost-model=2`);
