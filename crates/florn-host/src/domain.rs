@@ -638,6 +638,14 @@ impl Composite {
         *n
     }
     /// Every domain's state, by name, for a checkpoint; domains without state are left out.
+    /// The sequence counters of the domain origins (RFC 001 rule 17), part of a checkpoint:
+    /// an event's key carries them, so a run restored without them would order ties otherwise.
+    pub fn origin_seqs(&self) -> Vec<(Identity, u64)> {
+        self.seq.iter().map(|(o, s)| (*o, *s)).collect()
+    }
+    pub fn restore_origin_seqs(&mut self, seqs: &[(Identity, u64)]) {
+        self.seq = seqs.iter().copied().collect();
+    }
     pub fn export(&self) -> BTreeMap<String, Vec<u8>> {
         self.domains
             .iter()

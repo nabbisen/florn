@@ -105,6 +105,8 @@ jobs:
         run: command -v wasm-bindgen && wasm-bindgen --version | grep -q "0.2.126" || cargo install --locked wasm-bindgen-cli --version 0.2.126
       - name: The Host's worker module and the shell (RFC 005 rules 32 and 38)
         run: ci/build-shell.sh
+      - name: The runner (a checkpoint crosses the Hosts, RFC 009 rule 6)
+        run: cargo build --locked --release -p florn
       - uses: actions/setup-node@v4
         with:
           node-version: 22

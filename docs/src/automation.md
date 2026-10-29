@@ -17,6 +17,8 @@ Each release also carries prebuilt binaries for x86-64 Linux, AArch64 Linux and 
 ```text
 florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N]
           [--out <file>] [--trace] [--payloads]
+florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]
+          [--to TICK] [--out <file>] [--trace] [--payloads]
 florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]
 florn admit <module.wasm>
 florn probe [--instances N] [--memory BYTES]
@@ -26,11 +28,14 @@ florn help
 | Command | What it does | Prints |
 |---|---|---|
 | `run` | Admits the modules, starts a run with the seed given (or one the machine chooses, which is then printed), runs to the scenario's end, writes the run record | `state`, `seed`, `handled`, `records`, `chain`, `ended`, `run-record` |
+| `resume` | Starts a run from a checkpoint file (RFC 009 rule 6) with the scenario and its modules, to the scenario's end or to `--to`, and writes the run record | the same as `run`, with `handled` and `records` counted from the start of the run the checkpoint came from |
 | `replay` | Starts a run from the record's inputs, applies the recorded interventions, compares the chain at every stored point | the same, plus `replay = matched` or `diverged` |
 | `admit` | The admission step alone | `module`, `source`, `admitted`, `contract`, `kind`, `description`, `port-kind`, `param`, `channel`, `needs` lines |
 | `probe` | The capacity and the build | `instances`, `memory`, `engine`, `arch`, `florn`, `control` |
 
 Modules are found by the hash the scenario names: give each file with `--module` or a directory with `--modules`; a module the scenario does not reference is reported, and a missing one is an error. A replay needs the scenario and the modules again, since a run record carries neither (it carries their hashes, and refuses a different module).
+
+`run --checkpoint-at TICK --checkpoint-out <file>` writes one checkpoint at the boundary before the tick and goes on to the end; `resume` of that file on the other Host, or in another process, ends with the same `chain` as the uninterrupted run (DATA-005). A checkpoint file, `.florn-checkpoint`, holds the kernel's state, every actor's state and every domain's, with the identity it must agree on (the scenario's hash, the modules' hashes, the admission and cost-model versions, the seed); a mismatch is refused with the field named.
 
 ## Exit codes
 

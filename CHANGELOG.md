@@ -6,6 +6,13 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 ### Added
 - RFC 009 (checkpoints, backward navigation, branching, actor swapping, and the application's depth), RFC 010 (cost model version 2: florn's own metering pass) and RFC 011 (the BGP subset and its learning lab) proposed and accepted on 2026-10-29 for release 0.3.0, Phase 3 of the roadmap; its handoff package under `rfcs/handoffs/009-depth/` (PR-23 to PR-30).
+- Checkpoints (RFC 009 section 2, PR-23): the Host takes one every 10,000 handled events at the next boundary and on the `checkpoint` command, keeps them under a memory budget by thinning the older ones (the newest eight always), lists them (`checkpoints`), restores one in place (`restore`: the trace after its instant discarded, the interventions after it undone and said with `run.rewound`, re-applied by a replay), exports one as a `.florn-checkpoint` file after the preview, and starts a run from such a file (`load-checkpoint`) with the identity checked field by field; the file is bounded by the maxima of RFC 006 section 7. The runner gains `resume` and `run --checkpoint-at --checkpoint-out`; the kit proves a checkpoint crosses the Hosts both ways in CI. The codes `checkpoint.taken`, `checkpoint.budget`, `run.rewound`.
+
+### Changed
+- The checkpoint encoding is version 2: it carries the composed world's sequence counters per domain origin, without which a restored run ordered equal-time events otherwise. Version 1 was never written to a file.
+
+### Fixed
+- The several deliveries of one send (a lan's frame reaching every other port) shared one event key and the queue's own order decided between them, so that stepping one event at a time, or restoring a checkpoint, gave another digest than running through. Equal keys are ordered by the target's identity (RFC 001 rule 17 amended); the shipped `net-lan` digest, recorded from a run straight through, stands.
 
 ## [0.2.0] - 2026-10-29
 

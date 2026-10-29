@@ -491,6 +491,56 @@ pub extern "C" fn florn_export_record() -> i32 {
     })
 }
 
+/// A checkpoint of the run at this boundary (RFC 009 rule 2) and its file (rule 6): the bytes,
+/// or -1 when none was taken or kept. The kit's page proves a checkpoint crosses the Hosts.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_checkpoint() -> i32 {
+    CONTROLLER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(c) = slot.as_mut() else {
+            return -1;
+        };
+        c.handle(Envelope::new(Message::Command(Command::Checkpoint)));
+        let index = c
+            .handle(Envelope::new(Message::Query(Query::Checkpoints)))
+            .into_iter()
+            .find_map(|m| match m {
+                Message::Answer(Answer::Checkpoints(list)) if !list.is_empty() => {
+                    Some(list.len() as u32 - 1)
+                }
+                _ => None,
+            });
+        let Some(index) = index else {
+            set_out(Vec::new());
+            return -1;
+        };
+        let replies = c.handle(Envelope::new(Message::Command(Command::Export {
+            kind: florn_control::ExportKind::Checkpoint { index },
+            confirmed: true,
+        })));
+        for m in replies {
+            if let Message::Answer(Answer::Exported { bytes, .. }) = m {
+                let n = bytes.len() as i32;
+                set_out(bytes);
+                return n;
+            }
+        }
+        set_out(Vec::new());
+        -1
+    })
+}
+
+/// A run from a checkpoint file (RFC 009 rule 6, `load-checkpoint`): the replies as JSON.
+///
+/// # Safety
+/// As `florn_load_scenario`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn florn_load_checkpoint(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: as above.
+    let bytes = unsafe { take(ptr, len) };
+    send(Message::Command(Command::LoadCheckpoint { bytes }))
+}
+
 /// A replay of a run record (RFC 005 rule 26, `replay`): the replies as JSON.
 ///
 /// # Safety

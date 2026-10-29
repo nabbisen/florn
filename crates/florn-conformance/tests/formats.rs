@@ -5,7 +5,9 @@
 use std::collections::BTreeMap;
 
 use florn_conformance::host;
-use florn_control::{Command, Envelope, Message, Query, SeedChoice, Subscription, Unit};
+use florn_control::{
+    Command, Envelope, ExportKind, Message, Query, SeedChoice, Subscription, Unit,
+};
 use florn_host::{Environment, Options, Run, Seed};
 use florn_kernel::trace::{CommittedEffect, decode, encode};
 use florn_kernel::{EventKey, FaultKind, Record};
@@ -111,6 +113,12 @@ const RUN_STATE: &str = "010000000101";
 const EVENTS: &str = "010000000201";
 /// The `display` subscription of 0.2 (RFC 005 rule 14): an addition, the rest unchanged.
 const DISPLAY: &str = "010000000203";
+// RFC 009 section 8 (0.3): the checkpoint commands and query, within control version 1.
+const CHECKPOINT_CMD: &str = "01000000000b";
+const RESTORE: &str = "01000000000c03000000";
+const LOAD_CHECKPOINT: &str = "01000000000d03000000020000";
+const EXPORT_CHECKPOINT: &str = "010000000009030100000000";
+const CHECKPOINTS: &str = "010000000108";
 
 #[test]
 fn control_messages_encode_as_recorded() {
@@ -136,6 +144,36 @@ fn control_messages_encode_as_recorded() {
             Message::Subscribe(Subscription::Display),
             DISPLAY,
         ),
+        (
+            "checkpoint",
+            Message::Command(Command::Checkpoint),
+            CHECKPOINT_CMD,
+        ),
+        (
+            "restore",
+            Message::Command(Command::Restore { checkpoint: 3 }),
+            RESTORE,
+        ),
+        (
+            "load-checkpoint",
+            Message::Command(Command::LoadCheckpoint {
+                bytes: vec![2, 0, 0],
+            }),
+            LOAD_CHECKPOINT,
+        ),
+        (
+            "export checkpoint",
+            Message::Command(Command::Export {
+                kind: ExportKind::Checkpoint { index: 1 },
+                confirmed: false,
+            }),
+            EXPORT_CHECKPOINT,
+        ),
+        (
+            "checkpoints",
+            Message::Query(Query::Checkpoints),
+            CHECKPOINTS,
+        ),
     ] {
         let env = Envelope::new(m);
         let bytes = florn_control::encode(&env);
@@ -146,7 +184,8 @@ fn control_messages_encode_as_recorded() {
 }
 
 const RUN_TOML: &str = "2f9e7a06763c765b31ff3e5bde77a605eeba92123e21d69328a1c22f741b5a5c";
-const CHECKPOINT: &str = "a5e588698dad37787fa146a30305779639b248f786d368300307c7b3a3b790a1";
+// Version 2 since 0.3.0 (RFC 009 rule 1): the origins' sequence counters joined the layout.
+const CHECKPOINT: &str = "f6621db80a93e8ecf15e5a8036ff8999ac248da905f4bab1e5d5a4566aa25eb4";
 const ENTRIES: &str = "README.md diagnostic.bin diagnostic.log payloads/<64-hex-digest> run.toml trace/0.bin trace/1.bin";
 
 /// A fixed run of the hand-written guests under a fixed platform: its `run.toml` (with the

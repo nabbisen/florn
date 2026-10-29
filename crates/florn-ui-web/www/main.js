@@ -150,6 +150,11 @@ async function request(worker) {
       modules.push({ name, bytes: await fetchBytes(`scenarios/modules/${name}.wasm`) });
     }
     const seed = query.get("seed");
+    // `resume=<path>`: a checkpoint file under the origin; `checkpoint-at=T`: a checkpoint
+    // file out, in the result (RFC 009 rule 6: a checkpoint crosses the Hosts).
+    const resumePath = query.get("resume");
+    const resume = resumePath ? await fetchBytes(resumePath) : null;
+    const checkpointAt = query.get("checkpoint-at");
     let display = null;
     let reader = null;
     if (query.get("display") === "1") {
@@ -171,8 +176,10 @@ async function request(worker) {
         seed: seed === null ? null : seed,
         replay: query.get("replay") === "1",
         display,
+        resume,
+        checkpoint_at: checkpointAt === null ? null : checkpointAt,
       },
-      transfer: modules.map((m) => m.bytes.buffer),
+      transfer: [...modules.map((m) => m.bytes.buffer), ...(resume ? [resume.buffer] : [])],
       reader,
     };
   }

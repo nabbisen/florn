@@ -330,8 +330,30 @@ async function runScenario(m) {
   host.exports.florn_subscribe_events();
   if (d) host.exports.florn_subscribe_display();
   const [lo, hi] = m.seed === null ? [0, 0] : words(m.seed);
-  host.exports.florn_new_run(lo, hi, m.seed === null ? 0 : 1);
+  if (m.resume) {
+    // A run from a checkpoint file (RFC 009 rule 6): the other Host's, or this one's.
+    host.exports.florn_load_checkpoint(give(m.resume), m.resume.length);
+  } else {
+    host.exports.florn_new_run(lo, hi, m.seed === null ? 0 : 1);
+  }
   collect(out());
+  let checkpoint = null;
+  if (m.checkpoint_at !== null && m.checkpoint_at !== undefined) {
+    // To the boundary before the tick, a checkpoint there, its bytes for the page (rule 6).
+    const [tlo, thi] = words(m.checkpoint_at);
+    host.exports.florn_advance(tlo, thi);
+    collect(out());
+    // The out buffer holds the file's bytes, not JSON: read them before anything else.
+    const n = host.exports.florn_checkpoint();
+    if (n > 0) {
+      const bytes = hostBytes().slice(host.exports.florn_out_ptr(), host.exports.florn_out_ptr() + host.exports.florn_out_len());
+      let s = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      checkpoint = { bytes: n, base64: btoa(s) };
+    } else {
+      checkpoint = { error: "no checkpoint" };
+    }
+  }
   const t0 = performance.now();
   if (d) {
     // Paced: one advance of `slice` ticks per Host tick, a batch written after each, the
@@ -384,7 +406,7 @@ async function runScenario(m) {
     written = { transport: display.writer.kind, batches: display.batches, produced: display.produced, dropped_by_writer: display.dropped, produced_digest: await sha256Hex(display.chunks) };
     display = null;
   }
-  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay, written };
+  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay, written, checkpoint };
 }
 
 function runBench(m) {

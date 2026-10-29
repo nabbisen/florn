@@ -8,10 +8,10 @@ use std::collections::BTreeMap;
 use florn_admission::{Admission, ClassLimits, ModuleManifest};
 use florn_control::display::{DisplayPath, Record as DisplayRecord, Transport};
 use florn_control::message::{
-    ActorInfo, ActorSummary, CapacityInfo, ChangeSummary, ChannelSummary, ConnectionSummary,
-    ExportPreview, FaultInfo, ModuleSummary, ParamSummary, PortSummary, RunStateInfo,
-    ScenarioSummary, SendSummary, SupportInfo, TelemetryRecord, TraceEntry, control_invalid,
-    control_not_now,
+    ActorInfo, ActorSummary, CapacityInfo, ChangeSummary, ChannelSummary, CheckpointSummary,
+    ConnectionSummary, ExportPreview, FaultInfo, ModuleSummary, ParamSummary, PortSummary,
+    RunStateInfo, ScenarioSummary, SendSummary, SupportInfo, TelemetryRecord, TraceEntry,
+    control_invalid, control_not_now,
 };
 use florn_control::{
     Answer, At, CONTROL_VERSION, Code, Command, Envelope, ExportKind, FileKind, Message, Pacing,
@@ -27,6 +27,7 @@ use florn_platform::Platform;
 use crate::domain::{self, Domains};
 use crate::record::{self, Contents};
 use crate::run::{HostError, Options, Run, Seed};
+use crate::snapshot::{self, Checkpoint};
 
 /// What an export built: the file name, the bytes, whether payloads are in, the modules by hash.
 type Built = Result<(String, Vec<u8>, bool, Vec<(String, String)>), String>;
@@ -497,6 +498,68 @@ impl<E: Engine> Controller<E> {
                 out.push(Message::Answer(Answer::Done));
             }
             Command::Export { kind, confirmed } => self.export(kind, confirmed, out),
+            Command::Checkpoint => {
+                let Some(run) = &mut self.run else {
+                    return self.notify(out, self.not_now(name));
+                };
+                // Taken now at a boundary, else at the next one the run reaches (RFC 009 rule 2).
+                run.request_checkpoint();
+                self.drain_log(out);
+                out.push(Message::Answer(Answer::Done));
+            }
+            Command::Restore { checkpoint } => {
+                if !matches!(self.state, RunState::Paused | RunState::Ended) {
+                    return self.notify(out, self.not_now(name));
+                }
+                let Some(run) = &mut self.run else {
+                    return self.notify(out, self.not_now(name));
+                };
+                let index = checkpoint as usize;
+                if index >= run.kept().len() {
+                    return self.notify(out, control_invalid(name, "out-of-range", "checkpoint"));
+                }
+                match run.restore_kept(index) {
+                    Ok(()) => {
+                        self.state = RunState::Paused;
+                        self.target = None;
+                        self.after_advance(out, true);
+                        out.push(Message::Answer(Answer::Done));
+                    }
+                    Err(e) => {
+                        self.drain_log(out);
+                        if !matches!(e, HostError::CheckpointMismatch { .. }) {
+                            out.push(Message::Notification(Code::FileUnreadable.notification(
+                                Scope::file("checkpoint"),
+                                vec![Value::Enum("checkpoint".into()), Value::Text(e.to_string())],
+                            )));
+                        }
+                    }
+                }
+            }
+            Command::LoadCheckpoint { bytes } => {
+                if !matches!(self.state, RunState::Ready | RunState::Ended) {
+                    return self.notify(out, self.not_now(name));
+                }
+                match Checkpoint::decode_file(&bytes, snapshot::MAX_FILE_BYTES) {
+                    Ok(checkpoint) => self.load_checkpoint(checkpoint, out),
+                    Err("file.too-large") => {
+                        out.push(Message::Notification(Code::FileTooLarge.notification(
+                            Scope::file("checkpoint"),
+                            vec![
+                                Value::Enum("checkpoint".into()),
+                                Value::Bytes(bytes.len() as u64),
+                                Value::Bytes(snapshot::MAX_FILE_BYTES),
+                            ],
+                        )))
+                    }
+                    Err(reason) => {
+                        out.push(Message::Notification(Code::FileUnreadable.notification(
+                            Scope::file("checkpoint"),
+                            vec![Value::Enum("checkpoint".into()), Value::Text(reason.into())],
+                        )))
+                    }
+                }
+            }
             Command::Replay { record } => {
                 if !matches!(self.state, RunState::Ready | RunState::Ended) {
                     return self.notify(out, self.not_now(name));
@@ -628,6 +691,43 @@ impl<E: Engine> Controller<E> {
         }
     }
 
+    /// A run from a checkpoint file (RFC 009 rule 6): the loaded scenario and its modules, the
+    /// checkpoint's inputs and instant; refused with the field named on a mismatch.
+    fn load_checkpoint(&mut self, checkpoint: Checkpoint, out: &mut Vec<Message>) {
+        let Some(loaded) = &self.scenario else {
+            return self.notify(out, self.not_now("load-checkpoint"));
+        };
+        let (modules, missing) = self.modules_for(&loaded.manifest);
+        if let Some(h) = missing.first() {
+            return self.notify(
+                out,
+                control_invalid("load-checkpoint", "missing-field", &format!("modules.{h}")),
+            );
+        }
+        if let Some(run) = self.run.take() {
+            let (e, a) = run.into_parts();
+            self.engine = Some(e);
+            self.admission = Some(a);
+        }
+        let (Some(engine), Some(admission)) = (self.engine.take(), self.admission.take()) else {
+            return self.notify(out, self.not_now("load-checkpoint"));
+        };
+        let manifest = loaded.manifest.clone();
+        let mut options = self.options.clone();
+        options.display = self.subs.display;
+        let result = Run::from_checkpoint(
+            engine,
+            admission,
+            self.platform.as_mut(),
+            &self.domains,
+            manifest,
+            &modules,
+            &checkpoint,
+            options,
+        );
+        self.started(result, out);
+    }
+
     fn new_run(
         &mut self,
         seed: SeedChoice,
@@ -691,6 +791,11 @@ impl<E: Engine> Controller<E> {
                 })
             }
         };
+        self.started(result, out);
+    }
+
+    /// A run that started, or the reason it did not (RFC 005 rule 10: the Host goes on).
+    fn started(&mut self, result: Result<Run<E>, HostError>, out: &mut Vec<Message>) {
         match result {
             Ok(mut run) => {
                 self.log_seen = 0;
@@ -812,6 +917,34 @@ impl<E: Engine> Controller<E> {
                     false,
                     Vec::new(),
                 )),
+            },
+            ExportKind::Checkpoint { index } => match &self.run {
+                None => return self.notify(out, self.not_now("export")),
+                Some(run) => match run.kept().get(index as usize) {
+                    None => {
+                        return self
+                            .notify(out, control_invalid("export", "out-of-range", "checkpoint"));
+                    }
+                    Some(k) => {
+                        let modules = run
+                            .inputs()
+                            .modules
+                            .iter()
+                            .map(|m| (m.name.clone(), hex(&m.source_sha256)))
+                            .collect();
+                        Ok((
+                            format!(
+                                "{}-{}.{}",
+                                run.run_id(),
+                                k.instant.tick,
+                                file_kind.extension()
+                            ),
+                            k.checkpoint().encode(),
+                            false,
+                            modules,
+                        ))
+                    }
+                },
             },
             ExportKind::Package => match &self.scenario {
                 None => return self.notify(out, self.not_now("export")),
@@ -1082,6 +1215,24 @@ impl<E: Engine> Controller<E> {
                     swap_cost_us_per_kb: c.swap_cost_us_per_kb,
                 })
             }
+            Query::Checkpoints => Answer::Checkpoints(
+                self.run
+                    .as_ref()
+                    .map(|r| {
+                        r.kept()
+                            .iter()
+                            .enumerate()
+                            .map(|(i, k)| CheckpointSummary {
+                                index: i as u32,
+                                instant: at(k.instant),
+                                records: k.records,
+                                handled: k.handled,
+                                bytes: k.bytes,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            ),
             Query::Support => {
                 let info = match (&self.engine, &self.run) {
                     (Some(e), _) => e.info(),
@@ -1098,7 +1249,12 @@ impl<E: Engine> Controller<E> {
                     engine: info.name,
                     engine_version: info.version,
                     arch: std::env::consts::ARCH.to_string(),
-                    features: vec!["core".into(), "replay".into(), "export-state".into()],
+                    features: vec![
+                        "core".into(),
+                        "replay".into(),
+                        "export-state".into(),
+                        "checkpoint".into(),
+                    ],
                 })
             }
         }
@@ -1310,10 +1466,11 @@ fn trace_entry(r: &Record) -> TraceEntry {
 }
 
 /// The file kinds a Host writes, for the front end's file dialogs.
-pub fn export_kinds() -> [FileKind; 3] {
+pub fn export_kinds() -> [FileKind; 4] {
     [
         FileKind::RunRecord,
         FileKind::DiagnosticLog,
         FileKind::Package,
+        FileKind::Checkpoint,
     ]
 }

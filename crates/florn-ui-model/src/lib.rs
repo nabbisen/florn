@@ -22,8 +22,8 @@ use std::collections::BTreeMap;
 
 use florn_control::display::Record;
 use florn_control::message::{
-    ActorInfo, CapacityInfo, ExportPreview, ModuleSummary, RunStateInfo, ScenarioSummary,
-    SupportInfo, TelemetryRecord,
+    ActorInfo, CapacityInfo, CheckpointSummary, ExportPreview, ModuleSummary, RunStateInfo,
+    ScenarioSummary, SupportInfo, TelemetryRecord,
 };
 use florn_control::{
     Answer, At, Command, ExportKind, FieldValue, FileKind, Message, Notification, Pacing, Progress,
@@ -134,6 +134,8 @@ pub struct ViewModel {
     pub admitted: Vec<ModuleSummary>,
     /// The last export's preview (§3.9: explicit and previewed), until confirmed or dismissed.
     pub preview: Option<ExportPreview>,
+    /// The run's kept checkpoints (RFC 009 rule 3), as the Host last listed them.
+    pub checkpoints: Vec<CheckpointSummary>,
     /// The last confirmed export: the file to hand to the person, taken by the shell.
     pub exported: Option<(FileKind, String, Vec<u8>)>,
     /// The latest report on each actor's channels: (at, payload).
@@ -623,6 +625,7 @@ impl ViewModel {
                 self.exported = Some((*kind, name.clone(), bytes.clone()));
             }
             Answer::Done => {}
+            Answer::Checkpoints(list) => self.checkpoints = list.clone(),
         }
     }
 

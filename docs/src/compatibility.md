@@ -11,7 +11,7 @@ What is stable from which version, and what a newer florn does with older files 
 | Package `.florn` | `florn-package = 1` in `package.toml` | 1 | 1 | As the scenario manifest |
 | Run record `.florn-run` | `run-record = 1` in `run.toml` | 1 | 1 | A record of a newer version is refused with `file.unreadable` naming the version; version 1 stays readable through 1.0 |
 | Trace records | The run record's version | 1 | 1 (domain events are a record kind of version 1) | As the run record; the encodings are frozen by the kit's format tests |
-| Checkpoint | `CHECKPOINT_VERSION` 1 | 1 | 1 | Refused with `checkpoint.mismatch` naming the field |
+| Checkpoint `.florn-checkpoint` | `CHECKPOINT_VERSION` | 1 (in memory only) | 2 (the file form, from 0.3.0; version 1 was never written to a file and is refused) | Refused with `file.unreadable` for another version; a checkpoint of other inputs with `checkpoint.mismatch` naming the field |
 | Control interface | `control` 1 | 1 | 1 (the `decode` and `payload` queries, the `display` subscription and the summaries' new fields are additions; a 0.1.0 Host refuses the additions as unknown, a 0.2.0 front end reads a 0.1.0 Host's answers) | A front end and a Host of different versions refuse each other with `control.version` |
 | Display stream | `display` record version | — | 1 | A reader of a newer version refuses the stream before reading a record |
 | Admission and cost model | Recorded in every run record | 1 and 1 | 1 and 1 | A run recorded under one version replays under that version; a run under another version is refused with `checkpoint.mismatch` (`admission-version`, `cost-model`) |

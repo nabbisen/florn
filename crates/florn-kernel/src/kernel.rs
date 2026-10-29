@@ -54,8 +54,11 @@ impl PartialOrd for Event {
     }
 }
 impl Ord for Event {
+    /// By the key (RFC 001 rule 17), then by the target: the several deliveries of one send
+    /// share the key (a lan's frame reaches every other port) and are ordered by the receiver,
+    /// so that the order is the key's and the target's, never the queue's.
     fn cmp(&self, o: &Self) -> std::cmp::Ordering {
-        self.key.cmp(&o.key)
+        self.key.cmp(&o.key).then(self.target.cmp(&o.target))
     }
 }
 
@@ -258,6 +261,19 @@ impl Kernel {
     }
     pub fn applied_interventions(&self) -> &[AppliedIntervention] {
         &self.applied_interventions
+    }
+    /// The replayed interventions not yet applied (rule 36), in order.
+    pub fn replay_pending(&self) -> &[AppliedIntervention] {
+        &self.replay
+    }
+    /// Whether the kernel stands at a boundary between instants (RFC 001 rule 51): no event of
+    /// the current instant is still to come, so that a checkpoint taken now holds a whole instant.
+    pub fn at_boundary(&self) -> bool {
+        !self.in_activation
+            && match self.queue.peek() {
+                Some(Reverse(e)) => e.key.instant() != self.now || self.instant_events == 0,
+                None => true,
+            }
     }
 
     /// Register an actor: its stream is derived from the root seed and its identity (rule 29).

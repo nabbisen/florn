@@ -25,8 +25,8 @@ use florn_engine::{
 };
 use florn_kernel::trace::Comparison;
 use florn_kernel::{
-    Activation, Advance, Config, Digest, Event, EventKey, EventKind, FaultKind, Identity, Instant,
-    Kernel, Quotas, Sink, SinkRefusal, TiePolicy,
+    Activation, Advance, AppliedIntervention, Config, Digest, Event, EventKey, EventKind,
+    FaultKind, Identity, Instant, Kernel, Quotas, Sink, SinkRefusal, TiePolicy,
 };
 use florn_model::manifest::{ActorKind, DomainMap};
 use florn_model::{HostMaxima, Manifest};
@@ -105,6 +105,12 @@ pub struct Options {
     /// Write the display stream of RFC 005 rule 14 from the start (the `display`
     /// subscription); `Run::set_display` changes it later.
     pub display: bool,
+    /// A checkpoint by the Host itself every so many handled events, at the next boundary
+    /// (RFC 009 rule 2); 0 for none but the requested ones.
+    pub checkpoint_interval: u64,
+    /// The memory the kept checkpoints may use before the older ones are thinned (RFC 009
+    /// rule 3); the newest eight are kept whatever the budget.
+    pub checkpoint_memory: u64,
 }
 
 impl Default for Options {
@@ -119,19 +125,62 @@ impl Default for Options {
             host_build: "native".into(),
             telemetry_capacity: 65_536,
             display: false,
+            checkpoint_interval: Self::DEFAULT_CHECKPOINT_INTERVAL,
+            checkpoint_memory: 256 * 1024 * 1024,
         }
     }
 }
 
 impl Options {
+    /// Handled events between the Host's own checkpoints (RFC 009 rule 2).
+    pub const DEFAULT_CHECKPOINT_INTERVAL: u64 = 10_000;
+    /// The checkpoints the budget never drops (RFC 009 rule 3).
+    pub const CHECKPOINTS_ALWAYS_KEPT: usize = 8;
+
     /// The browser Host's options: its maxima (RFC 003 rule 19) and build name.
     pub fn browser() -> Self {
         Self {
             host: HostMaxima::browser(),
             host_build: "browser".into(),
+            checkpoint_memory: 64 * 1024 * 1024,
             ..Self::default()
         }
     }
+}
+
+/// A kept checkpoint (RFC 009 rule 3): where it stands and what it costs.
+pub struct Kept {
+    pub instant: Instant,
+    pub records: u64,
+    pub handled: u64,
+    pub bytes: u64,
+    checkpoint: Checkpoint,
+}
+
+impl Kept {
+    pub fn checkpoint(&self) -> &Checkpoint {
+        &self.checkpoint
+    }
+}
+
+/// The memory a checkpoint holds, as the budget counts it: the actors' memories and the rest
+/// by a fixed figure per item.
+fn size_of_checkpoint(c: &Checkpoint) -> u64 {
+    let actors: u64 = c
+        .actors
+        .values()
+        .map(|a| a.memory.len() as u64 + 32 * (a.globals.len() + a.tables.len()) as u64 + 64)
+        .sum();
+    let kernel = 64 * c.kernel.queue.len() as u64
+        + 64 * c.kernel.actors.len() as u64
+        + c.kernel
+            .applied_interventions
+            .iter()
+            .map(|i| i.content.len() as u64 + 16)
+            .sum::<u64>()
+        + 40 * c.kernel.trace.stored.len() as u64;
+    let domains: u64 = c.domains.values().map(|d| d.len() as u64 + 16).sum();
+    actors + kernel + domains + 256
 }
 
 /// A committed `report`, for the display path (RFC 005 rule 14; reduced above the transport).
@@ -437,6 +486,12 @@ pub struct Run<E: Engine> {
     /// The signatures of every world a module of the run uses, by world name.
     worlds: BTreeMap<String, Arc<WorldSigs>>,
     capacity: Capacity,
+    /// The kept checkpoints, oldest first (RFC 009 rule 3).
+    kept: Vec<Kept>,
+    /// The handled count at the last checkpoint taken by the Host itself (rule 2).
+    last_checkpoint_handled: u64,
+    /// A `checkpoint` command waiting for the next boundary (rule 2).
+    checkpoint_requested: bool,
 }
 
 impl<E: Engine> Run<E> {
@@ -759,6 +814,9 @@ impl<E: Engine> Run<E> {
             replay_against: None,
             worlds,
             capacity,
+            kept: Vec::new(),
+            last_checkpoint_handled: 0,
+            checkpoint_requested: false,
         };
         // The slots, without instances yet.
         let tick = run.scenario.time.tick;
@@ -1196,6 +1254,7 @@ impl<E: Engine> Run<E> {
             if self.ended.is_some() {
                 break;
             }
+            self.checkpoint_if_due();
             let ev = self
                 .kernel
                 .next_event_if(|i| unit.includes(start, i, handled));
@@ -1783,6 +1842,246 @@ impl<E: Engine> Run<E> {
         Ok(())
     }
 
+    /// Ask for a checkpoint (RFC 009 rule 2): taken now when the kernel stands at a boundary,
+    /// else at the next one the run reaches. Returns whether it was taken now.
+    pub fn request_checkpoint(&mut self) -> bool {
+        self.checkpoint_requested = true;
+        self.checkpoint_if_due()
+    }
+
+    /// A checkpoint when one is due at this boundary: requested, or the interval of rule 2
+    /// since the Host's last. Returns whether one was taken.
+    fn checkpoint_if_due(&mut self) -> bool {
+        let interval = self.options.checkpoint_interval;
+        let due_by_interval = interval > 0
+            && self
+                .kernel
+                .handled()
+                .saturating_sub(self.last_checkpoint_handled)
+                >= interval;
+        if !(self.checkpoint_requested || due_by_interval) || !self.kernel.at_boundary() {
+            return false;
+        }
+        match self.checkpoint() {
+            Ok(c) => {
+                self.checkpoint_requested = false;
+                self.last_checkpoint_handled = self.kernel.handled();
+                self.keep(c);
+                true
+            }
+            Err(e) => {
+                // An actor whose state cannot be read is a Host fault in the log; the run
+                // goes on, and the request stands for the next boundary.
+                let n = Notification::new(
+                    "host.instance-failed",
+                    Severity::Error,
+                    Scope::run(),
+                    Ends::Nothing,
+                )
+                .with("actor", Value::Identity(0))
+                .with("text", Value::Text(format!("checkpoint: {e}")))
+                .at(at(self.kernel.now()));
+                self.notify(n);
+                false
+            }
+        }
+    }
+
+    /// Keep a checkpoint within the budget (RFC 009 rule 3): when the new one does not fit, every
+    /// second checkpoint among those older than the newest eight is dropped, oldest first, until
+    /// it does; the newest eight are never dropped by the budget.
+    fn keep(&mut self, checkpoint: Checkpoint) {
+        let bytes = size_of_checkpoint(&checkpoint);
+        let k = Kept {
+            instant: checkpoint.kernel.now,
+            records: checkpoint.kernel.trace.records,
+            handled: checkpoint.kernel.handled,
+            bytes,
+            checkpoint,
+        };
+        self.kept.push(k);
+        let budget = self.options.checkpoint_memory;
+        let total = |kept: &[Kept]| kept.iter().map(|k| k.bytes).sum::<u64>();
+        let mut dropped = 0u64;
+        while total(&self.kept) > budget {
+            let old = self
+                .kept
+                .len()
+                .saturating_sub(Options::CHECKPOINTS_ALWAYS_KEPT);
+            if old == 0 {
+                break;
+            }
+            // The even positions of the old part, oldest first: half of it in one pass.
+            let mut i = 0;
+            let mut keep = Vec::with_capacity(self.kept.len());
+            for (n, k) in self.kept.drain(..).enumerate() {
+                if n < old && n % 2 == 0 {
+                    dropped += 1;
+                    i += 1;
+                } else {
+                    keep.push(k);
+                }
+            }
+            self.kept = keep;
+            if i == 0 {
+                break;
+            }
+        }
+        let n = Notification::new(
+            "checkpoint.taken",
+            Severity::Info,
+            Scope::run(),
+            Ends::Nothing,
+        )
+        .with("instant", Value::Tick(self.kernel.now().tick))
+        .with("bytes", Value::Bytes(bytes))
+        .with("kept", Value::Count(self.kept.len() as u64))
+        .at(at(self.kernel.now()));
+        self.notify(n);
+        if dropped > 0 {
+            let n = Notification::new(
+                "checkpoint.budget",
+                Severity::Info,
+                Scope::run(),
+                Ends::Nothing,
+            )
+            .with("kept", Value::Count(self.kept.len() as u64))
+            .with("dropped", Value::Count(dropped))
+            .with("bytes", Value::Bytes(total(&self.kept)))
+            .at(at(self.kernel.now()));
+            self.notify(n);
+        }
+    }
+
+    /// The kept checkpoints, oldest first.
+    pub fn kept(&self) -> &[Kept] {
+        &self.kept
+    }
+
+    /// Restore a kept checkpoint in this run (RFC 009 rules 5 and 7).
+    pub fn restore_kept(&mut self, index: usize) -> Result<(), HostError> {
+        if index >= self.kept.len() {
+            return Err(HostError::Malformed("no such checkpoint"));
+        }
+        let k = self.kept.remove(index);
+        let result = self.restore_in_place(&k.checkpoint);
+        // The restored one is kept again at its place; those after it belong to a future that is
+        // executed again (rule 7).
+        self.kept.truncate(index);
+        self.kept.push(k);
+        result
+    }
+
+    /// Continue this run from a checkpoint (RFC 009 rule 7): the identity is checked first
+    /// (RFC 003 rule 22), then the kernel, the domains and every actor are restored, the trace
+    /// and everything after the checkpoint's instant discarded, and the interventions applied
+    /// after it leave the inputs (rule 8; a replay re-applies them at their instants).
+    pub fn restore_in_place(&mut self, checkpoint: &Checkpoint) -> Result<(), HostError> {
+        self.check_identity(&checkpoint.identity)?;
+        let scenario_actors = self.actors.len() + self.builtins.len();
+        if checkpoint.actors.len() > scenario_actors
+            || checkpoint
+                .actors
+                .keys()
+                .any(|id| !self.actors.contains_key(id))
+        {
+            return Err(self.mismatch(
+                "actors",
+                checkpoint.actors.len().to_string(),
+                scenario_actors.to_string(),
+            ));
+        }
+        let applied_before = self.kernel.applied_interventions().to_vec();
+        let undone: Vec<AppliedIntervention> = applied_before
+            .get(checkpoint.kernel.applied_interventions.len()..)
+            .map(|s| s.to_vec())
+            .unwrap_or_default();
+        let replay_pending = self.kernel.replay_pending().to_vec();
+        let watched = self.kernel.trace.watched().to_vec();
+        let kept_records = self
+            .kernel
+            .trace
+            .kept_records()
+            .map(|r| r.to_vec())
+            .unwrap_or_default();
+        let config = self.kernel.config().clone();
+        self.kernel = Kernel::restore(config, checkpoint.kernel.clone());
+        self.kernel.trace.set_kept(kept_records);
+        self.kernel.trace.watch(watched);
+        if !self.world.restore(&checkpoint.domains) {
+            return Err(HostError::Malformed("domain state"));
+        }
+        self.world.restore_origin_seqs(&checkpoint.origins);
+        self.world.dead.clear();
+        for (id, a) in &checkpoint.kernel.actors {
+            if !a.alive {
+                self.world.dead.insert(*id);
+            }
+        }
+        for (id, state) in &checkpoint.actors {
+            self.restore_actor(*id, state)?;
+        }
+        if self.replay_against.is_some() {
+            // A replay: what was undone is still to come at its instant (RFC 001 rule 36).
+            let mut again = undone;
+            again.extend(replay_pending);
+            self.kernel.set_replay(again);
+        } else if !undone.is_empty() {
+            let n = Notification::new("run.rewound", Severity::Info, Scope::run(), Ends::Nothing)
+                .with("to", Value::Tick(checkpoint.kernel.now.tick))
+                .with("undone", Value::Count(undone.len() as u64))
+                .at(at(self.kernel.now()));
+            self.notify(n);
+        }
+        self.ended = None;
+        self.reached = checkpoint.kernel.now.tick;
+        self.telemetry.clear();
+        if let Some(a) = &mut self.activity {
+            a.clear();
+        }
+        self.world.take_display();
+        self.last_checkpoint_handled = checkpoint.kernel.handled;
+        self.checkpoint_requested = false;
+        Ok(())
+    }
+
+    /// The identity check of RFC 003 rule 22 (DATA-005), field by field.
+    fn check_identity(&mut self, id: &CheckpointIdentity) -> Result<(), HostError> {
+        let hex = florn_model::canonical::hex;
+        if id.scenario_sha256 != self.inputs.scenario_sha256 {
+            return Err(self.mismatch(
+                "scenario-hash",
+                hex(&id.scenario_sha256),
+                hex(&self.inputs.scenario_sha256),
+            ));
+        }
+        for (name, h) in &id.modules {
+            let found = self.inputs.modules.iter().find(|m| &m.name == name);
+            match found {
+                Some(m) if m.source_sha256 == *h => {}
+                Some(m) => {
+                    return Err(self.mismatch("module-hash", hex(h), hex(&m.source_sha256)));
+                }
+                None => return Err(self.mismatch("module-hash", hex(h), String::new())),
+            }
+        }
+        if id.admission_version != ADMISSION_VERSION {
+            return Err(self.mismatch(
+                "admission-version",
+                id.admission_version.to_string(),
+                ADMISSION_VERSION.to_string(),
+            ));
+        }
+        if id.cost_model_version != COST_MODEL_VERSION {
+            return Err(self.mismatch(
+                "cost-model",
+                id.cost_model_version.to_string(),
+                COST_MODEL_VERSION.to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     /// A checkpoint at the boundary (RFC 001 rule 51): the kernel and every actor.
     pub fn checkpoint(&mut self) -> Result<Checkpoint, HostError> {
         let ids: Vec<Identity> = self.actors.keys().copied().collect();
@@ -1807,6 +2106,7 @@ impl<E: Engine> Run<E> {
             },
             kernel: self.kernel.snapshot(),
             actors,
+            origins: self.world.origin_seqs(),
             domains: self.world.export(),
         })
     }
@@ -1831,37 +2131,16 @@ impl<E: Engine> Run<E> {
             engine, admission, platform, domains, scenario, modules, seed, options,
         )
         .map_err(|parts| parts.0)?;
-        let id = &checkpoint.identity;
-        let hex = florn_model::canonical::hex;
-        if id.scenario_sha256 != run.inputs.scenario_sha256 {
+        run.check_identity(&checkpoint.identity)?;
+        if checkpoint
+            .actors
+            .keys()
+            .any(|id| !run.actors.contains_key(id))
+        {
             return Err(run.mismatch(
-                "scenario-hash",
-                hex(&id.scenario_sha256),
-                hex(&run.inputs.scenario_sha256),
-            ));
-        }
-        for (name, h) in &id.modules {
-            let found = run.inputs.modules.iter().find(|m| &m.name == name);
-            match found {
-                Some(m) if m.source_sha256 == *h => {}
-                Some(m) => {
-                    return Err(run.mismatch("module-hash", hex(h), hex(&m.source_sha256)));
-                }
-                None => return Err(run.mismatch("module-hash", hex(h), String::new())),
-            }
-        }
-        if id.admission_version != ADMISSION_VERSION {
-            return Err(run.mismatch(
-                "admission-version",
-                id.admission_version.to_string(),
-                ADMISSION_VERSION.to_string(),
-            ));
-        }
-        if id.cost_model_version != COST_MODEL_VERSION {
-            return Err(run.mismatch(
-                "cost-model",
-                id.cost_model_version.to_string(),
-                COST_MODEL_VERSION.to_string(),
+                "actors",
+                checkpoint.actors.len().to_string(),
+                run.actors.len().to_string(),
             ));
         }
         let config = run.kernel.config().clone();
@@ -1869,6 +2148,7 @@ impl<E: Engine> Run<E> {
         if !run.world.restore(&checkpoint.domains) {
             return Err(HostError::Malformed("domain state"));
         }
+        run.world.restore_origin_seqs(&checkpoint.origins);
         for (id, state) in &checkpoint.actors {
             run.restore_actor(*id, state)?;
         }

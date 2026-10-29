@@ -430,6 +430,18 @@ impl Trace {
     pub fn kept_records(&self) -> Option<&[Record]> {
         self.recording.as_deref()
     }
+    /// The record counts watched besides the interval's (a replay's reference points).
+    pub fn watched(&self) -> &[u64] {
+        &self.watched
+    }
+    /// The kept records after a restore in place (RFC 009 rule 7): the prefix up to the
+    /// snapshot's count, when records are kept at all.
+    pub fn set_kept(&mut self, mut records: Vec<Record>) {
+        if self.recording.is_some() {
+            records.truncate(usize::try_from(self.records).unwrap_or(usize::MAX));
+            self.recording = Some(records);
+        }
+    }
 
     /// The chain over the records of one actor, from kept records (RFC 005 rule 24).
     pub fn actor_chain(&self, actor: Identity) -> Option<Digest> {

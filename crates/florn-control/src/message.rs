@@ -73,9 +73,16 @@ impl FileKind {
 /// What `export` writes (RFC 005 rules 26, 29, 30).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExportKind {
-    RunRecord { trace: bool, payloads: bool },
+    RunRecord {
+        trace: bool,
+        payloads: bool,
+    },
     DiagnosticLog,
     Package,
+    /// A kept checkpoint by its index in the `checkpoints` answer (RFC 009 rule 6; 0.3).
+    Checkpoint {
+        index: u32,
+    },
 }
 
 impl ExportKind {
@@ -84,6 +91,7 @@ impl ExportKind {
             Self::RunRecord { .. } => FileKind::RunRecord,
             Self::DiagnosticLog => FileKind::DiagnosticLog,
             Self::Package => FileKind::Package,
+            Self::Checkpoint { .. } => FileKind::Checkpoint,
         }
     }
 }
@@ -126,6 +134,18 @@ pub enum Command {
     Replay {
         record: Vec<u8>,
     },
+    /// A checkpoint at the next boundary (RFC 009 rule 2; 0.3).
+    Checkpoint,
+    /// Restore a kept checkpoint by its index (RFC 009 rules 5 and 7; 0.3): the run continues
+    /// from its instant, the trace after it discarded.
+    Restore {
+        checkpoint: u32,
+    },
+    /// A new run from a checkpoint file (RFC 009 rule 6; 0.3), with the loaded scenario and
+    /// its modules.
+    LoadCheckpoint {
+        bytes: Vec<u8>,
+    },
 }
 
 impl Command {
@@ -142,6 +162,9 @@ impl Command {
             Self::Intervene { .. } => "intervene",
             Self::Export { .. } => "export",
             Self::Replay { .. } => "replay",
+            Self::Checkpoint => "checkpoint",
+            Self::Restore { .. } => "restore",
+            Self::LoadCheckpoint { .. } => "load-checkpoint",
         }
     }
 
@@ -236,6 +259,8 @@ pub enum Query {
     Payload {
         digest: String,
     },
+    /// The kept checkpoints of the run (RFC 009 rule 3; 0.3).
+    Checkpoints,
 }
 
 impl Query {
@@ -249,6 +274,7 @@ impl Query {
             Self::Support => "support",
             Self::Decode { .. } => "decode",
             Self::Payload { .. } => "payload",
+            Self::Checkpoints => "checkpoints",
         }
     }
     /// The largest trace window one answer carries.
@@ -600,6 +626,19 @@ pub enum Answer {
     Decoded(Option<Vec<(String, String)>>),
     /// `payload` (0.2): the bytes, or `None`.
     Payload(Option<Vec<u8>>),
+    /// `checkpoints` (0.3): the kept checkpoints, oldest first.
+    Checkpoints(Vec<CheckpointSummary>),
+}
+
+/// One kept checkpoint (RFC 009 rule 3): its index for `restore` and `export`, the instant it
+/// holds, the records and the handled events up to it, and its size in memory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckpointSummary {
+    pub index: u32,
+    pub instant: At,
+    pub records: u64,
+    pub handled: u64,
+    pub bytes: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -799,12 +838,25 @@ fn command_w(e: &mut Encoder, c: &Command) {
                 }
                 ExportKind::DiagnosticLog => e.u8(1),
                 ExportKind::Package => e.u8(2),
+                ExportKind::Checkpoint { index } => {
+                    e.u8(3);
+                    e.u32(*index);
+                }
             }
             bool_w(e, *confirmed);
         }
         Command::Replay { record } => {
             e.u8(10);
             e.bytes(record);
+        }
+        Command::Checkpoint => e.u8(11),
+        Command::Restore { checkpoint } => {
+            e.u8(12);
+            e.u32(*checkpoint);
+        }
+        Command::LoadCheckpoint { bytes } => {
+            e.u8(13);
+            e.bytes(bytes);
         }
     }
 }
@@ -848,11 +900,17 @@ fn command_r(d: &mut Decoder) -> Option<Command> {
                 },
                 1 => ExportKind::DiagnosticLog,
                 2 => ExportKind::Package,
+                3 => ExportKind::Checkpoint { index: d.u32()? },
                 _ => return None,
             },
             confirmed: bool_r(d)?,
         },
         10 => Command::Replay { record: d.bytes()? },
+        11 => Command::Checkpoint,
+        12 => Command::Restore {
+            checkpoint: d.u32()?,
+        },
+        13 => Command::LoadCheckpoint { bytes: d.bytes()? },
         _ => return None,
     })
 }
@@ -881,6 +939,7 @@ fn query_w(e: &mut Encoder, q: &Query) {
             e.u8(7);
             e.text(digest);
         }
+        Query::Checkpoints => e.u8(8),
     }
 }
 fn query_r(d: &mut Decoder) -> Option<Query> {
@@ -899,6 +958,7 @@ fn query_r(d: &mut Decoder) -> Option<Query> {
             payload: d.bytes()?,
         },
         7 => Query::Payload { digest: d.text()? },
+        8 => Query::Checkpoints,
         _ => return None,
     })
 }
@@ -1318,6 +1378,16 @@ fn answer_w(e: &mut Encoder, a: &Answer) {
             e.u8(11);
             e.option(bytes.as_deref(), Encoder::bytes);
         }
+        Answer::Checkpoints(list) => {
+            e.u8(12);
+            e.list(list, |e, c| {
+                e.u32(c.index);
+                at_w(e, c.instant);
+                e.u64(c.records);
+                e.u64(c.handled);
+                e.u64(c.bytes);
+            });
+        }
     }
 }
 fn answer_r(d: &mut Decoder) -> Option<Answer> {
@@ -1383,6 +1453,15 @@ fn answer_r(d: &mut Decoder) -> Option<Answer> {
         9 => Answer::Done,
         10 => Answer::Decoded(d.option(pairs_r)?),
         11 => Answer::Payload(d.option(Decoder::bytes)?),
+        12 => Answer::Checkpoints(d.list(|d| {
+            Some(CheckpointSummary {
+                index: d.u32()?,
+                instant: at_r(d)?,
+                records: d.u64()?,
+                handled: d.u64()?,
+                bytes: d.u64()?,
+            })
+        })?),
         _ => return None,
     })
 }

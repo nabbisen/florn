@@ -39,12 +39,31 @@ pub struct Checkpoint {
     pub identity: CheckpointIdentity,
     pub kernel: KernelSnapshot,
     pub actors: BTreeMap<Identity, ActorState>,
+    /// The sequence counters of the domain origins (RFC 001 rule 17; connections and worlds),
+    /// from the composed world: version 2 added them, 0.1 and 0.2 held none and never wrote a
+    /// checkpoint to a file.
+    pub origins: Vec<(Identity, u64)>,
     /// Each domain's own state (RFC 008 rule 1, `export`), by domain name: a trailing section,
-    /// absent when no domain has state, so that the checkpoints of 0.1 read unchanged.
+    /// absent when no domain has state.
     pub domains: BTreeMap<String, Vec<u8>>,
 }
 
-pub const CHECKPOINT_VERSION: u8 = 1;
+/// Version 2 since 0.3.0 (RFC 009 rule 1): the origins' sequence counters joined the layout.
+pub const CHECKPOINT_VERSION: u8 = 2;
+/// A checkpoint file's maximum (RFC 006 section 7, RFC 009 rule 6): 2 GiB. Every count inside
+/// is checked against the bytes left before anything is allocated (the canonical decoder).
+pub const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+
+impl Checkpoint {
+    /// A checkpoint from a file under the maxima: `file.too-large` above `max`, `file.unreadable`
+    /// for bytes that are no checkpoint of this version.
+    pub fn decode_file(bytes: &[u8], max: u64) -> Result<Self, &'static str> {
+        if bytes.len() as u64 > max {
+            return Err("file.too-large");
+        }
+        Self::decode(bytes).ok_or("file.unreadable")
+    }
+}
 
 fn kind_tag(k: GlobalKind) -> u8 {
     match k {
@@ -184,6 +203,10 @@ impl Checkpoint {
             e.u32(*id);
             encode_actor_state(&mut e, a);
         }
+        e.list(&self.origins, |e, (o, s)| {
+            e.u32(*o);
+            e.u64(*s);
+        });
         if !self.domains.is_empty() {
             e.u32(self.domains.len() as u32);
             for (name, state) in &self.domains {
@@ -233,6 +256,7 @@ impl Checkpoint {
             let id = d.u32()?;
             states.insert(id, d.actor_state()?);
         }
+        let origins = d.list(|d| Some((d.u32()?, d.u64()?)))?;
         let mut domains = BTreeMap::new();
         if !d.done() {
             let n = d.u32()?;
@@ -273,6 +297,7 @@ impl Checkpoint {
                 },
             },
             actors: states,
+            origins,
             domains,
         })
     }

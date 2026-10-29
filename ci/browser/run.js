@@ -9,7 +9,10 @@
 // Usage: node run.js --browsers chromium,firefox[,webkit] [--quick] [--port N]
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { existsSync } from "node:fs";
 import { chromium, firefox, webkit } from "playwright";
 import { startServer } from "./serve.js";
 
@@ -233,6 +236,43 @@ for (const name of browsers) {
     }
   } catch (err) {
     check(false, `${name}: cost benchmark`, { error: String(err).split("\n")[0] });
+  }
+
+  // RFC 009 rule 6 (checklist C23): a checkpoint crosses the Hosts both ways. The native
+  // runner writes one at the lab's half and the page resumes it to the recorded digest; the
+  // page writes one and the runner resumes it. Skipped with a notice where the runner is not
+  // built (ci/build-shell.sh builds the worker only; CI builds the runner beside it).
+  const runner = join(root, "target/release/florn");
+  const checkpoints = join(root, "crates/florn-ui-web/www/checkpoints");
+  if (existsSync(runner)) {
+    const run = promisify(execFile);
+    await mkdir(checkpoints, { recursive: true });
+    for (const s of ["ospf-lab", "net-lan"].filter((x) => digests.runs[x])) {
+      const rec = digests.runs[s];
+      // The scenario's end, from its manifest: the checkpoint is taken at its half.
+      const end = parseInt((/^end = "(\d+)/m.exec(await readFile(join(root, `scenarios/${s}.toml`), "utf8")) || [])[1] || "0", 10);
+      const at = Math.floor(end / 2);
+      try {
+        // Native to browser.
+        const file = `${s}-${name}-native.florn-checkpoint`;
+        await run(runner, ["run", join(root, `scenarios/${s}.toml`), "--modules", join(root, "scenarios/modules"), "--seed", String(rec.seed), "--checkpoint-at", String(at), "--checkpoint-out", join(checkpoints, file), "--out", join(checkpoints, `${s}-${name}.florn-run`)]);
+        const r = await open(`scenario=${s}&seed=${rec.seed}&resume=checkpoints/${file}`);
+        check(r.chain === rec.chain && r.records === rec.records && at > 0, `${name}: a checkpoint of ${s} taken natively resumes in the browser to the recorded digest`, { chain: r.chain, records: r.records, at, expected: rec.chain });
+        // Browser to native.
+        const b = await open(`scenario=${s}&seed=${rec.seed}&checkpoint-at=${at}`);
+        check(b.checkpoint && b.checkpoint.bytes > 0 && b.chain === rec.chain, `${name}: the page writes a checkpoint of ${s} and runs on to the recorded digest`, { bytes: b.checkpoint && b.checkpoint.bytes, chain: b.chain });
+        const back = `${s}-${name}-browser.florn-checkpoint`;
+        await writeFile(join(checkpoints, back), Buffer.from(b.checkpoint.base64, "base64"));
+        const { stdout } = await run(runner, ["resume", join(checkpoints, back), join(root, `scenarios/${s}.toml`), "--modules", join(root, "scenarios/modules"), "--out", join(checkpoints, `${s}-${name}-resumed.florn-run`)]);
+        const chain = (/^chain = (\S+)$/m.exec(stdout) || [])[1];
+        check(chain === rec.chain, `${name}: a checkpoint of ${s} taken in the browser resumes natively to the recorded digest`, { chain, expected: rec.chain });
+      } catch (err) {
+        check(false, `${name}: checkpoint across the Hosts (${s})`, { error: String(err).split("\n")[0] });
+      }
+    }
+    await rm(checkpoints, { recursive: true, force: true });
+  } else {
+    console.log(JSON.stringify({ notice: `${name}: the runner is not built; the cross-Host checkpoint check is skipped` }));
   }
 
   // Rules 32 and 35: a start from the service worker's cache, offline, with the headers. The

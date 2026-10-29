@@ -41,10 +41,16 @@ struct Args {
     keep_records: bool,
     instances: Option<u64>,
     memory: Option<u64>,
+    /// `run --checkpoint-at TICK --checkpoint-out FILE`: one checkpoint file at the boundary
+    /// before the tick (RFC 009 rule 6).
+    checkpoint_at: Option<u64>,
+    checkpoint_out: Option<PathBuf>,
+    /// `resume --to TICK`: stop there instead of at the scenario's end.
+    to: Option<u64>,
 }
 
 fn usage() -> &'static str {
-    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done; 1 refused or failed; 2 the replay diverged; 3 the run ended with a run fault"
+    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads] [--checkpoint-at TICK --checkpoint-out <file>]\n  florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--to TICK] [--out <file>] [--trace] [--payloads]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done; 1 refused or failed; 2 the replay diverged; 3 the run ended with a run fault"
 }
 
 fn parse_args(argv: &[String]) -> Result<Args, String> {
@@ -60,6 +66,9 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         keep_records: false,
         instances: None,
         memory: None,
+        checkpoint_at: None,
+        checkpoint_out: None,
+        to: None,
     };
     let mut i = 1;
     let value = |i: &mut usize, name: &str| -> Result<String, String> {
@@ -97,6 +106,23 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
                     value(&mut i, "--memory")?
                         .parse()
                         .map_err(|_| "--memory needs an integer of bytes".to_string())?,
+                )
+            }
+            "--checkpoint-at" => {
+                a.checkpoint_at = Some(
+                    value(&mut i, "--checkpoint-at")?
+                        .parse()
+                        .map_err(|_| "--checkpoint-at needs a tick".to_string())?,
+                )
+            }
+            "--checkpoint-out" => {
+                a.checkpoint_out = Some(PathBuf::from(value(&mut i, "--checkpoint-out")?))
+            }
+            "--to" => {
+                a.to = Some(
+                    value(&mut i, "--to")?
+                        .parse()
+                        .map_err(|_| "--to needs a tick".to_string())?,
                 )
             }
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
@@ -240,6 +266,9 @@ fn print_state(c: &mut Controller<WasmtimeEngine>) -> Option<florn_control::mess
 
 fn cmd_run(args: &Args) -> Result<ExitCode, String> {
     let scenario = PathBuf::from(args.positional.first().ok_or(usage())?);
+    if args.checkpoint_at.is_some() != args.checkpoint_out.is_some() {
+        return Err("--checkpoint-at and --checkpoint-out go together".into());
+    }
     let mut c = controller(args)?;
     load(&mut c, &scenario, args)?;
     let seed = args.seed.map_or(SeedChoice::Choose, SeedChoice::Given);
@@ -247,8 +276,80 @@ fn cmd_run(args: &Args) -> Result<ExitCode, String> {
     if error {
         return Err("the run was not started".into());
     }
+    if let (Some(tick), Some(out)) = (args.checkpoint_at, &args.checkpoint_out) {
+        // To the boundary before the tick, a checkpoint there, its file (RFC 009 rule 6).
+        let (_, error) = send(
+            &mut c,
+            Message::Command(Command::Advance {
+                unit: Unit::ToTick(tick),
+            }),
+        );
+        if error {
+            return Err("the run did not reach the checkpoint's tick".into());
+        }
+        let (_, error) = send(&mut c, Message::Command(Command::Checkpoint));
+        if error {
+            return Err("the checkpoint was not taken".into());
+        }
+        let index = match send(&mut c, Message::Query(Query::Checkpoints)) {
+            (Some(Answer::Checkpoints(list)), _) if !list.is_empty() => list.len() as u32 - 1,
+            _ => return Err("the checkpoint was not kept".into()),
+        };
+        let (answer, error) = send(
+            &mut c,
+            Message::Command(Command::Export {
+                kind: ExportKind::Checkpoint { index },
+                confirmed: true,
+            }),
+        );
+        match answer {
+            Some(Answer::Exported { bytes, .. }) if !error => {
+                std::fs::write(out, bytes)
+                    .map_err(|e| format!("cannot write {}: {e}", out.display()))?;
+                println!("checkpoint = {}", out.display());
+            }
+            _ => return Err("the checkpoint was not written".into()),
+        }
+    }
     run_to_end(&mut c)?;
-    let state = print_state(&mut c).ok_or("no run state")?;
+    finish(&mut c, args, &scenario)
+}
+
+/// A run from a checkpoint file (RFC 009 rule 6; `resume`): the scenario and its modules as for
+/// `run`, then to `--to` or to the end, with the same lines and exit codes.
+fn cmd_resume(args: &Args) -> Result<ExitCode, String> {
+    let checkpoint = PathBuf::from(args.positional.first().ok_or(usage())?);
+    let scenario = PathBuf::from(args.positional.get(1).ok_or(usage())?);
+    let mut c = controller(args)?;
+    load(&mut c, &scenario, args)?;
+    let (_, error) = send(
+        &mut c,
+        Message::Command(Command::LoadCheckpoint {
+            bytes: read(&checkpoint)?,
+        }),
+    );
+    if error {
+        return Err("the checkpoint was not restored".into());
+    }
+    let (_, error) = send(
+        &mut c,
+        Message::Command(Command::Advance {
+            unit: Unit::ToTick(args.to.unwrap_or(u64::MAX)),
+        }),
+    );
+    if error {
+        return Err("the run did not complete".into());
+    }
+    finish(&mut c, args, &scenario)
+}
+
+/// The state lines, the run record and the exit code, once a run has advanced as far as asked.
+fn finish(
+    c: &mut Controller<WasmtimeEngine>,
+    args: &Args,
+    scenario: &Path,
+) -> Result<ExitCode, String> {
+    let state = print_state(c).ok_or("no run state")?;
     let out = args.out.clone().unwrap_or_else(|| {
         let stem = scenario
             .file_stem()
@@ -257,7 +358,7 @@ fn cmd_run(args: &Args) -> Result<ExitCode, String> {
         PathBuf::from(format!("{stem}.florn-run"))
     });
     let (answer, error) = send(
-        &mut c,
+        c,
         Message::Command(Command::Export {
             kind: ExportKind::RunRecord {
                 trace: args.trace,
@@ -276,13 +377,15 @@ fn cmd_run(args: &Args) -> Result<ExitCode, String> {
     }
     // A run fault (a limit of RFC 001 rule 13, or a Host fault) is its own exit code, so that a
     // script can tell it from a refusal; the `ended` line names the reason.
-    Ok(if state.ended.as_deref() != Some("end-reached") {
-        ExitCode::from(3)
-    } else if state.reproducible {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
-    })
+    Ok(
+        if state.ended.as_deref() != Some("end-reached") && args.to.is_none() {
+            ExitCode::from(3)
+        } else if state.reproducible {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        },
+    )
 }
 
 fn cmd_replay(args: &Args) -> Result<ExitCode, String> {
@@ -409,6 +512,7 @@ pub fn run(argv: Vec<String>) -> ExitCode {
     };
     let result = match args.command.as_str() {
         "run" => cmd_run(&args),
+        "resume" => cmd_resume(&args),
         "replay" => cmd_replay(&args),
         "admit" => cmd_admit(&args),
         "probe" => cmd_probe(&args),

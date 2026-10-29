@@ -293,6 +293,18 @@ pub const TABLE: &[(&str, &str)] = &[
         "The replay diverged from the record between records {from} and {to}.",
     ),
     (
+        "checkpoint.taken",
+        "A checkpoint was taken at tick {instant} ({bytes}); {kept} are kept.",
+    ),
+    (
+        "checkpoint.budget",
+        "The checkpoints' memory budget dropped {dropped} older checkpoints; {kept} are kept ({bytes}).",
+    ),
+    (
+        "run.rewound",
+        "The run went back to tick {to}; {undone} interventions after it were undone.",
+    ),
+    (
         "checkpoint.mismatch",
         "The record's {what} is {expected}; this run's is {found}.",
     ),
