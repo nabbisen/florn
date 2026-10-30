@@ -40,6 +40,10 @@ The `chain` line is the run's digest, and it is the same digest the application 
 
 The guest implements one area, point-to-point adjacencies, router-LSAs with sequence numbers and acknowledgements, and Dijkstra. Anything else is refused rather than approximated, and the refusal is a line in the diagnostic log and under "States": a router whose `area` is not 0 stays idle and says why; a second router on the same interface is refused once per port; hellos with other intervals or from another area are ignored with a reason. The bundled scenario `ospf-outside` shows the first of these: r2 is in area 1, logs its refusal, and r1 keeps saying hello to nobody.
 
+## The second lab: BGP
+
+`bgp-lab` is the second learning lab, "BGP: a path chosen by policy", under the OSPF lab in the list. Four routers in four autonomous systems: r1 has sessions to r2 and r3, both have sessions to r4, which originates one prefix. A session comes up over its link in three steps and is kept alive by keepalives under a hold time; the peer reports in the inspector and the timeline show the states. r1 holds two paths with one autonomous system between on each and chooses by local preference, a parameter of its port to r2, not by length. At tick 1,000 the link r1-r2 goes down and both ends drop the session at once: r1 withdraws what it learned there and chooses the path through AS 3. At 2,000 the link returns and local preference brings the first path back. The story under the lab says what to try: take r2 down and watch r1's hold timer expire 90 ticks after the last frame; make the local preferences equal and watch the tie go to the MED r4 set towards each neighbour, then to the lower router id. The subset, its refusals and its frames are RFC 011; `bgp-outside` puts two routers of one autonomous system on a link, which both refuse with the reason logged.
+
 ## The other bundled scenarios
 
 | Scenario | What to watch |

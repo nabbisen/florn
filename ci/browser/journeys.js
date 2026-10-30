@@ -692,6 +692,54 @@ for (const name of browsers) {
     check(false, `${name}: P4`, { error: String(err).split("\n")[0] });
   }
 
+  // RFC 011 rule 8 (checklist C29): the BGP lab opens from the list with its story, its peer
+  // and route reports decode in the inspector, a frame decodes, and the run ends with the
+  // recorded digest.
+  try {
+    const { page, errors } = await openApp(context);
+    const bgp = digests.runs["bgp-lab"];
+    await openLab(page, "bgp-lab");
+    const story = await page.textContent("#lab-story");
+    check(/BGP/.test(story) && story.length > 200, `${name}: the BGP lab opens with its story`, { story: story.length });
+    await runTo(page, 300);
+    await page.click('button.actor[data-actor="1"]');
+    await sleep(600);
+    const reports = await page.textContent('dd[data-fact="reports"]');
+    check(/peer/.test(reports) && /established/.test(reports) && /route/.test(reports) && /10\.4\.0\.0\/16/.test(reports) && /local-pref=200/.test(reports), `${name}: the inspector shows r1's peer and route reports decoded`, { reports: reports.slice(0, 200) });
+    let s = await state(page);
+    check(s.routes >= 1 && s.timeline > 10, `${name}: the BGP lab's reports reach the timeline`, { routes: s.routes, timeline: s.timeline });
+    // A frame of the lab decodes in the message inspector.
+    await page.click('input.kind-filter[data-kind="activation"]');
+    for (const k of ["fault", "intervention", "change", "event", "report", "notice"]) {
+      if (await page.isChecked(`input.kind-filter[data-kind="${k}"]`)) await page.click(`input.kind-filter[data-kind="${k}"]`);
+    }
+    await page.click('input.kind-filter[data-kind="activation"]');
+    await sleep(400);
+    const rows = page.locator("#timeline li.row");
+    const count = await rows.count();
+    let decoded = "";
+    for (let i = count - 1; i >= 0 && i > count - 40; i--) {
+      await rows.nth(i).locator("button").first().click();
+      await sleep(300);
+      if (/Message|メッセージ/.test(await page.textContent("#inspector-kind"))) {
+        for (let w = 0; w < 20; w++) {
+          decoded = (await page.textContent('dd[data-fact="decoded"]')) || "";
+          if (/type=/.test(decoded)) break;
+          await sleep(100);
+        }
+        if (/type=/.test(decoded)) break;
+      }
+    }
+    check(/type=(keepalive|update|open)/.test(decoded) && /sender-as=/.test(decoded), `${name}: a BGP frame decodes in the inspector`, { decoded: decoded.slice(0, 120) });
+    await runToEnd(page);
+    s = await state(page);
+    check(bgp && s.chain === bgp.chain, `${name}: the BGP lab's run has the recorded digest`, { chain: s.chain, expected: bgp && bgp.chain });
+    await consoleCheck(page, errors, `${name}: BGP lab no error of the application in the console`);
+    await page.close();
+  } catch (err) {
+    check(false, `${name}: BGP lab`, { error: String(err).split("\n")[0] });
+  }
+
   // RFC 009 rule 20 (WEB-004): the web application manifest and its icons, from the origin.
   try {
     const { page } = await openApp(context);

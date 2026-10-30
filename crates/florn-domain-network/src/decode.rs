@@ -3,7 +3,7 @@
 //! module is 0.3.
 
 /// The protocols with a decoder.
-pub const PROTOCOLS: &[&str] = &["net-echo", "distance-vector", "ospf"];
+pub const PROTOCOLS: &[&str] = &["net-echo", "distance-vector", "ospf", "bgp"];
 
 /// A frame's fields as `(name, value)` text pairs, or `None` when the protocol is unknown or
 /// the frame does not parse.
@@ -42,6 +42,7 @@ pub fn decode(protocol: &str, payload: &[u8]) -> Option<Vec<(String, String)>> {
             ])
         }
         "ospf" => decode_ospf(payload),
+        "bgp" => decode_bgp(payload),
         _ => None,
     }
 }
@@ -133,6 +134,119 @@ fn decode_ospf(payload: &[u8]) -> Option<Vec<(String, String)>> {
             }
             out.push(("count".into(), n.to_string()));
             out.push(("acks".into(), acks.join(" ")));
+        }
+    }
+    Some(out)
+}
+
+/// Version 1 of the BGP subset's frames (RFC 011 rule 7; the guest's layout): the type, the
+/// sender's AS and router id, then an open's hold time, an update's withdrawn prefixes and
+/// advertised prefixes as `prefix [as,as,…] med`, or a notification's code and text; a frame
+/// that is not this layout is `None`, which the inspector shows as unknown.
+fn decode_bgp(payload: &[u8]) -> Option<Vec<(String, String)>> {
+    let u64_at = |at: usize| {
+        payload
+            .get(at..at + 8)
+            .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+    };
+    let u32_at = |at: usize| {
+        payload
+            .get(at..at + 4)
+            .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+    };
+    let u16_at = |at: usize| {
+        payload
+            .get(at..at + 2)
+            .map(|b| u16::from_le_bytes(b.try_into().unwrap()))
+    };
+    let prefix_at = |at: usize| -> Option<(String, usize)> {
+        let n = usize::from(*payload.get(at)?);
+        let bytes = payload.get(at + 1..at + 1 + n)?;
+        Some((String::from_utf8_lossy(bytes).into_owned(), at + 1 + n))
+    };
+    if payload.first() != Some(&1) {
+        return None;
+    }
+    let kind = *payload.get(1)?;
+    let sender_as = u32_at(2)?;
+    let router_id = u64_at(6)?;
+    let mut out = vec![
+        (
+            "type".to_string(),
+            match kind {
+                1 => "open",
+                2 => "update",
+                3 => "keepalive",
+                4 => "notification",
+                _ => return None,
+            }
+            .to_string(),
+        ),
+        ("sender-as".to_string(), sender_as.to_string()),
+        ("router-id".to_string(), router_id.to_string()),
+    ];
+    match kind {
+        1 => {
+            out.push(("hold".into(), u32_at(14)?.to_string()));
+            if payload.len() != 18 {
+                return None;
+            }
+        }
+        2 => {
+            let nw = usize::from(u16_at(14)?);
+            let mut at = 16;
+            let mut withdrawn = Vec::with_capacity(nw);
+            for _ in 0..nw {
+                let (p, next) = prefix_at(at)?;
+                withdrawn.push(p);
+                at = next;
+            }
+            let na = usize::from(u16_at(at)?);
+            at += 2;
+            let mut advertised = Vec::with_capacity(na);
+            for _ in 0..na {
+                let (p, next) = prefix_at(at)?;
+                at = next;
+                let n = usize::from(u16_at(at)?);
+                at += 2;
+                let path: Vec<String> = (0..n)
+                    .map(|i| u32_at(at + i * 4).map(|a| a.to_string()))
+                    .collect::<Option<Vec<_>>>()?;
+                at += n * 4;
+                let med = u32_at(at)?;
+                at += 4;
+                advertised.push(format!("{p} [{}] {med}", path.join(",")));
+            }
+            if payload.len() != at {
+                return None;
+            }
+            out.push(("withdrawn".into(), withdrawn.join(" ")));
+            out.push(("advertised".into(), advertised.join(" ")));
+        }
+        3 => {
+            if payload.len() != 14 {
+                return None;
+            }
+        }
+        _ => {
+            let code = *payload.get(14)?;
+            let n = usize::from(u16_at(15)?);
+            let text = payload.get(17..17 + n)?;
+            if payload.len() != 17 + n {
+                return None;
+            }
+            out.push((
+                "code".into(),
+                match code {
+                    1 => "bad-version",
+                    2 => "own-as",
+                    3 => "hold-time",
+                    4 => "outside-the-subset",
+                    _ => "unknown",
+                }
+                .to_string(),
+            ));
+            out.push(("text".into(), String::from_utf8_lossy(text).into_owned()));
         }
     }
     Some(out)

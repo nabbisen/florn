@@ -48,4 +48,6 @@ The `zero-delay` scenario ends with the run fault of RFC 001 rule 13 by design; 
 | `dv-chain` | RFC 008 rule 20: four distance-vector routers in a line with `infinity = 3`; the far ends never install each other |
 | `ospf-lab` | RFC 008 rule 21 (NET-004, NET-010), the learning lab: four OSPF routers in a ring with a costly chord r1-r3, hellos every 50 ticks and a dead interval of 200; the link r2-r3 down at 1500 and up at 3000; the adjacencies go full, the LSAs flood, the routes take the short way, reroute after the dead interval and come back |
 | `ospf-outside` | RFC 008 rule 21: r2 is in area 1, outside the subset; it logs its refusal and stays idle while r1 keeps saying hello |
+| `bgp-lab` | RFC 011 rule 9 (NET-005), the BGP learning lab: four routers in four autonomous systems, r1 with sessions to r2 and r3, both with sessions to r4, which originates 10.4.0.0/16; local preference 200 on r1's port to r2, MED 10 and 20 from r4; hold 90 ticks, keepalive 30; the link r1-r2 down at 1000 and up at 2000 |
+| `bgp-outside` | RFC 011 rule 10: two routers of one autonomous system on a link; internal BGP is outside the subset, so both refuse the session with the reason logged and no route forms |
 | `bench-protocol`, `bench-compute` | The kernel-path benchmarks of RFC 005 section 11 |

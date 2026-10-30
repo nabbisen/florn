@@ -177,7 +177,7 @@ florn_guest_network::router!(NetEcho);
 
 A frame is `on_message` through the interface's port, its payload the bytes the sender gave `send`. `link_info(port)` answers the state of one interface as it was when the activation began: whether the link is up, the per-port cost, the mtu, the bandwidth. The optional `tables` entry names the protocol the frames follow, so that the inspector decodes them with the domain's decoder for it; a protocol without a decoder is a warning at admission and the frames are shown as bytes. A guest that reports on channels named `neighbour` and `route` with the layouts of RFC 008 rule 17 gets its neighbours and routes shown by the network view. The examples in `crates/florn-guest-network/examples` are the ladder of RFC 008 rule 20: `net_echo`, which echoes every frame, and `distance_vector`, a router that advertises its routes with split horizon, counts to infinity, withdraws what it has not heard for three periods and reports `neighbour` and `route`; the kit's network scenarios are built on them.
 
-The three network examples under `crates/florn-guest-network/examples/` are the ladder: `net_echo`, `distance_vector` and `ospf`. The last shows the pattern for a protocol that ships a declared subset: everything outside it is refused with a line on channel 0, which the application and the diagnostic log show, and the router keeps running.
+The four network examples under `crates/florn-guest-network/examples/` are the ladder: `net_echo`, `distance_vector`, `ospf` and `bgp`. The last two show the pattern for a protocol that ships a declared subset: everything outside it is refused with a line on channel 0, which the application and the diagnostic log show, and the router keeps running.
 
 ## Where to look next
 

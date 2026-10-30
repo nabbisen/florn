@@ -20,7 +20,7 @@ use wasmtime::{
 };
 
 /// The pinned Wasmtime version (RFC 005 rule 44); a test keeps it equal to `Cargo.lock`.
-pub const WASMTIME_VERSION: &str = "48.0.7";
+pub const WASMTIME_VERSION: &str = "48.0.8";
 
 /// What the Host allows one instance's store to hold (RFC 003 rule 20; RFC 005 rule 9). Every
 /// instance has a store of its own, so that dropping it (RFC 009 rule 13: a swapped-out actor)

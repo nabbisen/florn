@@ -7,6 +7,7 @@ recorded-on = "x86_64"
 [modules]
 bench_compute = "15ca4afe08374b883bbbab8c5f988be358b89dc7b3e3d1495c75942fc3dab481"
 bench_protocol = "71aa813f95f7edab48ce1e7883f2d7ef71654426c01fe44fb693808404fd0810"
+bgp = "7c2af3721f28b01de6b2ee553a0b983b11d8f0dfd60e41979444bb2f78b67d74"
 chatter = "1af6d0d08bf7446b3fe6291e948b4d0530bf9fd70ef1443587b4404154946fc7"
 clock = "5bb020a3164a813bc61d8676dc05493e9a505151c2e1b00ae9d328df3d05bb14"
 distance_vector = "0eaeb731163ce15211dba48880ef307b42437866ea41438ea75f6053a57349cb"
@@ -27,6 +28,7 @@ timers = "3dcebb9b37893157290010bfdde60875e1f326f23aa8360b311d2a3c3e6c4366"
 [admitted]
 bench_compute = "95b7be26d39ee55bd8f71abc2ebbf92b942baff1c60d6b5b07c69c014a90e589"
 bench_protocol = "035dc654997cb1f17347b6f94b71eb054d822c567982ae2aa27583fccdc0ed8f"
+bgp = "71cefd38e889386f2106b292be970325aea866efcbbcd4b943489b157589d9f3"
 chatter = "f856210ab429681d8b3cf2032a09dba35a218925bbf9bdcda92e5c070f9200ae"
 clock = "c9ea05c2c8ecd7c9cc221e59c5aa84c9456c9d560cd04f42555c44cd5cd88fe3"
 distance_vector = "3adb60f51ba3c14ab9335501dbad403bb3068af1e0b34f5070eb0dde944afaef"
@@ -46,6 +48,7 @@ timers = "7560d1f671998a0249fca23634a94672e134240f679b60cc54b0a652d423fc16"
 [admitted-2]
 bench_compute = "95b7be26d39ee55bd8f71abc2ebbf92b942baff1c60d6b5b07c69c014a90e589"
 bench_protocol = "035dc654997cb1f17347b6f94b71eb054d822c567982ae2aa27583fccdc0ed8f"
+bgp = "71cefd38e889386f2106b292be970325aea866efcbbcd4b943489b157589d9f3"
 chatter = "f856210ab429681d8b3cf2032a09dba35a218925bbf9bdcda92e5c070f9200ae"
 clock = "c9ea05c2c8ecd7c9cc221e59c5aa84c9456c9d560cd04f42555c44cd5cd88fe3"
 distance_vector = "3adb60f51ba3c14ab9335501dbad403bb3068af1e0b34f5070eb0dde944afaef"
@@ -72,6 +75,18 @@ ended = "end-reached"
 seed = 1
 chain = "e950007db42de361bbf88cce7dbaebccb0921e92677d99562532d7314f3fa7af"
 records = 29999
+ended = "end-reached"
+
+[runs."bgp-lab"]
+seed = 1
+chain = "8c0fe83fa779ee3dc0b83c8320be127ce47d15321cdc0c95d747d9faeeea0cb4"
+records = 1160
+ended = "end-reached"
+
+[runs."bgp-outside"]
+seed = 1
+chain = "f933560976ef5c1a941a9a014e18e27d44ce7fa66c16f4d5a9928f793794ee55"
+records = 44
 ended = "end-reached"
 
 [runs."dv-chain"]

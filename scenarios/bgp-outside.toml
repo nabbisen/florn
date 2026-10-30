@@ -1,0 +1,54 @@
+# bgp-outside: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "bgp-outside"
+domains = ["core", "network"]
+
+[time]
+tick = "1ns"
+end = "600ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 1
+
+[limits.default]
+memory = "2MiB"
+
+[modules.bgp]
+sha256 = "7c2af3721f28b01de6b2ee553a0b983b11d8f0dfd60e41979444bb2f78b67d74"
+contract = "florn:network/router@0.1.0"
+
+[[actors]]
+id = 1
+name = "a1"
+kind = "module"
+module = "bgp"
+ports = [{ id = 0, name = "p0", type = "network/interface" }]
+[actors.config]
+as = 1
+hold = "90ns"
+keepalive = "30ns"
+networks = "10.1.0.0/16"
+
+[[actors]]
+id = 2
+name = "a2"
+kind = "module"
+module = "bgp"
+ports = [{ id = 0, name = "p0", type = "network/interface" }]
+[actors.config]
+as = 1
+hold = "90ns"
+keepalive = "30ns"
+
+[[connections]]
+id = 1000
+name = "c0"
+type = "network/link"
+ports = ["a1.p0", "a2.p0"]
+[connections.attrs]
+delay = "2ns"

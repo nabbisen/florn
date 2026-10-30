@@ -30,3 +30,7 @@ crate-type = ["cdylib"]
 [[example]]
 name = "ospf"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "bgp"
+crate-type = ["cdylib"]

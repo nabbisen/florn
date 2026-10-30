@@ -90,6 +90,63 @@ fn ospf(id: u32, interfaces: u32, hello: u64, dead: u64, area: u64) -> crate::sc
     a
 }
 
+/// A BGP router (RFC 011) in autonomous system `as_`, with `hold` and `keepalive` ticks, and
+/// the extra parameters given (`networks`, `local-pref`, `med`).
+fn bgp(
+    id: u32,
+    interfaces: u32,
+    as_: u32,
+    hold: u64,
+    keepalive: u64,
+    extra: &[(&'static str, &str)],
+) -> crate::scenario::Actor {
+    let mut a = router(id, "bgp", interfaces)
+        .with("as", as_.to_string())
+        .with("hold", format!("\"{hold}ns\""))
+        .with("keepalive", format!("\"{keepalive}ns\""));
+    for (k, v) in extra {
+        a = a.with(k, v.to_string());
+    }
+    a
+}
+
+/// The BGP learning lab (RFC 011 rule 9; NET-005): four routers in four autonomous systems,
+/// r1 (AS 1) with sessions to r2 (AS 2) and r3 (AS 3), both with sessions to r4 (AS 4), which
+/// originates 10.4.0.0/16; r1 prefers its port to r2 (local preference 200 against 100), r4
+/// sets MED 10 towards r2 and 20 towards r3; hold 90 ticks, keepalive 30; the link r1-r2
+/// breaks at 1000 and is repaired at 2000 (open question 2 of the RFC, decided here).
+pub fn bgp_lab() -> Scenario {
+    Scenario::new("bgp-lab", 3_000)
+        .domain("network")
+        .actor(bgp(1, 2, 1, 90, 30, &[("local-pref", "\"0=200,1=100\"")]))
+        .actor(bgp(2, 2, 2, 90, 30, &[]))
+        .actor(bgp(3, 2, 3, 90, 30, &[]))
+        .actor(bgp(
+            4,
+            2,
+            4,
+            90,
+            30,
+            &[("networks", "\"10.4.0.0/16\""), ("med", "\"0=10,1=20\"")],
+        ))
+        .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")])
+        .change(1_000, &[("enabled", "false")])
+        .change(2_000, &[("enabled", "true")])
+        .link("network/link", &[(1, 1), (3, 0)], &[("delay", "\"2ns\"")])
+        .link("network/link", &[(2, 1), (4, 0)], &[("delay", "\"2ns\"")])
+        .link("network/link", &[(3, 1), (4, 1)], &[("delay", "\"2ns\"")])
+}
+
+/// Two routers of one autonomous system on a link (RFC 011 rule 10): internal BGP is outside
+/// the subset, so both refuse the session with the reason logged and no route forms.
+pub fn bgp_outside() -> Scenario {
+    Scenario::new("bgp-outside", 600)
+        .domain("network")
+        .actor(bgp(1, 1, 1, 90, 30, &[("networks", "\"10.1.0.0/16\"")]))
+        .actor(bgp(2, 1, 1, 90, 30, &[]))
+        .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")])
+}
+
 /// The learning lab of NET-010 (RFC 008 rule 21): four OSPF routers in a ring with a costly
 /// chord r1-r3, hellos every 50 ticks, a neighbour dead after 200; the link r2-r3 breaks at
 /// 1500 and is repaired at 3000, so that the adjacencies form, the database floods, the
@@ -275,6 +332,8 @@ fn definitions() -> Vec<Shipped> {
         // The OSPF subset (RFC 008 rule 21): the learning lab, and a router outside the subset.
         normal(ospf_lab()),
         normal(ospf_outside()),
+        normal(bgp_lab()),
+        normal(bgp_outside()),
         // The blackhole built-in drops every frame and reports the count.
         normal(
             Scenario::new("net-blackhole", 200)

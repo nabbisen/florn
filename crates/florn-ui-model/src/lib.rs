@@ -938,7 +938,7 @@ impl ViewModel {
         if let Some(c) = self
             .module_of(t.actor)
             .and_then(|m| m.channels.iter().find(|c| c.channel == t.channel))
-            && matches!(c.name.as_str(), "neighbour" | "route")
+            && matches!(c.name.as_str(), "neighbour" | "route" | "peer")
         {
             let fields = inspector::decode_report(&c.fields, &t.payload);
             let name = c.name.clone();
