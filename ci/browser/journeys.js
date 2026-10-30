@@ -521,7 +521,9 @@ for (const name of browsers) {
     const undoneText = await page.textContent("#undone");
     check(s.interventions === 0 && s.undone === 1 && s.timeline < rowsBefore && /2,[0-9]{3}/.test(undoneText), `${name}: P1 the timeline ends at the instant and the intervention is listed as undone with its instant`, { now: s.now, timeline: s.timeline, rows_before: rowsBefore, undone: undoneText.slice(0, 120) });
     check(s.links_down === 0, `${name}: P1 the link is up again at the earlier instant`, { links_down: s.links_down });
-    // "Step to here" on an early row goes back the same way.
+    // "Step to here" on an early row goes back the same way. The rows re-render a few times a
+    // second (rule 39): the row read and the row clicked must be of the same rendering.
+    await sleep(600);
     const firstTick = await page.locator("#timeline li.row .tick").first().textContent();
     const target = parseInt(firstTick.replace(/,/g, ""), 10) + 1;
     await page.locator("#timeline li.row .step-to").first().click();
