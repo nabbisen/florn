@@ -25,5 +25,5 @@ Independent of the order above: PR-24 depends on nothing of Phase 3 and may be f
 | PR-26 | merged | `f5312e7`, 2026-10-29; CI run 40866743099 green | C26 pending |
 | PR-27 | merged | `4b87982 with the follow-ups aed5714 and 67d9e29`, 2026-10-29; CI run 40890654979 green | C27 pending |
 | PR-28 | merged | `17521bf`, 2026-10-30; CI run 40995874215 green | C28 pending (J5, P1 to P4, the installation and the language on the new panels run in CI; the owner's pass at their pace) |
-| PR-29 | not started | | |
+| PR-29 | merged | `0ca1cd4 with the follow-up df8358a`, 2026-10-31; CI run 41138934751 green | C29 pending |
 | PR-30 | not started | | |
