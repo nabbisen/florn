@@ -9,6 +9,7 @@
 - [The browser interface](./interface.md)
 - [The learning lab](./lab.md)
 - [Compatibility and versions](./compatibility.md)
+- [Release notes: 0.3.0](./releases/0.3.0.md)
 - [Release notes: 0.2.0](./releases/0.2.0.md)
 - [Release notes: 0.1.0](./releases/0.1.0.md)
 

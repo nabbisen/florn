@@ -43,9 +43,7 @@ _None at present._
 
 | ID | Title | Accepted | Implemented by |
 |----|-------|----------|----------------|
-| 009 | [Checkpoints, backward navigation, branching, actor swapping, and the application's depth](./accepted/009-checkpoints-navigation-branching.md) | 2026-10-29 | Release 0.3 |
-| 010 | [Cost model version 2: florn's own metering pass](./accepted/010-cost-model-version-2.md) | 2026-10-29 | Release 0.3 |
-| 011 | [The BGP subset and its learning lab](./accepted/011-bgp-subset.md) | 2026-10-29 | Release 0.3 |
+_None at present._
 
 ### Implemented
 
@@ -60,6 +58,9 @@ _None at present._
 | 006 | [Security baseline for the browser Host](./done/006-security-baseline-browser-host.md) | 0.1.0 (accepted 2026-10-14) |
 | 007 | [Error model and internationalisation](./done/007-error-model-and-internationalisation.md) | 0.1.0 (accepted 2026-10-14) |
 | 008 | [Network domain: how a domain enters the Host, links, frames, the router contract, the guest ladder](./done/008-network-domain.md) | 0.2.0 (accepted 2026-10-24) |
+| 009 | [Checkpoints, backward navigation, branching, actor swapping, and the application's depth](./done/009-checkpoints-navigation-branching.md) | 0.3.0 (accepted 2026-10-29) |
+| 010 | [Cost model version 2: florn's own metering pass](./done/010-cost-model-version-2.md) | 0.3.0 (accepted 2026-10-29) |
+| 011 | [The BGP subset and its learning lab](./done/011-bgp-subset.md) | 0.3.0 (accepted 2026-10-29) |
 
 ### Archive
 

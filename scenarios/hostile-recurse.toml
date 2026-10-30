@@ -19,11 +19,11 @@ root = 1
 memory = "2MiB"
 
 [modules.hostile_recurse]
-sha256 = "d4da782611ff838d159237bd16d8246eda778e85ba67abcdf6cb45760a6c6147"
+sha256 = "8c50ce80d875309405f294cf344f5e65afc750bf7c3a26587961fd414265d7df"
 contract = "florn:core/guest@0.1.0"
 
 [modules.echo]
-sha256 = "a05bcdcdec10cdb1a5b5b8ad924a1208586c99ff1051a13446c0a1a75bb19347"
+sha256 = "2b84df48e59b970fa545aff5869ec32bef097d9ae105ab0f92d58b35890ad6e4"
 contract = "florn:core/guest@0.1.0"
 
 [[actors]]

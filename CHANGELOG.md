@@ -4,6 +4,12 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] - 2026-10-31
+
+Depth (Phase 3 of the roadmap): checkpoints, backward navigation and branching, cost-model version 2, actor swapping, the application's depth, the BGP subset and its lab. The release notes with the figures, the security review and the file hashes are `docs/src/releases/0.3.0.md` and the release page.
+
 ### Added
 - RFC 009 (checkpoints, backward navigation, branching, actor swapping, and the application's depth), RFC 010 (cost model version 2: florn's own metering pass) and RFC 011 (the BGP subset and its learning lab) proposed and accepted on 2026-10-29 for release 0.3.0, Phase 3 of the roadmap; its handoff package under `rfcs/handoffs/009-depth/` (PR-23 to PR-30).
 - Cost-model version 2 (RFC 010, PR-24): florn's own metering pass, charging version 1's units at version 1's blocks into a local of the function and touching the budget global only before calls, before a loop's back-edge, before a return and at a function's end; a run without a fault gives the same digest under both versions, and a run under version 1 replays under version 1. The version is a run input and a Host setting (`set-cost-model`, `florn run --cost-model`); the admission refusal `module.segment-too-long`; the kit's figures and `[admitted-2]` hashes under both versions; the fuzz target over both. The default stays version 1 until the figures of every engine are in.

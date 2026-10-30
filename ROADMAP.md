@@ -85,6 +85,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 |---|---|
 | **Scope** | Checkpoints, backward navigation, branching. Import of user modules through the UI. BGP guest. Usability test with people who did not build florn. **Metering optimisation:** florn's own metering pass, released as cost-model version 2 (see "Metering cost" below). **Actor swapping in the browser:** actors beyond the browser's instance ceiling are held as exported state and re-instantiated on activation. |
 | **Exit criteria** | A run restored from a checkpoint continues with the same digest as an uninterrupted run. A user imports a module and runs it in a topology. The cost benchmark shows at most 1.5× on the protocol-style guest and 2× on the compute-style guest under cost-model version 2, or the owner has decided again on the measured figures. Runs recorded under version 1 still replay. |
+| **Released** | 0.3.0 on 2026-10-31: every criterion has its evidence in `docs/src/releases/0.3.0.md` (the kit's checkpoint tests across the two Hosts; journey J5; the cost figures of both versions, the owner's decision of 2026-10-29 on the one engine over the compute-style target; a 0.1.0 and a 0.2.0 record replayed). The usability test of the handoff's checklist runs at the owner's pace; its findings become issues for 0.3.x or Phase 4. |
 
 ## Phase 4 — Circuit and control (0.4.0)
 

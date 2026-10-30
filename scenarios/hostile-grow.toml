@@ -19,11 +19,11 @@ root = 1
 memory = "2MiB"
 
 [modules.hostile_grow]
-sha256 = "f819f17424deef62b93d9966d2fe965ea8956de34bb31ac269b16d4097eb39c0"
+sha256 = "00cf545eaac96bdd99d837397fcad7859869442326945f0176c8d1217abb1a72"
 contract = "florn:core/guest@0.1.0"
 
 [modules.echo]
-sha256 = "a05bcdcdec10cdb1a5b5b8ad924a1208586c99ff1051a13446c0a1a75bb19347"
+sha256 = "2b84df48e59b970fa545aff5869ec32bef097d9ae105ab0f92d58b35890ad6e4"
 contract = "florn:core/guest@0.1.0"
 
 [[actors]]

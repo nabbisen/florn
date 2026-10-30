@@ -6,7 +6,7 @@ The headless runner `florn` runs a scenario, writes a run record, replays one, a
 
 ```sh
 cargo install florn                                                          # from crates.io
-cargo install --git https://github.com/nabbisen/florn --tag 0.2.0 florn      # pinned to the tag
+cargo install --git https://github.com/nabbisen/florn --tag 0.3.0 florn      # pinned to the tag
 cargo install --path crates/florn                                            # from a checkout
 ```
 

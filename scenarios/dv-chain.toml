@@ -19,7 +19,7 @@ root = 1
 memory = "2MiB"
 
 [modules.distance_vector]
-sha256 = "0eaeb731163ce15211dba48880ef307b42437866ea41438ea75f6053a57349cb"
+sha256 = "0e8b3dc298099c4595d62f9c36cb5b2a3c503a163330a9f2894938686b01edf0"
 contract = "florn:network/router@0.1.0"
 
 [[actors]]
