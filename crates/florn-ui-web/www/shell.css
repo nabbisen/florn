@@ -60,3 +60,8 @@ dd { margin: 0; white-space: pre-wrap; word-break: break-all; font-family: ui-mo
 .draft-actor, .draft-connection { border-top: 1px solid var(--line); padding: 4px 0; }
 @media (max-width: 900px) { body { height: auto; overflow: auto; } main.layout { grid-template-columns: 1fr; grid-template-rows: auto; } .column { border: none; } canvas#topology { min-height: 240px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Files kept in this browser, the checkpoints and the hashes (RFC 009 section 6 and 7). */
+.hash { word-break: break-all; font-size: 0.85em; opacity: 0.85; }
+.files li, .checkpoints li { display: flex; gap: 0.4rem; align-items: baseline; flex-wrap: wrap; }
+.undone li { display: flex; gap: 0.4rem; align-items: baseline; flex-wrap: wrap; }

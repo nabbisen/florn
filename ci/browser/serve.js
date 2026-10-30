@@ -14,6 +14,9 @@ const TYPES = {
   ".wasm": "application/wasm",
   ".toml": "text/plain; charset=utf-8",
   ".json": "application/json",
+  ".webmanifest": "application/manifest+json",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
 };
 
 export const POLICY = {

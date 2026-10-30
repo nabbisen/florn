@@ -901,3 +901,86 @@ fn a_run_asked_to_swap_says_so_and_gives_the_resident_digest() {
         (plain.chain, plain.records)
     );
 }
+
+/// NFR-004 (RFC 009 rule 21): a paced slice that overruns its share of the second says what
+/// limited it, from the Host's own figures, once a second; a swapping run whose swaps keep up
+/// with its activations names swapping.
+#[test]
+fn a_slow_slice_names_its_limiting_factor() {
+    let platform = FixedPlatform {
+        // Every reading of the clock adds 20 ms: each slice takes longer than a sixtieth.
+        slice_us: 20_000,
+        ..FixedPlatform::default()
+    };
+    let mut c = Controller::new(
+        engine(),
+        Admission::default(),
+        Box::new(platform),
+        Domains::core(),
+        Options::default(),
+    );
+    let s = spec();
+    command(
+        &mut c,
+        Command::LoadScenario {
+            bytes: s.text().into_bytes(),
+        },
+    );
+    for m in s.modules().values() {
+        command(&mut c, Command::LoadModule { bytes: m.clone() });
+    }
+    let limited = |c: &mut C, residency: florn_control::Residency| {
+        command(
+            c,
+            Command::NewRun {
+                seed: SeedChoice::Given(1),
+                residency,
+            },
+        );
+        command(
+            c,
+            Command::SetPacing {
+                pacing: Pacing::TicksPerSecond(600),
+            },
+        );
+        command(
+            c,
+            Command::Advance {
+                unit: Unit::ToTick(2_000),
+            },
+        );
+        let mut said = Vec::new();
+        for _ in 0..200 {
+            for m in c.pump(10) {
+                if let Message::Notification(n) = m
+                    && n.code == "host.limited-by"
+                {
+                    n.check().unwrap();
+                    said.push(n.params[0].1.clone());
+                }
+            }
+            if c.state() != RunState::Running {
+                break;
+            }
+        }
+        command(c, Command::EndRun);
+        said
+    };
+    let resident = limited(&mut c, florn_control::Residency::Resident);
+    assert!(!resident.is_empty(), "said");
+    assert!(
+        resident.iter().all(|v| *v == Value::Enum("actors".into())),
+        "{resident:?}"
+    );
+    // Two hundred slices, the clock read three times per slice at 20 ms each: once a second,
+    // not once per slice.
+    assert!(resident.len() < 30, "{}", resident.len());
+    c.set_resident_limit(Some(1));
+    let swapping = limited(&mut c, florn_control::Residency::Swap);
+    assert!(
+        swapping
+            .iter()
+            .any(|v| *v == Value::Enum("swapping".into())),
+        "{swapping:?}"
+    );
+}

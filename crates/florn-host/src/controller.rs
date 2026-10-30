@@ -69,6 +69,8 @@ pub struct Controller<E: Engine> {
     /// The record of the run the current one branched from (RFC 009 rule 11), until the next
     /// run starts.
     parent_record: Option<Contents>,
+    /// When `host.limited-by` was last said (the platform's monotonic microseconds), and what.
+    limited: Option<(u64, &'static str)>,
 }
 
 impl<E: Engine> Controller<E> {
@@ -100,6 +102,7 @@ impl<E: Engine> Controller<E> {
             dropped_seen: 0,
             transport: None,
             parent_record: None,
+            limited: None,
         }
     }
 
@@ -275,17 +278,54 @@ impl<E: Engine> Controller<E> {
             // where no event lies (the kernel's clock stays at the last event handled).
             let now = run.reached().max(run.kernel().now().tick);
             let to = now.saturating_add(max_ticks.max(1)).min(target);
+            let t0 = self.platform.monotonic_us();
+            let (handled0, swaps0, dropped0) =
+                (run.kernel().handled(), run.swaps(), run.telemetry_dropped());
             run.advance(Advance::ToTick(to));
+            let elapsed = self.platform.monotonic_us().saturating_sub(t0);
             // The unit is complete when every event before the target is handled.
             if to >= target || !run.kernel().has_next() {
                 self.state = RunState::Paused;
                 self.target = None;
+            }
+            // NFR-004 (RFC 009 rule 21): a slice that took longer than its share of the
+            // second names what limited it, from the Host's own figures, at most once a second.
+            if elapsed > Self::SLICE_BUDGET_US {
+                let handled = run.kernel().handled().saturating_sub(handled0);
+                let swaps = run.swaps().saturating_sub(swaps0);
+                let dropped = run.telemetry_dropped().saturating_sub(dropped0);
+                let memory = run.memory_counted();
+                let capacity = run.capacity().memory_bytes;
+                let what = if swaps > 0 && swaps.saturating_mul(2) >= handled {
+                    "swapping"
+                } else if memory.saturating_mul(10) >= capacity.saturating_mul(9) {
+                    "memory"
+                } else if dropped > 0 {
+                    "display"
+                } else {
+                    "actors"
+                };
+                let now_us = self.platform.monotonic_us();
+                let say = match self.limited {
+                    Some((at, last)) => last != what || now_us.saturating_sub(at) >= 1_000_000,
+                    None => true,
+                };
+                if say {
+                    self.limited = Some((now_us, what));
+                    out.push(Message::Notification(
+                        Code::HostLimitedBy
+                            .notification(Scope::run(), vec![Value::Enum(what.into())]),
+                    ));
+                }
             }
         }
         let events = self.subs.events;
         self.after_advance(&mut out, events);
         out
     }
+
+    /// A paced slice's share of the second: the worker's clock ticks sixty times a second.
+    const SLICE_BUDGET_US: u64 = 1_000_000 / 60;
 
     /// The display transport this Host's front end reads from (RFC 005 rule 14); each run's
     /// log then opens with `telemetry.transport`.
@@ -437,7 +477,12 @@ impl<E: Engine> Controller<E> {
                 out.push(Message::Answer(Answer::Done));
             }
             Command::Advance { unit } => {
-                if self.state != RunState::Paused {
+                // Backward (RFC 009 rule 7) from a run that ended too: the person goes back
+                // from the end as from a pause; forward from the end is nothing.
+                let backward = matches!(unit, Unit::ToTick(t)
+                    if self.run.as_ref().is_some_and(|r| t < r.kernel().now().tick));
+                if !(self.state == RunState::Paused || (self.state == RunState::Ended && backward))
+                {
                     return self.notify(out, self.not_now(name));
                 }
                 let Some(run) = &mut self.run else {
@@ -475,6 +520,8 @@ impl<E: Engine> Controller<E> {
                             ),
                         );
                     }
+                    // Back from the end as from a pause: the run goes on from here.
+                    self.state = RunState::Paused;
                     if paced && run.kernel().now().tick < t {
                         self.target = Some(t);
                         self.state = RunState::Running;
@@ -977,16 +1024,15 @@ impl<E: Engine> Controller<E> {
         }
         let file_kind = kind.file_kind();
         let built: Built = match kind {
-            ExportKind::RunRecord { trace, payloads } => match &self.run {
+            ExportKind::RunRecord { trace, payloads } => match &mut self.run {
                 None => return self.notify(out, self.not_now("export")),
                 Some(run) => {
+                    // The whole trace, assembled by replay where the Host kept only the records
+                    // since the last checkpoint (DATA-008).
+                    let records = if trace { run.full_trace() } else { None };
                     let contents = Contents {
                         run: Some(run.run_toml()),
-                        trace: if trace {
-                            run.records().map(|r| r.to_vec())
-                        } else {
-                            None
-                        },
+                        trace: records,
                         payloads: if payloads {
                             Some(run.payloads().clone())
                         } else {

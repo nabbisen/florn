@@ -309,6 +309,14 @@ pub const TABLE: &[(&str, &str)] = &[
         "The run went back to tick {to}; {undone} interventions after it were undone.",
     ),
     (
+        "storage.evicted",
+        "The browser let the {kind} {name} go from its storage; the file is the durable form.",
+    ),
+    (
+        "module.component",
+        "{module} is a WebAssembly Component, which florn does not run; {reason}.",
+    ),
+    (
         "run.branched",
         "A branch from tick {instant} of run {parent}; the parent's record is kept.",
     ),

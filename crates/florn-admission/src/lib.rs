@@ -178,6 +178,16 @@ impl Admission {
         if let Some(a) = self.cache.get(&key) {
             return Ok(a.clone());
         }
+        // A WebAssembly Component (the layer field of its header) is refused with the way to a
+        // core module (RFC 009 rule 18): no decoder of the component layer is in the Host.
+        if source.len() >= 8 && source[..4] == *b"\0asm" && source[6..8] == [0x01, 0x00] {
+            let mut errors = Errors::default();
+            errors.push(Error::new(Kind::Component {
+                module: name.to_string(),
+                reason: "the binary's layer field says component; build a core module (a wasm32-unknown-unknown target, no component adapter)".to_string(),
+            }));
+            return Err(errors);
+        }
         // Stage 1 needs the world for its import and export rows, and the world is named by the
         // sections stage 2 reads; so the sections are read first, but stage 1's refusals come first.
         let custom = validate::custom_sections(source)?;

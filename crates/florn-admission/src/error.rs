@@ -29,6 +29,8 @@ pub enum Kind {
     ExportMissing { name: String },
     /// `module.export-reserved`: an export under `florn.` (RFC 003 rule 8).
     ExportReserved { name: String },
+    /// `module.component`: a WebAssembly Component, not a core module (RFC 009 rule 18).
+    Component { module: String, reason: String },
     /// `module.export-unsupported`: a function of the world whose flat shape no Host can call or
     /// bind (RFC 008 rule 6).
     ExportUnsupported { name: String },
@@ -128,6 +130,7 @@ impl Error {
             ImportRefused { .. } => "module.import-refused",
             ExportMissing { .. } => "module.export-missing",
             ExportReserved { .. } => "module.export-reserved",
+            Component { .. } => "module.component",
             ExportUnsupported { .. } => "module.export-unsupported",
             InitialMemoryAboveLimit { .. } => "module.initial-memory-above-limit",
             ManifestMissing { .. } => "module.manifest-missing",
@@ -184,6 +187,10 @@ impl Error {
             ExportMissing { name } | ExportReserved { name } | ExportUnsupported { name } => {
                 vec![("name", Name(name.clone()))]
             }
+            Component { module, reason } => vec![
+                ("module", Name(module.clone())),
+                ("reason", Text(reason.clone())),
+            ],
             InitialMemoryAboveLimit { pages, limit } => {
                 vec![("pages", Count(*pages)), ("limit", Count(*limit))]
             }

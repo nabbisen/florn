@@ -262,6 +262,31 @@ impl Kernel {
     pub fn applied_interventions(&self) -> &[AppliedIntervention] {
         &self.applied_interventions
     }
+    /// Interventions scheduled for an instant after `instant` leave the queue and the applied
+    /// list (RFC 001 rule 35: an input belongs to its instant; RFC 009 rule 8: a move back to
+    /// `instant` undoes what lies after it). Those undone are returned.
+    pub fn unschedule_interventions_after(&mut self, instant: Instant) -> Vec<AppliedIntervention> {
+        let events: Vec<Event> = std::mem::take(&mut self.queue)
+            .into_iter()
+            .map(|Reverse(e)| e)
+            .collect();
+        for e in events {
+            let scheduled = e.key.origin == ORIGIN_INTERVENTIONS
+                && e.key.class == CLASS_CONTROL
+                && e.key.instant() > instant;
+            if !scheduled {
+                self.queue.push(Reverse(e));
+            }
+        }
+        let (keep, gone): (Vec<_>, Vec<_>) = std::mem::take(&mut self.applied_interventions)
+            .into_iter()
+            .partition(|i| i.instant <= instant);
+        self.applied_interventions = keep;
+        // The sequence numbers they took are free again: the next intervention's key is the one
+        // a replay of the inputs gives it (RFC 001 rule 40).
+        self.intervention_seq = self.intervention_seq.saturating_sub(gone.len() as u64);
+        gone
+    }
     /// The replayed interventions not yet applied (rule 36), in order.
     pub fn replay_pending(&self) -> &[AppliedIntervention] {
         &self.replay

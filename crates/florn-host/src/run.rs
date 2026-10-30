@@ -142,6 +142,9 @@ pub struct Options {
     /// The cost-model version new runs admit under (RFC 003 rule 15; RFC 010 rule 9): a replay
     /// or a restored checkpoint uses its record's version instead.
     pub cost_model: u32,
+    /// Keep the trace records since the last checkpoint only (DATA-008; the browser): an earlier
+    /// window is produced by replay (RFC 009 rule 9), and an export's trace is assembled.
+    pub records_since_checkpoint: bool,
     /// Swapping asked for, or every actor resident (RFC 009 rule 14; `resident` by default).
     pub residency: Residency,
     /// A cap on the resident set when swapping (the conformance kit's pools of one and two);
@@ -164,6 +167,7 @@ impl Default for Options {
             checkpoint_interval: Self::DEFAULT_CHECKPOINT_INTERVAL,
             checkpoint_memory: 256 * 1024 * 1024,
             cost_model: COST_MODEL_VERSION,
+            records_since_checkpoint: false,
             residency: Residency::Resident,
             resident_limit: None,
         }
@@ -185,6 +189,7 @@ impl Options {
             host: HostMaxima::browser(),
             host_build: "browser".into(),
             checkpoint_memory: 64 * 1024 * 1024,
+            records_since_checkpoint: true,
             ..Self::default()
         }
     }
@@ -2131,6 +2136,11 @@ impl<E: Engine> Run<E> {
                 self.checkpoint_requested = false;
                 self.last_checkpoint_handled = self.kernel.handled();
                 self.keep(c);
+                // The records before this checkpoint leave (DATA-008): a window of them is
+                // produced by replay from it or an earlier one.
+                if self.options.records_since_checkpoint {
+                    self.kernel.trace.set_kept(Vec::new());
+                }
                 true
             }
             Err(e) => {
@@ -2382,11 +2392,18 @@ impl<E: Engine> Run<E> {
             .unwrap_or_default();
         let replay_pending = self.kernel.replay_pending().to_vec();
         let watched = self.kernel.trace.watched().to_vec();
+        // The kept records before the checkpoint's instant stay; the kept list may begin after
+        // the start (DATA-008: the records since the last checkpoint), so its offset counts.
+        let total_before = self.kernel.trace.records();
         let kept_records = self
             .kernel
             .trace
             .kept_records()
-            .map(|r| r.to_vec())
+            .map(|r| {
+                let first = total_before.saturating_sub(r.len() as u64);
+                let keep = checkpoint.kernel.trace.records.saturating_sub(first) as usize;
+                r[..keep.min(r.len())].to_vec()
+            })
             .unwrap_or_default();
         let mut config = self.kernel.config().clone();
         // Detail by replay records from the restore on, the start's `init` included.
@@ -2413,7 +2430,16 @@ impl<E: Engine> Run<E> {
             let mut again = undone;
             again.extend(replay_pending);
             self.kernel.set_replay(again);
-        } else if !undone.is_empty() {
+        } else {
+            // An intervention the checkpoint holds as scheduled for an instant after its own
+            // (requested before, applied after) is undone with the rest (rule 8).
+            let mut undone = undone;
+            undone.extend(
+                self.kernel
+                    .unschedule_interventions_after(checkpoint.kernel.now),
+            );
+            // Said at every move back (rule 8: how many were undone, none included), so that a
+            // front end knows the run went back rather than began again.
             let n = Notification::new("run.rewound", Severity::Info, Scope::run(), Ends::Nothing)
                 .with("to", Value::Tick(checkpoint.kernel.now.tick))
                 .with("undone", Value::Count(undone.len() as u64))
@@ -2784,9 +2810,45 @@ impl<E: Engine> Run<E> {
         Ok(parent_record)
     }
 
-    /// The kept trace records, when `keep_records` is on.
+    /// The kept trace records, when `keep_records` is on: from the start, or from the last
+    /// checkpoint when the Host keeps the records since it only.
     pub fn records(&self) -> Option<&[florn_kernel::Record]> {
         self.kernel.trace.kept_records()
+    }
+
+    /// Every record of the run so far, for an export (RFC 005 rule 29): the kept ones when they
+    /// are the whole trace, else assembled window by window, by replay where needed (rule 9).
+    /// `None` when the run keeps no records.
+    pub fn full_trace(&mut self) -> Option<Vec<florn_kernel::Record>> {
+        let total = self.kernel.trace.records();
+        let kept = self.kernel.trace.kept_records()?;
+        if kept.len() as u64 == total {
+            return Some(kept.to_vec());
+        }
+        let mut out = Vec::with_capacity(total as usize);
+        let mut from = 0u64;
+        while from < total {
+            let count = (total - from).min(10_000) as u32;
+            let window = self.trace_window(from, count);
+            if window.is_empty() {
+                break;
+            }
+            from += window.len() as u64;
+            out.extend(window);
+        }
+        Some(out)
+    }
+
+    /// The memory the Host counts for this run (RFC 005 rule 18): the resident instances'
+    /// limits and the kept checkpoints.
+    pub fn memory_counted(&self) -> u64 {
+        let instances: u64 = self
+            .actors
+            .values()
+            .filter(|s| s.instance.is_some())
+            .map(|s| s.limits.memory_bytes)
+            .sum();
+        instances.saturating_add(self.kept.iter().map(|k| k.bytes).sum())
     }
 
     /// The per-actor chain from kept records (RFC 005 rule 24).

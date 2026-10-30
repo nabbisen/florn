@@ -26,8 +26,9 @@ use florn_control::message::{
     ScenarioSummary, SupportInfo, TelemetryRecord,
 };
 use florn_control::{
-    Answer, At, Command, ExportKind, FieldValue, FileKind, Message, Notification, Pacing, Progress,
-    Query, RunState, SeedChoice, Subscription, Unit, Value, intervention_content,
+    Answer, At, Command, Ends, ExportKind, FieldValue, FileKind, Message, Notification, Pacing,
+    Progress, Query, Residency, RunState, Scope, SeedChoice, Severity, Subscription, Unit, Value,
+    intervention_content,
 };
 
 pub use draft::Draft;
@@ -64,6 +65,8 @@ pub struct RunView {
     pub ended: Option<String>,
     pub reproducible: bool,
     pub run_id: Option<String>,
+    /// A branch's parent (RFC 009 rule 12): the instant branched at and the parent's run id.
+    pub parent: Option<(u64, String)>,
 }
 
 impl Default for RunView {
@@ -79,6 +82,7 @@ impl Default for RunView {
             ended: None,
             reproducible: true,
             run_id: None,
+            parent: None,
         }
     }
 }
@@ -94,6 +98,38 @@ pub struct Status {
     pub limited_by: Option<String>,
     /// The replay's outcome code, when a replay ran.
     pub replay: Option<String>,
+    /// The resident count and the actor count of a swapping run (RFC 009 rule 14).
+    pub swapping: Option<(u64, u64)>,
+}
+
+/// A backward move waiting for the person's word (RFC 009 rule 19): the tick, and the
+/// interventions applied after it that the move would undo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GoBack {
+    pub tick: u64,
+    pub undone: Vec<InterventionView>,
+}
+
+/// A file in origin storage (RFC 009 rule 16), as the loader lists it: a cache of what the
+/// person opened, saved or imported, each by its hash with the name they gave.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredFile {
+    /// `enum(file-kind)`.
+    pub kind: String,
+    pub name: String,
+    /// The file's hash, hex: the key.
+    pub key: String,
+    pub bytes: u64,
+}
+
+/// A file the Host built: for the person's disk, or kept in origin storage only (a branch's
+/// parent record, RFC 009 rule 11).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Exported {
+    pub kind: FileKind,
+    pub name: String,
+    pub bytes: Vec<u8>,
+    pub keep_only: bool,
 }
 
 /// An intervention of this run (§3.5): asked, then applied at an instant the Host reports.
@@ -137,7 +173,20 @@ pub struct ViewModel {
     /// The run's kept checkpoints (RFC 009 rule 3), as the Host last listed them.
     pub checkpoints: Vec<CheckpointSummary>,
     /// The last confirmed export: the file to hand to the person, taken by the shell.
-    pub exported: Option<(FileKind, String, Vec<u8>)>,
+    pub exported: Option<Exported>,
+    /// The export being previewed, for the confirmation to name the same kind.
+    pub pending_export: Option<ExportKind>,
+    /// Interventions undone by a move backward (RFC 009 rule 8), to re-apply or discard.
+    pub undone: Vec<InterventionView>,
+    /// A backward move that would undo interventions, waiting for the person's word (rule 19).
+    pub go_back: Option<GoBack>,
+    /// Where new runs' actors live (RFC 009 rule 14): the person's choice.
+    pub residency: Residency,
+    /// Origin storage's files (rule 16), as the loader lists them, and its size.
+    pub files: Vec<StoredFile>,
+    pub storage_bytes: u64,
+    /// The admitted hash of each module admitted from a file, by its source hash (rule 17).
+    pub admitted_hashes: BTreeMap<String, String>,
     /// The latest report on each actor's channels: (at, payload).
     reports: BTreeMap<u32, BTreeMap<u32, (At, Vec<u8>)>>,
     /// The world's events so far: (at, target, event, detail).
@@ -152,6 +201,10 @@ pub struct ViewModel {
     loading_draft: bool,
     /// Trace records of the run the Host holds, from the last progress or state.
     records_available: u64,
+    /// A branch started: the next run identity is this run gone on, not a new run.
+    branching: Option<String>,
+    /// The instant a move backward reached, said by `run.rewound`, until the state follows.
+    rewound_to: Option<u64>,
 }
 
 impl ViewModel {
@@ -224,11 +277,114 @@ impl ViewModel {
         self.command(Command::Admit { bytes });
     }
     pub fn new_run(&mut self, seed: Option<u64>) {
+        // Said by the new run's first entries, which arrive before its state does.
+        self.status.swapping = None;
         self.command(Command::NewRun {
             seed: seed.map_or(SeedChoice::Choose, SeedChoice::Given),
-            residency: florn_control::Residency::Resident,
+            residency: self.residency,
         });
         self.query(Query::RunState);
+        self.query(Query::Checkpoints);
+    }
+    /// Where the next runs' actors live (RFC 009 rule 14): asked for, never silent.
+    pub fn set_residency(&mut self, residency: Residency) {
+        self.residency = residency;
+    }
+    /// A run from a checkpoint file (RFC 009 rule 6).
+    pub fn load_checkpoint(&mut self, bytes: Vec<u8>) {
+        self.status.swapping = None;
+        self.command(Command::LoadCheckpoint { bytes });
+        self.query(Query::RunState);
+        self.query(Query::Checkpoints);
+    }
+    /// "Go to…" (RFC 009 rule 19): forward, run to there; backward, say what would be undone
+    /// first when interventions after the tick exist (`go_back`), else move at once. Returns
+    /// whether the move was sent.
+    pub fn goto(&mut self, tick: u64) -> bool {
+        let now = self.run.now.map_or(0, |a| a.tick);
+        if tick < now {
+            let undone: Vec<InterventionView> = self
+                .interventions
+                .iter()
+                .filter(|i| i.applied_at.is_some_and(|a| a.tick > tick))
+                .cloned()
+                .collect();
+            if !undone.is_empty() {
+                self.go_back = Some(GoBack { tick, undone });
+                return false;
+            }
+        }
+        self.step(Unit::ToTick(tick));
+        true
+    }
+    /// The person's word on a backward move: it happens.
+    pub fn confirm_go_back(&mut self) {
+        if let Some(g) = self.go_back.take() {
+            self.step(Unit::ToTick(g.tick));
+        }
+    }
+    pub fn cancel_go_back(&mut self) {
+        self.go_back = None;
+    }
+    /// An undone intervention asked for again at its instant (rule 8): a new request.
+    pub fn reapply(&mut self, index: usize) {
+        if index >= self.undone.len() {
+            return;
+        }
+        let u = self.undone.remove(index);
+        let fields: Vec<(String, FieldValue)> = u
+            .content
+            .iter()
+            .map(|(k, v)| {
+                let value = match v.as_str() {
+                    "true" => FieldValue::Boolean(true),
+                    "false" => FieldValue::Boolean(false),
+                    s => s
+                        .parse::<i64>()
+                        .map_or_else(|_| FieldValue::Text(s.to_string()), FieldValue::Integer),
+                };
+                (k.clone(), value)
+            })
+            .collect();
+        let at = u.applied_at.map(|a| a.tick).or(u.requested_at);
+        self.intervene(u.target, &u.kind, fields, at);
+    }
+    pub fn discard_undone(&mut self, index: usize) {
+        if index < self.undone.len() {
+            self.undone.remove(index);
+        }
+    }
+    /// "Take a checkpoint now" (RFC 009 rule 19).
+    pub fn take_checkpoint(&mut self) {
+        self.command(Command::Checkpoint);
+        self.query(Query::Checkpoints);
+    }
+    /// "Branch from here" (rules 10 to 12): the parent's record is kept in origin storage.
+    pub fn branch(&mut self) {
+        self.command(Command::Branch);
+        self.query(Query::RunState);
+        self.query(Query::Checkpoints);
+    }
+    /// The files of origin storage, as the loader lists them (rule 16), and the cache's size.
+    pub fn set_files(&mut self, files: Vec<StoredFile>, bytes: u64) {
+        self.files = files;
+        self.storage_bytes = bytes;
+    }
+    /// An eviction the browser made (rule 16): a plain fact, shown as a notice.
+    pub fn evicted(&mut self, kind: &str, name: &str) {
+        let n = Notification::new(
+            "storage.evicted",
+            Severity::Warning,
+            Scope::file(name),
+            Ends::Nothing,
+        )
+        .with("kind", Value::Enum(kind.into()))
+        .with("name", Value::Text(name.into()));
+        self.notices.push(Notice { notification: n });
+    }
+    /// The admitted hash of a module admitted from a file (rule 17), by its source hash.
+    pub fn admitted_hash_of(&self, source_sha256: &str) -> Option<&str> {
+        self.admitted_hashes.get(source_sha256).map(String::as_str)
     }
     /// Run at the chosen speed until paused or until `end`.
     pub fn run(&mut self) {
@@ -259,15 +415,13 @@ impl ViewModel {
         let seed = self.run.seed;
         self.new_run(seed);
     }
-    /// Advance so that the events of the selected timeline entry's instant are handled.
+    /// Advance so that the events of the selected timeline entry's instant are handled;
+    /// backward (RFC 009 rule 19), as "Go to…" does, with the same word asked first.
     pub fn step_to(&mut self, entry: usize) {
         if let Some(e) = self.timeline.entries.get(entry) {
             let tick = e.at.tick.saturating_add(1);
             self.timeline.selected = Some(entry);
-            self.command(Command::Advance {
-                unit: Unit::ToTick(tick),
-            });
-            self.query(Query::RunState);
+            self.goto(tick);
         }
     }
     /// An intervention of a domain's kind on a target (§3.5): the control that causes it says
@@ -325,16 +479,24 @@ impl ViewModel {
     }
     /// Preview an export (§3.9: explicit and previewed), then write it with `confirm_export`.
     pub fn preview_export(&mut self, kind: ExportKind) {
+        self.pending_export = Some(kind);
         self.command(Command::Export {
             kind,
             confirmed: false,
         });
     }
     pub fn confirm_export(&mut self, kind: ExportKind) {
+        self.pending_export = Some(kind);
         self.command(Command::Export {
             kind,
             confirmed: true,
         });
+    }
+    /// The previewed export, written.
+    pub fn confirm_pending_export(&mut self) {
+        if let Some(kind) = self.pending_export {
+            self.confirm_export(kind);
+        }
     }
     /// Replay a run record (§3.10): the interface says the recorded interventions apply. A run
     /// in progress ends first; its interventions are kept (§3.3).
@@ -342,15 +504,17 @@ impl ViewModel {
         if matches!(self.run.state, RunState::Running | RunState::Paused) {
             self.command(Command::EndRun);
         }
+        self.status.swapping = None;
         self.command(Command::Replay { record });
         self.query(Query::RunState);
     }
-    /// The exported file, once; the shell writes it out.
-    pub fn take_exported(&mut self) -> Option<(FileKind, String, Vec<u8>)> {
+    /// The exported file, once; the shell writes it out, or keeps it in origin storage only.
+    pub fn take_exported(&mut self) -> Option<Exported> {
         self.exported.take()
     }
     pub fn dismiss_preview(&mut self) {
         self.preview = None;
+        self.pending_export = None;
     }
     pub fn dismiss(&mut self, notice: usize) {
         if notice < self.notices.len() {
@@ -608,8 +772,10 @@ impl ViewModel {
             }
             Answer::Admitted {
                 module,
-                admitted_sha256: _,
+                admitted_sha256,
             } => {
+                self.admitted_hashes
+                    .insert(module.source_sha256.clone(), admitted_sha256.clone());
                 self.admitted
                     .retain(|m| m.source_sha256 != module.source_sha256);
                 self.admitted.push(module.clone());
@@ -623,7 +789,14 @@ impl ViewModel {
             Answer::Preview(p) => self.preview = Some(p.clone()),
             Answer::Exported { kind, name, bytes } => {
                 self.preview = None;
-                self.exported = Some((*kind, name.clone(), bytes.clone()));
+                let keep_only = self.pending_export == Some(ExportKind::ParentRecord);
+                self.pending_export = None;
+                self.exported = Some(Exported {
+                    kind: *kind,
+                    name: name.clone(),
+                    bytes: bytes.clone(),
+                    keep_only,
+                });
             }
             Answer::Done => {}
             Answer::Checkpoints(list) => self.checkpoints = list.clone(),
@@ -631,13 +804,19 @@ impl ViewModel {
     }
 
     fn run_state(&mut self, r: &RunStateInfo) {
-        // A new run: another identity, or the counts started again (a replay keeps the
+        let same_id = r.run_id == self.run.run_id;
+        // A branch (RFC 009 rule 10): this run gone on under another identity, its lists kept
+        // and the parent named. A move backward (rule 7): the same run with fewer records.
+        // Else another identity or counts started again is a new run (a replay keeps the
         // recorded run's identity).
-        let new_run = r.run_id.is_some()
-            && (r.run_id != self.run.run_id
-                || r.records < self.run.records
-                || r.handled < self.run.handled);
-        if new_run {
+        let parent = self.run.parent.clone();
+        if r.run_id.is_some() && !same_id && self.branching.is_some() {
+            self.branching = None;
+        } else if r.run_id.is_some() && same_id && self.rewound_to.is_some() {
+            self.rewind(r.records);
+        } else if r.run_id.is_some()
+            && (!same_id || r.records < self.run.records || r.handled < self.run.handled)
+        {
             self.forget_run();
         }
         self.run = RunView {
@@ -651,9 +830,50 @@ impl ViewModel {
             ended: r.ended.clone(),
             reproducible: r.reproducible,
             run_id: r.run_id.clone(),
+            parent: if self.run.run_id.is_none() || r.run_id == self.run.run_id {
+                parent
+            } else {
+                self.run.parent.clone()
+            },
         };
         self.records_available = r.records;
         self.fetch_trace();
+    }
+
+    /// The run moved backward (RFC 009 rule 7): what the trace held after the instant is gone
+    /// from the views; the world is shown as it stood there.
+    fn rewind(&mut self, records: u64) {
+        let to = self.rewound_to.take().unwrap_or(0);
+        self.timeline.entries.retain(|e| {
+            e.record.is_none_or(|r| r < records) && (e.record.is_some() || e.at.tick <= to)
+        });
+        self.timeline.selected = None;
+        self.events.retain(|(at, ..)| at.tick <= to);
+        self.topology.reset_run();
+        let events = self.events.clone();
+        for (_, target, event, detail) in &events {
+            match event.as_str() {
+                "link-changed" => self.topology.link_changed(*target, detail),
+                "node-changed" => self.topology.node_changed(*target, detail),
+                _ => {}
+            }
+        }
+        let faulted: Vec<u32> = self
+            .timeline
+            .entries
+            .iter()
+            .filter(|e| e.kind == timeline::Kind::Fault)
+            .map(|e| e.target)
+            .collect();
+        for a in faulted {
+            self.topology.faulted(a);
+        }
+        self.reports.clear();
+        self.trace_seen = records;
+        self.window_pending = false;
+        self.records_available = records;
+        self.refresh_selected();
+        self.query(Query::Checkpoints);
     }
 
     /// A new run: what the previous one told is forgotten; the scenario and the draft stay.
@@ -671,6 +891,10 @@ impl ViewModel {
         self.status.dropped = 0;
         self.status.replay = None;
         self.status.limited_by = None;
+        self.undone.clear();
+        self.go_back = None;
+        self.run.parent = None;
+        self.checkpoints.clear();
     }
 
     fn fetch_trace(&mut self) {
@@ -687,7 +911,11 @@ impl ViewModel {
 
     fn progress(&mut self, p: &Progress) {
         if p.records < self.run.records || p.handled < self.run.handled {
-            self.forget_run();
+            if self.rewound_to.is_some() {
+                self.rewind(p.records);
+            } else {
+                self.forget_run();
+            }
         }
         // The run ended under pacing: its digest and end are in the state answer.
         if p.state == RunState::Ended && self.run.state != RunState::Ended {
@@ -746,6 +974,39 @@ impl ViewModel {
                     self.status.limited_by = Some(w.clone());
                 }
                 return;
+            }
+            "host.swapping" => {
+                if let (Some(Value::Count(r)), Some(Value::Count(a))) =
+                    (get("resident"), get("actors"))
+                {
+                    self.status.swapping = Some((*r, *a));
+                }
+            }
+            "checkpoint.taken" | "checkpoint.budget" => {
+                self.query(Query::Checkpoints);
+            }
+            "run.rewound" => {
+                // The interventions after the instant are undone (rule 8): listed to re-apply
+                // or discard; the state that follows truncates the views.
+                if let Some(Value::Tick(to)) = get("to") {
+                    let to = *to;
+                    self.rewound_to = Some(to);
+                    let (kept, undone): (Vec<_>, Vec<_>) = std::mem::take(&mut self.interventions)
+                        .into_iter()
+                        .partition(|i| i.applied_at.is_none_or(|a| a.tick <= to));
+                    self.interventions = kept;
+                    self.undone.extend(undone);
+                }
+            }
+            "run.branched" => {
+                if let (Some(Value::Tick(at)), Some(Value::Text(parent))) =
+                    (get("instant"), get("parent"))
+                {
+                    self.branching = Some(parent.clone());
+                    self.run.parent = Some((*at, parent.clone()));
+                    // The parent's record is kept in origin storage (rule 11), not written out.
+                    self.confirm_export(ExportKind::ParentRecord);
+                }
             }
             "domain.event" => {
                 let target = match get("target") {

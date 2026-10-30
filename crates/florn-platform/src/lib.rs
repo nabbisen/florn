@@ -38,6 +38,10 @@ pub struct FixedPlatform {
     pub capacity: Capacity,
     pub seeds: Vec<u64>,
     pub clock_ms: u64,
+    /// What every reading of the monotonic clock adds, in microseconds: a test's slow Host.
+    pub slice_us: u64,
+    /// The monotonic clock's reading so far.
+    pub clock_us: u64,
 }
 
 impl Default for FixedPlatform {
@@ -50,6 +54,8 @@ impl Default for FixedPlatform {
             },
             seeds: vec![7],
             clock_ms: 0,
+            slice_us: 0,
+            clock_us: 0,
         }
     }
 }
@@ -67,5 +73,12 @@ impl Platform for FixedPlatform {
     }
     fn wall_clock_ms(&mut self) -> u64 {
         self.clock_ms
+    }
+    fn monotonic_us(&mut self) -> u64 {
+        self.clock_us = self
+            .clock_us
+            .saturating_add(self.slice_us)
+            .max(self.clock_ms.saturating_mul(1_000));
+        self.clock_us
     }
 }

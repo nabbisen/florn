@@ -7,7 +7,9 @@ use std::rc::Rc;
 
 use florn_ui_model::fields::{Field, Problem};
 use florn_ui_model::florn_control::message::ExportPreview;
-use florn_ui_model::florn_control::{ExportKind, Notification, RunState, Unit};
+use florn_ui_model::florn_control::{
+    Ends, ExportKind, Notification, Residency, RunState, Scope, Severity, Unit, Value,
+};
 use florn_ui_model::timeline::Kind;
 use florn_ui_model::{Inspector, Point, Selection, ViewModel};
 use leptos::prelude::*;
@@ -45,6 +47,10 @@ fn roving(ev: web_sys::KeyboardEvent) {
         let _ = b.focus();
     }
 }
+
+/// A backward move waiting for the person's word: the tick and the undone, each as kind,
+/// target and content.
+type GoBackPlan = (u64, Vec<(String, String, String)>);
 
 fn tabindex(focused: RwSignal<usize>, i: usize) -> impl Fn() -> &'static str {
     move || if focused.get() == i { "0" } else { "-1" }
@@ -137,6 +143,42 @@ fn Header(shared: Shared) -> impl IntoView {
         rev.track();
         read(&|vm| vm.status.limited_by.clone().unwrap_or_default())
     };
+    let swapping = move || -> Option<(u64, u64)> {
+        rev.track();
+        sv.with_value(|s| s.read(|vm| vm.status.swapping).flatten())
+    };
+    // A backward move waiting for the person's word (RFC 009 rule 19): the tick and what it
+    // would undo, each named.
+    let go_back = move || -> Option<GoBackPlan> {
+        rev.track();
+        sv.with_value(|s| {
+            s.read(|vm| {
+                vm.go_back.as_ref().map(|g| {
+                    let name = |id: u32| {
+                        vm.topology
+                            .node(id)
+                            .map(|n| n.name.clone())
+                            .or_else(|| vm.topology.link(id).map(|l| l.name.clone()))
+                            .unwrap_or_else(|| id.to_string())
+                    };
+                    (
+                        g.tick,
+                        g.undone
+                            .iter()
+                            .map(|u| {
+                                (
+                                    u.kind.clone(),
+                                    name(u.target),
+                                    florn_ui_model::timeline::pairs(&u.content),
+                                )
+                            })
+                            .collect(),
+                    )
+                })
+            })
+            .flatten()
+        })
+    };
     let can_run = move || {
         rev.track();
         read(&|vm| vm.run.state.as_str().to_string())
@@ -184,12 +226,24 @@ fn Header(shared: Shared) -> impl IntoView {
         let Some(input) = goto_ref.get() else { return };
         if let Ok(t) = input.value().trim().parse::<u64>() {
             s.update(|vm| {
-                if matches!(vm.run.state, RunState::Ready | RunState::Ended) {
+                if vm.run.state == RunState::Ready {
                     vm.new_run(None);
                 }
-                vm.step(Unit::ToTick(t));
+                // Backward asks first when interventions would be undone (RFC 009 rule 19).
+                vm.goto(t);
             });
         }
+    };
+    let s = shared.clone();
+    let on_residency = move |ev: web_sys::Event| {
+        let v = event_target_value(&ev);
+        s.update(|vm| {
+            vm.set_residency(if v == "swap" {
+                Residency::Swap
+            } else {
+                Residency::Resident
+            })
+        });
     };
     let s = shared.clone();
     let on_speed = move |ev: web_sys::Event| {
@@ -231,6 +285,12 @@ fn Header(shared: Shared) -> impl IntoView {
                         <input type="number" id="goto-tick" node_ref=goto_ref min="0" step="1"/>
                     </label>
                     <button type="button" id="goto" on:click=on_goto disabled=move || matches!(can_run().as_str(), "no-scenario" | "invalid" | "running")>{t!(i18n, run.goto_button)}</button>
+                    <label>{t!(i18n, run.residency)}
+                        <select id="residency" on:change=on_residency>
+                            <option value="resident">{t!(i18n, run.resident)}</option>
+                            <option value="swap">{t!(i18n, run.swap)}</option>
+                        </select>
+                    </label>
                 </div>
                 <div class="lang" role="group" aria-label=move || t_string!(i18n, language)>
                     <button type="button" id="lang-en" aria-pressed=move || (i18n.get_locale() == Locale::en).to_string() on:click=move |_| i18n.set_locale(Locale::en)>{t!(i18n, lang_en)}</button>
@@ -244,6 +304,7 @@ fn Header(shared: Shared) -> impl IntoView {
                 <span id="status-transport">{move || if transport() == "messages" { t_string!(i18n, status.messages).to_string() } else { String::new() }}</span>
                 <span id="status-dropped">{move || if dropped() > 0 { catalogue::label(lang_of(i18n.get_locale()), "status.dropped", &[("count", catalogue::group(dropped()))]) } else { String::new() }}</span>
                 <span id="status-limited">{move || { let l = limited(); if l.is_empty() { String::new() } else { catalogue::label(lang_of(i18n.get_locale()), "status.limited", &[("what", catalogue::enum_text(lang_of(i18n.get_locale()), "limiting-factor", &l))]) } }}</span>
+                <span id="status-swapping">{move || swapping().map(|(r, a)| catalogue::label(lang_of(i18n.get_locale()), "status.swapping", &[("resident", catalogue::group(r)), ("actors", catalogue::group(a))])).unwrap_or_default()}</span>
                 <span id="status-frame">{move || { let (m, p) = frame.get(); catalogue::label(lang_of(i18n.get_locale()), "status.frame", &[("median", format!("{m:.1}")), ("p95", format!("{p:.1}"))]) }}</span>
                 <span id="status-offline">{move || match offline.get() {
                     1 => t_string!(i18n, offline.ready).to_string(),
@@ -252,6 +313,16 @@ fn Header(shared: Shared) -> impl IntoView {
                 }}</span>
                 <span id="status-about" class="about">{move || catalogue::label(lang_of(i18n.get_locale()), "about", &[("version", about_version.clone()), ("origin", about_origin.clone()), ("isolated", if about_isolated { t_string!(i18n, yes).to_string() } else { t_string!(i18n, no).to_string() })])}</span>
             </div>
+            {move || go_back().map(|(tick, undone)| view! {
+                <div class="preview" id="go-back" role="dialog" aria-labelledby="go-back-title">
+                    <h3 id="go-back-title">{t!(i18n, go_back.title)}</h3>
+                    <p>{catalogue::label(lang_of(i18n.get_locale()), "go_back.text", &[("tick", catalogue::group(tick)), ("count", undone.len().to_string())])}</p>
+                    <p class="help">{t!(i18n, go_back.help)}</p>
+                    <ul>{undone.into_iter().map(|(k, t, c)| view! { <li>{k}" "{t}" "{c}</li> }).collect_view()}</ul>
+                    <button type="button" id="go-back-confirm" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.confirm_go_back()))>{t!(i18n, go_back.confirm)}</button>
+                    <button type="button" id="go-back-cancel" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.cancel_go_back()))>{t!(i18n, cancel)}</button>
+                </div>
+            })}
         </header>
     }
 }
@@ -273,6 +344,34 @@ fn Labs(shared: Shared) -> impl IntoView {
     let preview = move || -> Option<ExportPreview> {
         rev.track();
         sv.with_value(|s| s.read(|vm| vm.preview.clone()).flatten())
+    };
+    // Origin storage's files (RFC 009 rule 16): kind, name, key, size.
+    let files = move || -> Vec<(String, String, String, u64)> {
+        rev.track();
+        sv.with_value(|s| {
+            s.read(|vm| {
+                vm.files
+                    .iter()
+                    .map(|f| (f.kind.clone(), f.name.clone(), f.key.clone(), f.bytes))
+                    .collect()
+            })
+            .unwrap_or_default()
+        })
+    };
+    let file_focus = RwSignal::new(0usize);
+    let storage_note = move || -> String {
+        rev.track();
+        let items = sv
+            .with_value(|s| s.read(|vm| vm.files.len() as u64))
+            .unwrap_or(0);
+        let n = Notification::new(
+            "storage.cache",
+            Severity::Info,
+            Scope::default(),
+            Ends::Nothing,
+        )
+        .with("items", Value::Count(items));
+        catalogue::render(lang_of(i18n.get_locale()), &n)
     };
     view! {
         <section class="labs" aria-labelledby="labs-title">
@@ -301,8 +400,17 @@ fn Labs(shared: Shared) -> impl IntoView {
                 <button type="button" id="import-module" on:click=move |_| sv.with_value(|s| s.pick_file("module"))>{t!(i18n, files.import_module)}</button>
                 <button type="button" id="export-record" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.preview_export(ExportKind::RunRecord { trace: true, payloads: false })))>{t!(i18n, files.export_record)}</button>
                 <button type="button" id="replay-record" on:click=move |_| sv.with_value(|s| s.pick_file("record"))>{t!(i18n, files.replay_record)}</button>
+                <button type="button" id="load-checkpoint" on:click=move |_| sv.with_value(|s| s.pick_file("checkpoint"))>{t!(i18n, files.load_checkpoint)}</button>
             </div>
             <p class="help">{t!(i18n, files.replay_note)}</p>
+            <h3 id="files-title">{t!(i18n, files.stored)}</h3>
+            <p class="help" id="storage-note">{storage_note}</p>
+            <ul class="files list" id="files" on:keydown=roving>{move || { let list = files(); if list.is_empty() { vec![view! { <li class="help">{t!(i18n, files.none_stored)}</li> }.into_any()] } else { list.into_iter().enumerate().map(|(i, (kind, name, key, bytes))| {
+                let (k1, k2, attr) = (key.clone(), key.clone(), key);
+                let text = catalogue::label(lang_of(i18n.get_locale()), "files.item", &[("kind", catalogue::enum_text(lang_of(i18n.get_locale()), "file-kind", &kind)), ("name", name), ("bytes", catalogue::value_text(lang_of(i18n.get_locale()), None, &Value::Bytes(bytes)))]);
+                // One Tab stop for the list: the focused row's buttons, arrow keys between rows.
+                view! { <li class="file" data-key=attr data-kind=kind><span>{text}</span><button type="button" class="open-stored" tabindex=tabindex(file_focus, i) on:focus=move |_| file_focus.set(i) on:click=move |_| sv.with_value(|s| s.open_stored(&k1))>{t!(i18n, files.open_stored)}</button><button type="button" class="export-stored" tabindex=tabindex(file_focus, i) on:click=move |_| sv.with_value(|s| s.export_stored(&k2))>{t!(i18n, files.export_stored)}</button></li> }.into_any()
+            }).collect::<Vec<_>>() } }}</ul>
             {move || preview().map(|p| {
                 let kind = p.kind.as_str().to_string();
                 let payloads = if p.payloads { t_string!(i18n, yes).to_string() } else { t_string!(i18n, no).to_string() };
@@ -312,7 +420,7 @@ fn Labs(shared: Shared) -> impl IntoView {
                         <h3 id="preview-title">{t!(i18n, files.preview_title)}</h3>
                         <p>{catalogue::label(lang_of(i18n.get_locale()), "files.preview", &[("kind", catalogue::enum_text(lang_of(i18n.get_locale()), "file-kind", &kind)), ("size", catalogue::group(p.bytes)), ("payloads", payloads)])}</p>
                         <ul>{modules.into_iter().map(|m| view! { <li>{m}</li> }).collect_view()}</ul>
-                        <button type="button" id="export-confirm" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.confirm_export(ExportKind::RunRecord { trace: true, payloads: false })))>{t!(i18n, files.confirm)}</button>
+                        <button type="button" id="export-confirm" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.confirm_pending_export()))>{t!(i18n, files.confirm)}</button>
                         <button type="button" id="export-cancel" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.dismiss_preview()))>{t!(i18n, cancel)}</button>
                     </div>
                 }
@@ -785,6 +893,20 @@ fn InspectorPanel(shared: Shared) -> impl IntoView {
                     ]
                 }
                 Inspector::World(w) => vec![
+                    (
+                        "parent",
+                        vm.run
+                            .parent
+                            .as_ref()
+                            .map(|(t, p)| {
+                                catalogue::label(
+                                    lang(),
+                                    "inspector.parent",
+                                    &[("parent", p.clone()), ("instant", catalogue::group(*t))],
+                                )
+                            })
+                            .unwrap_or_default(),
+                    ),
                     ("domains", w.domains.join(", ")),
                     (
                         "classes",
@@ -833,11 +955,25 @@ fn InspectorPanel(shared: Shared) -> impl IntoView {
             "protocol" => t_string!(i18n, inspector.protocol).to_string(),
             "bytes" => t_string!(i18n, inspector.bytes).to_string(),
             "decoded" => t_string!(i18n, inspector.decoded).to_string(),
+            "parent" => t_string!(i18n, inspector.parent).to_string(),
             "domains" => t_string!(i18n, inspector.domains).to_string(),
             "classes" => t_string!(i18n, inspector.classes).to_string(),
             "events" => t_string!(i18n, inspector.events).to_string(),
             _ => key.to_string(),
         }
+    };
+    let checkpoint_focus = RwSignal::new(0usize);
+    let checkpoints = move || -> Vec<(u32, u64, u64, u64)> {
+        rev.track();
+        sv.with_value(|s| {
+            s.read(|vm| {
+                vm.checkpoints
+                    .iter()
+                    .map(|c| (c.index, c.instant.tick, c.records, c.bytes))
+                    .collect()
+            })
+            .unwrap_or_default()
+        })
     };
     let title = move || match selection.get() {
         Selection::None => t_string!(i18n, inspector.none).to_string(),
@@ -908,6 +1044,17 @@ fn InspectorPanel(shared: Shared) -> impl IntoView {
                     <button type="button" id="link-down" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.set_link(id, false)))>{t!(i18n, inspector.take_link_down)}</button>
                     <button type="button" id="link-up" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.set_link(id, true)))>{t!(i18n, inspector.bring_link_up)}</button>
                 </div>
+            }.into_any(),
+            // The run's checkpoints and the controls of RFC 009 rule 19.
+            Selection::World => view! {
+                <div class="buttons">
+                    <button type="button" id="take-checkpoint" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.take_checkpoint()))>{t!(i18n, inspector.take_checkpoint)}</button>
+                    <button type="button" id="branch" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.branch()))>{t!(i18n, inspector.branch)}</button>
+                </div>
+                <h3 id="checkpoints-title">{t!(i18n, inspector.checkpoints)}</h3>
+                <ul class="checkpoints list" id="checkpoints" on:keydown=roving>{move || checkpoints().into_iter().enumerate().map(|(i, (index, tick, records, bytes))| view! {
+                    <li class="checkpoint" data-index=index.to_string()><span>{catalogue::label(lang(), "inspector.checkpoint", &[("instant", catalogue::group(tick)), ("records", catalogue::group(records)), ("bytes", catalogue::value_text(lang(), None, &Value::Bytes(bytes)))])}</span><button type="button" class="export-checkpoint" tabindex=tabindex(checkpoint_focus, i) on:focus=move |_| checkpoint_focus.set(i) on:click=move |_| sv.with_value(|s| s.update(|vm| vm.preview_export(ExportKind::Checkpoint { index })))>{t!(i18n, inspector.export_checkpoint)}</button></li>
+                }).collect_view()}</ul>
             }.into_any(),
             _ => view! { <div class="buttons"></div> }.into_any(),
         }
@@ -1068,6 +1215,7 @@ fn Interventions(shared: Shared) -> impl IntoView {
     let i18n = use_i18n();
     let rev = shared.rev;
     let sv = StoredValue::new_local(shared.clone());
+    let undone_focus = RwSignal::new(0usize);
     let items = move || {
         rev.track();
         sv.with_value(|s| {
@@ -1103,7 +1251,7 @@ fn Interventions(shared: Shared) -> impl IntoView {
                         })
                         .collect::<Vec<_>>()
                 };
-                (list(&vm.interventions), list(&vm.kept))
+                (list(&vm.interventions), list(&vm.kept), list(&vm.undone))
             })
             .unwrap_or_default()
         })
@@ -1137,6 +1285,12 @@ fn Interventions(shared: Shared) -> impl IntoView {
             <h2 id="interventions-title">{t!(i18n, interventions.title)}</h2>
             <p class="help">{t!(i18n, interventions.help)}</p>
             <ul id="interventions">{move || items().0.into_iter().map(|(kind, target, content, applied)| view! { <li class="intervention">{kind}" "{target}" "{content}" — "{applied}</li> }).collect_view()}</ul>
+            {move || { let undone = items().2; if undone.is_empty() { view! { <div></div> }.into_any() } else { view! {
+                <div>
+                    <h3 id="undone-title">{t!(i18n, interventions.undone)}</h3>
+                    <ul class="undone list" id="undone" on:keydown=roving>{undone.into_iter().enumerate().map(|(i, (kind, target, content, applied))| view! { <li>{kind}" "{target}" "{content}" — "{applied}<button type="button" class="reapply" tabindex=tabindex(undone_focus, i) on:focus=move |_| undone_focus.set(i) on:click=move |_| sv.with_value(|s| s.update(|vm| vm.reapply(i)))>{t!(i18n, interventions.reapply)}</button><button type="button" class="discard-undone" tabindex=tabindex(undone_focus, i) on:click=move |_| sv.with_value(|s| s.update(|vm| vm.discard_undone(i)))>{t!(i18n, interventions.discard)}</button></li> }).collect_view()}</ul>
+                </div>
+            }.into_any() } }}
             {move || { let kept = items().1; if kept.is_empty() { view! { <div></div> }.into_any() } else { view! {
                 <div>
                     <h3>{t!(i18n, interventions.kept)}</h3>
@@ -1172,7 +1326,12 @@ fn Authoring(shared: Shared) -> impl IntoView {
                                     .map(|(_, ty, min, _)| (ty.clone(), (*min).max(1) as u32))
                             })
                             .unwrap_or_default();
-                        (m.name.clone(), ports)
+                        (
+                            m.name.clone(),
+                            ports,
+                            m.sha256.clone(),
+                            vm.admitted_hash_of(&m.sha256).map(str::to_string),
+                        )
                     })
                     .collect::<Vec<_>>()
             })
@@ -1416,7 +1575,7 @@ fn Authoring(shared: Shared) -> impl IntoView {
             </form>
             <h3>{t!(i18n, authoring.palette)}</h3>
             <label>{t!(i18n, authoring.ports)}<input type="number" id="place-ports" node_ref=ports_ref min="1" max="255" value="2"/></label>
-            <ul id="palette">{move || modules().into_iter().map(|(name, (ty, ports))| { let n2 = name.clone(); view! { <li><button type="button" class="place" data-module=name.clone() on:click=move |_| place(n2.clone(), ty.clone(), ports)>{catalogue::label(lang_of(i18n.get_locale()), "authoring.place", &[("module", name.clone())])}</button></li> } }).collect_view()}</ul>
+            <ul id="palette">{move || modules().into_iter().map(|(name, (ty, ports), source, admitted)| { let n2 = name.clone(); let hashes = admitted.map(|a| catalogue::label(lang_of(i18n.get_locale()), "authoring.hashes", &[("source", source.clone()), ("admitted", a)])).unwrap_or_default(); view! { <li data-module=name.clone()><button type="button" class="place" data-module=name.clone() on:click=move |_| place(n2.clone(), ty.clone(), ports)>{catalogue::label(lang_of(i18n.get_locale()), "authoring.place", &[("module", name.clone())])}</button><span class="hash">{hashes}</span></li> } }).collect_view()}</ul>
             <h3>{t!(i18n, authoring.actors)}</h3>
             <ul id="draft-actors">{move || draft_actors().into_iter().map(|(id, name, module, _ports, config)| view! {
                 <li class="draft-actor" data-actor=id.to_string()><span>{name}" ("{module}")"</span>

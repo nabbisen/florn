@@ -21,7 +21,15 @@
   "speed_fastest": "できるだけ速く",
   "reset": "リセット",
   "goto": "ティックへ移動",
-  "goto_button": "時刻へ移動…"
+  "goto_button": "時刻へ移動…",
+  "residency": "アクター",
+  "resident": "すべて常駐",
+  "swap": "容量を超えた分はスワップ"
+ },
+ "go_back": {
+  "title": "戻ると、その後のことは破棄されます",
+  "help": "実行はその時刻に戻り、直近のチェックポイントから先へ実行し直します。下の介入はその後に適用されたものです。取り消され、「介入」の下に再適用または破棄できるよう並びます。",
+  "confirm": "戻る"
  },
  "status": {
   "instant": "t =",
@@ -38,7 +46,12 @@
  },
  "files": {
   "title": "ファイル",
-  "cache_note": "このブラウザーには何も保存されません。ファイルが永続的な形です。",
+  "cache_note": "開いた、保存した、または取り込んだものはキャッシュとしてこのブラウザーに保持され、下に並びます。ファイルが永続的な形です。",
+  "stored": "このブラウザーに保持",
+  "none_stored": "まだありません。",
+  "open_stored": "開く",
+  "export_stored": "エクスポート",
+  "load_checkpoint": "チェックポイントを読み込む…",
   "open_scenario": "シナリオを開く…",
   "save_scenario": "シナリオを保存",
   "import_module": "モジュールをインポート…",
@@ -93,6 +106,11 @@
   "domains": "ドメイン",
   "classes": "イベントクラス",
   "events": "ドメインイベント",
+  "checkpoints": "保持しているチェックポイント",
+  "parent": "分岐元",
+  "take_checkpoint": "いまチェックポイントを取る",
+  "export_checkpoint": "エクスポート",
+  "branch": "ここから分岐",
   "open_in_timeline": "タイムラインで開く",
   "take_node_down": "次の時点でこのアクターをダウンさせる",
   "bring_node_up": "次の時点でこのアクターをアップさせる",
@@ -117,6 +135,9 @@
   "title": "介入",
   "help": "実行中の世界に加えた変更です。それぞれ次の時点境界で適用され、実行の入力として記録されます。",
   "pending": "未適用",
+  "undone": "戻ったことで取り消された介入",
+  "reapply": "その時刻に再適用",
+  "discard": "破棄",
   "kept": "終了した実行から",
   "keep_as_changes": "シナリオの予定変更として残す"
  },
@@ -134,7 +155,9 @@
   "set": "設定",
   "schedule": "変更を予定",
   "schedule_button": "予定",
-  "ports": "アクターあたりのポート数"
+  "ports": "アクターあたりのポート数",
+  "source_hash": "ソース",
+  "admitted_hash": "受け入れ後"
  },
  "notices": {
   "title": "状態"

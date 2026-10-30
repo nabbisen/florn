@@ -866,3 +866,37 @@ fn classification_reads_globals_only() {
         "budget first (RFC 003 rule 13)"
     );
 }
+
+/// RFC 009 rule 18: a WebAssembly Component is refused on admission with `module.component`,
+/// naming the module and the way to a core module.
+#[test]
+fn a_component_is_refused_with_its_reason() {
+    let mut component = b"\0asm".to_vec();
+    component.extend_from_slice(&[0x0d, 0x00, 0x01, 0x00]);
+    component.extend_from_slice(&[0x00, 0x00]);
+    let mut a = florn_admission::Admission::default();
+    let err = a
+        .admit_under(
+            "comp",
+            &component,
+            &florn_admission::ClassLimits::defaults(),
+            florn_admission::COST_MODEL_VERSION,
+        )
+        .expect_err("refused");
+    assert_eq!(err.codes(), vec!["module.component"]);
+    let params = err.0[0].params();
+    assert_eq!(params[0].0, "module");
+    assert!(format!("{:?}", params[1].1).contains("core module"));
+    // A core module's header is not a component's.
+    let mut core = b"\0asm".to_vec();
+    core.extend_from_slice(&[0x01, 0x00, 0x00, 0x00]);
+    let err = a
+        .admit_under(
+            "core",
+            &core,
+            &florn_admission::ClassLimits::defaults(),
+            florn_admission::COST_MODEL_VERSION,
+        )
+        .expect_err("refused for another reason");
+    assert_ne!(err.codes(), vec!["module.component"]);
+}

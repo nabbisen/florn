@@ -4,11 +4,11 @@
 // florn's own code, nothing from another origin. The cache is named by the version: a released
 // version lives at its own path and never updates itself under a person.
 "use strict";
-const CACHE = "florn-0.2";
+const CACHE = "florn-0.3";
 // The small files are cached on install; the modules and whatever a page fetches (the labs'
 // scenarios and modules, the shell's and the Host's WebAssembly) are cached as they are
 // fetched, so that the first visit is light and a page that ran once starts offline.
-const FILES = ["./", "./index.html", "./shell.css", "./app.js", "./florn_shell.js", "./worker.js", "./display.js", "./labs.txt", "./palette.txt", "./kit.html", "./page.css", "./main.js"];
+const FILES = ["./", "./index.html", "./shell.css", "./app.js", "./florn_shell.js", "./worker.js", "./display.js", "./labs.txt", "./palette.txt", "./kit.html", "./page.css", "./main.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 const HEADERS = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "require-corp",

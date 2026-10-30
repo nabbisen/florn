@@ -225,7 +225,7 @@ The conformance target of UI-008 is **WCAG 2.2 level AA** for everything that is
 
 ### 3.13 Performance transparency
 
-The interface says what limits a run (NFR-004): the status line shows "limited by: actors · solver · telemetry · display · memory" when a run cannot keep its chosen pacing, the probed capacity at start-up ("this browser holds about 124 resident actors"), when actors are being swapped and at what cost, and dropped telemetry records on the display path if any (the trace is never affected). The frame budget is a measured figure, not an assumption: draw time at the 95th percentile at most 8 ms and at most 1% of frames longer than twice the display's cadence, with 500 nodes and 200 moving messages (RFC 005 rule 40).
+The interface says what limits a run (NFR-004): the status line shows "limited by: actors · solver · telemetry · display · memory · swapping" when a run cannot keep its chosen pacing, the probed capacity at start-up ("this browser holds about 124 resident actors"), when actors are being swapped and at what cost, and dropped telemetry records on the display path if any (the trace is never affected). The frame budget is a measured figure, not an assumption: draw time at the 95th percentile at most 8 ms and at most 1% of frames longer than twice the display's cadence, with 500 nodes and 200 moving messages (RFC 005 rule 40).
 
 ### 3.14 Structure
 

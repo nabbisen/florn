@@ -21,7 +21,15 @@
   "speed_fastest": "as fast as possible",
   "reset": "Reset",
   "goto": "Go to tick",
-  "goto_button": "Go to…"
+  "goto_button": "Go to…",
+  "residency": "Actors",
+  "resident": "all resident",
+  "swap": "swapping beyond the capacity"
+ },
+ "go_back": {
+  "title": "Going back discards what came after",
+  "help": "The run returns to the instant and executes forward from its nearest checkpoint. The interventions below were applied after it: they are undone, and listed under Interventions to re-apply or discard.",
+  "confirm": "Go back"
  },
  "status": {
   "instant": "t =",
@@ -38,7 +46,12 @@
  },
  "files": {
   "title": "Files",
-  "cache_note": "Nothing is kept in this browser: the file is the durable form.",
+  "cache_note": "What you open, save or import is kept in this browser as a cache, listed below; the file is the durable form.",
+  "stored": "Kept in this browser",
+  "none_stored": "Nothing yet.",
+  "open_stored": "Open",
+  "export_stored": "Export",
+  "load_checkpoint": "Load a checkpoint…",
   "open_scenario": "Open scenario…",
   "save_scenario": "Save scenario",
   "import_module": "Import module…",
@@ -93,6 +106,11 @@
   "domains": "Domains",
   "classes": "Event classes",
   "events": "Domain events",
+  "checkpoints": "Kept checkpoints",
+  "parent": "Branched from",
+  "take_checkpoint": "Take a checkpoint now",
+  "export_checkpoint": "Export",
+  "branch": "Branch from here",
   "open_in_timeline": "Open in timeline",
   "take_node_down": "Take this actor down at the next instant",
   "bring_node_up": "Bring this actor up at the next instant",
@@ -117,6 +135,9 @@
   "title": "Interventions",
   "help": "Changes made to the running world, each applied at the next instant boundary and recorded as a run input.",
   "pending": "not yet applied",
+  "undone": "Undone by going back",
+  "reapply": "Re-apply at its instant",
+  "discard": "Discard",
   "kept": "From the ended run",
   "keep_as_changes": "Keep as scheduled changes of the scenario"
  },
@@ -134,7 +155,9 @@
   "set": "Set",
   "schedule": "Schedule a change",
   "schedule_button": "Schedule",
-  "ports": "Ports per actor"
+  "ports": "Ports per actor",
+  "source_hash": "source",
+  "admitted_hash": "admitted"
  },
  "notices": {
   "title": "States"

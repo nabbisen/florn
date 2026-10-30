@@ -581,3 +581,229 @@ fn j4_the_saved_scenario_reloads_and_replays_the_saved_run() {
     assert_eq!(vm.run.chain, chain);
     assert_eq!(vm.interventions.len(), 1);
 }
+
+fn controller_with(options: florn_host::Options) -> C {
+    Controller::new(
+        host::engine(),
+        Admission::default(),
+        Box::new(FixedPlatform::default()),
+        host::domains(),
+        options,
+    )
+}
+
+/// RFC 009 rules 19 and 8 through the view model (checklist C28, P1): a backward "Go to…" with
+/// interventions after the instant waits for the person's word with the list of what it would
+/// undo; afterwards the timeline ends at the instant, the intervention is listed as undone and
+/// can be re-applied at its instant; the run continued to the end gives the plain digest when
+/// nothing is re-applied, and the cut run's when it is.
+#[test]
+fn p1_going_back_asks_first_lists_the_undone_and_reapplies_them() {
+    let s = shipped::dv_triangle(100);
+    let mut plain = host::try_start(&s, host::options()).unwrap();
+    plain.run_to_end();
+    let mut cut = host::try_start(&s, host::options()).unwrap();
+    cut.advance(florn_host::Advance::ToTick(1_500));
+    cut.intervene_map(Some(1_500), 1001, &cut_content())
+        .unwrap();
+    cut.run_to_end();
+
+    let mut c = controller_with(florn_host::Options {
+        checkpoint_interval: 100,
+        ..host::options()
+    });
+    let mut vm = ViewModel::new();
+    open_triangle(&mut c, &mut vm);
+    vm.new_run(Some(s.seed));
+    pump(&mut c, &mut vm);
+    advance_to(&mut c, &mut vm, 1_000, 100);
+    // Asked at 1,000 for the instant 1,500: applied at its boundary (RFC 001 rule 34).
+    vm.intervene(
+        1001,
+        "link",
+        vec![("enabled".into(), florn_control::FieldValue::Boolean(false))],
+        Some(1_500),
+    );
+    pump(&mut c, &mut vm);
+    advance_to(&mut c, &mut vm, 2_200, 100);
+    assert_eq!(vm.interventions.len(), 1);
+    assert_eq!(vm.interventions[0].applied_at.map(|a| a.tick), Some(1_500));
+    let rows_before = vm.timeline.entries.len();
+    assert!(vm.timeline.entries.iter().any(|e| e.at.tick > 1_000));
+    // Forward moves need no word; a backward move past the intervention does.
+    assert!(vm.goto(2_300));
+    pump(&mut c, &mut vm);
+    assert!(!vm.goto(1_000), "asked first");
+    let plan = vm.go_back.clone().expect("the plan");
+    assert_eq!((plan.tick, plan.undone.len()), (1_000, 1));
+    assert_eq!(plan.undone[0].kind, "link");
+    vm.cancel_go_back();
+    assert!(vm.go_back.is_none());
+    assert!(!vm.goto(1_000));
+    vm.confirm_go_back();
+    pump(&mut c, &mut vm);
+    assert!(
+        vm.run.now.is_some_and(|a| a.tick <= 1_000),
+        "{:?}",
+        vm.run.now
+    );
+    assert_eq!(vm.interventions.len(), 0);
+    assert_eq!(vm.undone.len(), 1, "listed as undone");
+    assert_eq!(vm.undone[0].applied_at.map(|a| a.tick), Some(1_500));
+    assert!(vm.timeline.entries.len() < rows_before);
+    assert!(
+        vm.timeline
+            .entries
+            .iter()
+            .all(|e| e.record.is_none() || e.at.tick <= 1_000),
+        "the timeline ends at the instant"
+    );
+    assert!(
+        vm.topology.link(1001).is_none_or(|l| l.up),
+        "the link is up again"
+    );
+    assert!(!vm.checkpoints.is_empty());
+    // Nothing re-applied: the plain digest.
+    vm.run();
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.run.state, RunState::Ended);
+    assert_eq!(vm.run.chain, Some(plain.chain_hex()));
+    assert_eq!(vm.undone.len(), 1, "still offered");
+    // Back again and re-applied at its instant: the cut run's digest.
+    assert!(vm.goto(1_000), "nothing applied after the instant now");
+    pump(&mut c, &mut vm);
+    vm.reapply(0);
+    pump(&mut c, &mut vm);
+    assert_eq!((vm.undone.len(), vm.interventions.len()), (0, 1));
+    assert_eq!(vm.interventions[0].requested_at, Some(1_500));
+    vm.run();
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.run.chain, Some(cut.chain_hex()));
+    assert_eq!(vm.interventions[0].applied_at.map(|a| a.tick), Some(1_500));
+}
+
+fn cut_content() -> Vec<u8> {
+    let mut m = florn_model::manifest::DomainMap::new();
+    m.insert(
+        "kind".into(),
+        florn_model::manifest::DomainValue::Text("link".into()),
+    );
+    m.insert(
+        "enabled".into(),
+        florn_model::manifest::DomainValue::Boolean(false),
+    );
+    let mut e = florn_model::canonical::Encoder::default();
+    florn_model::canonical::domain_map(&mut e, &m);
+    e.finish()
+}
+
+/// RFC 009 rules 10 to 12 and 19 through the view model (P2): "Branch from here" keeps the
+/// run's lists and names the parent; the parent's record arrives to be kept, not written out;
+/// "Take a checkpoint now" lengthens the list; a checkpoint export is previewed by its kind.
+#[test]
+fn p2_a_branch_names_its_parent_and_keeps_the_lists() {
+    let s = shipped::dv_triangle(100);
+    let mut c = controller_with(florn_host::Options {
+        checkpoint_interval: 0,
+        ..host::options()
+    });
+    let mut vm = ViewModel::new();
+    open_triangle(&mut c, &mut vm);
+    vm.new_run(Some(s.seed));
+    pump(&mut c, &mut vm);
+    advance_to(&mut c, &mut vm, 800, 100);
+    vm.set_link(1001, false);
+    pump(&mut c, &mut vm);
+    advance_to(&mut c, &mut vm, 1_200, 100);
+    let kept_before = vm.checkpoints.len();
+    vm.take_checkpoint();
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.checkpoints.len(), kept_before + 1);
+    vm.preview_export(ExportKind::Checkpoint {
+        index: vm.checkpoints.len() as u32 - 1,
+    });
+    pump(&mut c, &mut vm);
+    assert!(
+        vm.preview
+            .as_ref()
+            .is_some_and(|p| p.kind == florn_control::FileKind::Checkpoint)
+    );
+    vm.confirm_pending_export();
+    pump(&mut c, &mut vm);
+    let file = vm.take_exported().expect("the checkpoint file");
+    assert_eq!(file.kind, florn_control::FileKind::Checkpoint);
+    assert!(!file.keep_only);
+    let parent_id = vm.run.run_id.clone().unwrap();
+    let rows = vm.timeline.entries.len();
+    vm.branch();
+    pump(&mut c, &mut vm);
+    assert_ne!(vm.run.run_id, Some(parent_id.clone()));
+    assert_eq!(
+        vm.run.parent.as_ref().map(|(_, p)| p.as_str()),
+        Some(parent_id.as_str())
+    );
+    assert!(
+        vm.run
+            .parent
+            .as_ref()
+            .is_some_and(|(t, _)| *t <= 1_200 && *t > 800)
+    );
+    assert_eq!(vm.interventions.len(), 1, "the parent's inputs stay listed");
+    assert!(vm.kept.is_empty(), "not an ended run's");
+    assert!(vm.timeline.entries.len() >= rows, "the trace stays");
+    assert_eq!(vm.checkpoints.len(), 1, "the branch begins at its instant");
+    let parent = vm.take_exported().expect("the parent's record");
+    assert!(parent.keep_only, "kept in origin storage, not written out");
+    assert!(parent.name.starts_with(&parent_id));
+    assert!(
+        florn_host::record::read(&parent.bytes)
+            .unwrap()
+            .run
+            .ended
+            .is_some()
+    );
+    vm.run();
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.run.state, RunState::Ended);
+}
+
+/// RFC 009 rules 14, 16 and 17 through the view model: swapping asked for is said with the
+/// counts; the files of origin storage are listed with an eviction as a notice; a module
+/// admitted from a file carries both hashes.
+#[test]
+fn p4_swapping_is_said_and_the_files_of_storage_are_listed() {
+    let s = shipped::dv_triangle(100);
+    let mut c = controller_with(host::options());
+    let mut vm = ViewModel::new();
+    open_triangle(&mut c, &mut vm);
+    let bytes = s.modules().into_values().next().unwrap();
+    vm.admit(bytes);
+    pump(&mut c, &mut vm);
+    let m = vm.admitted.last().expect("admitted").clone();
+    let admitted = vm
+        .admitted_hash_of(&m.source_sha256)
+        .expect("both hashes")
+        .to_string();
+    assert_ne!(admitted, m.source_sha256);
+    assert_eq!(admitted.len(), 64);
+    vm.set_residency(florn_control::Residency::Swap);
+    vm.new_run(Some(s.seed));
+    pump(&mut c, &mut vm);
+    assert_eq!(vm.status.swapping, Some((3, 3)));
+    vm.set_files(
+        vec![florn_ui_model::StoredFile {
+            kind: "module".into(),
+            name: "dv.wasm".into(),
+            key: "ab".into(),
+            bytes: 10,
+        }],
+        10,
+    );
+    vm.evicted("run-record", "old.florn-run");
+    assert_eq!(vm.files.len(), 1);
+    assert!(
+        vm.notices
+            .iter()
+            .any(|n| n.notification.code == "storage.evicted")
+    );
+}

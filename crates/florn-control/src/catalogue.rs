@@ -92,6 +92,7 @@ pub enum Code {
     AdmissionResult,
     ModuleExportUnsupported,
     ModuleSegmentTooLong,
+    ModuleComponent,
     HostCapacityExceeded,
     HostCapacityWarning,
     HostCapacity,
@@ -123,6 +124,7 @@ pub enum Code {
     CheckpointBudget,
     RunRewound,
     RunBranched,
+    StorageEvicted,
     StorageCache,
     MessageUnknown,
     NetworkLinkPorts,
@@ -624,6 +626,14 @@ pub const CATALOGUE: &[Entry] = &[
         ends: Ends::Command,
     },
     Entry {
+        code: Code::ModuleComponent,
+        name: "module.component",
+        params: &[("module", ParamType::Name), ("reason", ParamType::Text)],
+        severity: Severity::Error,
+        scope: ScopeKind::File,
+        ends: Ends::Command,
+    },
+    Entry {
         code: Code::HostCapacityExceeded,
         name: "host.capacity-exceeded",
         params: &[
@@ -941,6 +951,17 @@ pub const CATALOGUE: &[Entry] = &[
         ends: Ends::Nothing,
     },
     Entry {
+        code: Code::StorageEvicted,
+        name: "storage.evicted",
+        params: &[
+            ("kind", ParamType::Enum("file-kind")),
+            ("name", ParamType::Text),
+        ],
+        severity: Severity::Warning,
+        scope: ScopeKind::File,
+        ends: Ends::Nothing,
+    },
+    Entry {
         code: Code::StorageCache,
         name: "storage.cache",
         params: &[("items", ParamType::Count)],
@@ -1046,7 +1067,14 @@ pub const ENUMERATIONS: &[(&str, &[&str])] = &[
     ("machine-condition", &["memory-refused", "engine-stack"]),
     (
         "limiting-factor",
-        &["actors", "solver", "telemetry", "display", "memory"],
+        &[
+            "actors",
+            "solver",
+            "telemetry",
+            "display",
+            "memory",
+            "swapping",
+        ],
     ),
     ("faulted-policy", &["drop", "stop-run"]),
     ("end-reason", &["end-reached", "user", "host-fault"]),

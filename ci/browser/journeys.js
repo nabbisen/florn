@@ -6,6 +6,16 @@
 //   J4 save the scenario, reload it, replay the saved run with its intervention: the same digest;
 //   J2 author the triangle from an empty scenario with validation at the field, run it: the
 //      digest the runner recorded for the shipped scenario.
+// Release 0.3 (RFC 009 section 7; the handoff's checklist C28):
+//   J5 import a module from a file, read both hashes, place it beside bundled routers, connect,
+//      run, replay; the file is kept in this browser and exports byte for byte;
+//   P1 go back past an intervention: the application says what it will discard, lists the
+//      intervention as undone, re-applies it on request;
+//   P2 branch from an instant: the parent named, its record kept, both records replaying natively;
+//   P3 export a checkpoint, open the application again, load it, run to the lab's digest;
+//   P4 a scenario beyond the browser's capacity: refused resident, run swapping, the status
+//      line saying so, the digest the runner gives;
+//   the installable manifest and its icons from the origin; the address after every journey.
 // Then the rules of rule 41: switch the language mid-run and keep the typed text; reach the
 // controls by keyboard with a bound on the presses between landmarks; start offline; and the
 // measured frame budget (rule 40) and the network log of one origin (rule 34).
@@ -13,8 +23,11 @@
 // Usage: node journeys.js --browsers chromium,firefox[,webkit] [--port N]
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFile, mkdtemp } from "node:fs/promises";
+import { readFile, mkdtemp, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { chromium, firefox, webkit } from "playwright";
 import { startServer } from "./serve.js";
 
@@ -101,6 +114,32 @@ async function runToEnd(page, speed = "0") {
   await page.click("#run");
   await until(page, (s) => s.state === "ended", 120000, "run ended");
 }
+// Run at the lab's pace to an instant and pause there.
+async function runTo(page, tick, speed = "1000") {
+  await page.selectOption("#speed", speed);
+  await page.click("#run");
+  await until(page, (x) => x.instant >= tick || x.state === "ended", 120000, `at ${tick}`);
+  await page.click("#pause");
+  await until(page, (x) => x.state === "paused" || x.state === "ended", 10000, "paused");
+}
+// Select a connection by clicking its middle on the canvas (between its two actors).
+async function selectLink(page, a, b) {
+  const box = await page.locator("#topology").boundingBox();
+  const pos = (await state(page)).positions;
+  const [x1, y1] = pos[String(a)], [x2, y2] = pos[String(b)];
+  await page.mouse.click(box.x + (x1 + x2) / 2, box.y + (y1 + y2) / 2);
+  await sleep(400);
+  return /Connection|接続/.test(await page.textContent("#inspector-kind"));
+}
+// RFC 009 rule 22 (SEC-007): the address holds the origin, the path and at most a lab's name.
+function addressClean(url) {
+  const u = new URL(url);
+  const keys = [...u.searchParams.keys()].filter((k) => k !== "lab");
+  return u.origin === origin && keys.length === 0 && u.hash === "";
+}
+const runner = join(root, "target/release/florn");
+const run = promisify(execFile);
+const chainOf = (stdout) => (/^chain = (\S+)$/m.exec(stdout) || [])[1];
 
 for (const name of browsers) {
   console.log(JSON.stringify({ browser: name }));
@@ -152,6 +191,7 @@ for (const name of browsers) {
     s = await until(page, (x) => x.state === "ended", 180000, "ended");
     j1chain = s.chain;
     check(s.chain === lab.chain, `${name}: J1 the lab's run has the recorded digest`, { chain: s.chain, expected: lab.chain });
+    check(addressClean(page.url()), `${name}: J1 the address holds nothing but the origin and the path (RFC 009 rule 22)`, { url: page.url() });
     await consoleCheck(page, errors, `${name}: J1 no error of the application in the console`);
     await page.close();
   } catch (err) {
@@ -259,6 +299,7 @@ for (const name of browsers) {
     await sleep(500);
     s = await state(page);
     check(s.replay === "replay.matched" && s.chain === j3chain, `${name}: J4 the saved scenario reloads and replays the saved run with its intervention to the same digest`, { chain: s.chain, replay: s.replay, expected: j3chain });
+    check(addressClean(page.url()), `${name}: J3/J4 the address holds nothing but the origin and the path (RFC 009 rule 22)`, { url: page.url() });
     await consoleCheck(page, errors, `${name}: J3/J4 no error of the application in the console`);
     await page.close();
   } catch (err) {
@@ -355,10 +396,331 @@ for (const name of browsers) {
     await runToEnd(page);
     s = await state(page);
     check(s.chain === triangle.chain, `${name}: J2 the authored scenario runs to the digest the runner recorded`, { chain: s.chain, expected: triangle.chain });
+    check(addressClean(page.url()), `${name}: J2 the address holds nothing but the origin and the path (RFC 009 rule 22)`, { url: page.url() });
     await consoleCheck(page, errors, `${name}: J2 no error of the application in the console`);
     await page.close();
   } catch (err) {
     check(false, `${name}: J2`, { error: String(err).split("\n")[0] });
+  }
+
+  // J5 (RFC 009 rule 17): a module imported from a file is admitted with both hashes shown,
+  // kept in this browser, placed from the palette beside two routers, connected, run to the
+  // triangle's recorded digest, replayed; its export is byte for byte the imported file.
+  try {
+    const { page, errors } = await openApp(context);
+    const modulePath = join(root, "scenarios/modules/distance_vector.wasm");
+    const moduleBytes = await readFile(modulePath);
+    const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.click("#import-module")]);
+    await chooser.setFiles(modulePath);
+    let s = await until(page, (x) => x.files.some((f) => f.kind === "module"), 20000, "the module kept");
+    const hashes = await page.textContent('#palette li[data-module="distance-vector"] .hash');
+    const hex = hashes.match(/[0-9a-f]{64}/g) || [];
+    check(hex.length === 2 && hex[0] !== hex[1], `${name}: J5 the imported module shows its source and admitted hashes before it can be placed`, { hashes: hashes.slice(0, 160) });
+    const kept = s.files.find((f) => f.kind === "module");
+    check(kept && kept.name === "distance_vector.wasm" && kept.bytes === moduleBytes.length && s.storage_bytes >= kept.bytes, `${name}: J5 the module is kept in this browser under Files with its name and size`, { kept, storage_bytes: s.storage_bytes });
+    const note = await page.textContent("#storage-note");
+    check(/kept in this browser|このブラウザー/.test(note), `${name}: J5 the Files list says the cache's size and that the file is the durable form`, { note });
+    // The triangle from the palette: the imported module beside two bundled routers.
+    await page.click("#authoring-title");
+    await page.click("#new-draft");
+    await page.fill("#draft-name", "triangle-j5");
+    await page.press("#draft-name", "Tab");
+    await page.fill("#draft-end", "3000ns");
+    await page.press("#draft-end", "Tab");
+    await page.fill("#place-ports", "2");
+    for (let i = 0; i < 3; i++) await page.click('button.place[data-module="distance-vector"]');
+    await sleep(200);
+    for (const id of [1, 2, 3]) {
+      await page.waitForSelector(`#attr-target option[value="${id}"]`, { state: "attached" });
+      await page.selectOption("#attr-target", String(id));
+      await page.fill("#attr-key", "period");
+      await page.fill("#attr-value", "100ns");
+      await page.click("#attr-set");
+    }
+    for (const [a, b] of [["1.0", "2.0"], ["2.1", "3.0"], ["3.1", "1.1"]]) {
+      await page.waitForSelector(`#connect-from option[value="${a}"]`, { state: "attached" });
+      await page.selectOption("#connect-from", a);
+      await page.selectOption("#connect-to", b);
+      await page.click("#connect");
+    }
+    await sleep(200);
+    for (const id of [1000, 1001, 1002]) {
+      await page.selectOption("#attr-target", String(id));
+      await page.fill("#attr-key", "delay");
+      await page.fill("#attr-value", "2ns");
+      await page.click("#attr-set");
+    }
+    await page.selectOption("#attr-target", "1000");
+    await page.fill("#attr-key", "loss");
+    await page.fill("#attr-value", "0.0");
+    await page.click("#attr-set");
+    for (const [at, value] of [["1000ns", "false"], ["2000ns", "true"]]) {
+      await page.fill("#change-at", at);
+      await page.selectOption("#change-target", "1000");
+      await page.fill("#change-key", "enabled");
+      await page.fill("#change-value", value);
+      await page.click("#schedule");
+    }
+    await page.click("#apply-draft");
+    await until(page, (x) => x.state === "ready" && x.nodes === 3, 20000, "the draft loaded");
+    await runToEnd(page);
+    s = await state(page);
+    check(s.chain === triangle.chain, `${name}: J5 the scenario with the imported module runs to the recorded digest`, { chain: s.chain, expected: triangle.chain });
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 20000 }),
+      (async () => {
+        await page.click("#export-record");
+        await page.waitForSelector("#export-preview", { timeout: 10000 });
+        await page.click("#export-confirm");
+      })(),
+    ]);
+    const j5record = join(dir, `${name}-j5.florn-run`);
+    await download.saveAs(j5record);
+    const [chooser2] = await Promise.all([page.waitForEvent("filechooser"), page.click("#replay-record")]);
+    await chooser2.setFiles(j5record);
+    await until(page, (x) => x.state === "paused", 20000, "replay started");
+    await page.click("#run");
+    s = await until(page, (x) => x.state === "ended" && x.replay, 120000, "replay ended");
+    await sleep(500);
+    s = await state(page);
+    check(s.replay === "replay.matched", `${name}: J5 the replay matches`, { replay: s.replay });
+    // The kept module exports byte for byte; the record exported is kept too.
+    const [back] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click('#files li[data-kind="module"] .export-stored')]);
+    const exported = await readFile(await back.path());
+    check(Buffer.compare(exported, moduleBytes) === 0, `${name}: J5 the exported module's bytes equal the imported file's`, { bytes: exported.length });
+    s = await state(page);
+    check(s.files.some((f) => f.kind === "run-record"), `${name}: J5 the exported run record is kept under Files too`, { files: s.files.map((f) => f.kind) });
+    check(addressClean(page.url()), `${name}: J5 the address holds nothing but the origin and the path (RFC 009 rule 22)`, { url: page.url() });
+    await consoleCheck(page, errors, `${name}: J5 no error of the application in the console`);
+    await page.close();
+  } catch (err) {
+    check(false, `${name}: J5`, { error: String(err).split("\n")[0] });
+  }
+
+  // P1 (RFC 009 rules 19 and 8): going back past an intervention says what it discards, lists
+  // the intervention as undone, and re-applies it on request.
+  try {
+    const { page, errors } = await openApp(context, `?lab=${LAB}`);
+    await until(page, (s) => s.state === "ready" && s.nodes === 4, 30000, "lab ready");
+    await runTo(page, 2000);
+    check(await selectLink(page, 3, 4), `${name}: P1 the link r3-r4 is selected`);
+    await page.click("#link-down");
+    await page.click("#step");
+    await until(page, (x) => x.applied >= 1, 20000, "intervention applied");
+    await runTo(page, 2500);
+    let s = await state(page);
+    const rowsBefore = s.timeline;
+    await page.fill("#goto-tick", "1200");
+    await page.click("#goto");
+    await page.waitForSelector("#go-back", { timeout: 10000 });
+    const dialog = await page.textContent("#go-back");
+    s = await state(page);
+    check(s.go_back === 1200 && /1,200|1200/.test(dialog) && /link/.test(dialog), `${name}: P1 before going back the application says what it will discard`, { text: dialog.slice(0, 160) });
+    await page.click("#go-back-confirm");
+    s = await until(page, (x) => x.state === "paused" && x.now !== null && x.now <= 1200 && x.undone === 1, 60000, "went back");
+    const undoneText = await page.textContent("#undone");
+    check(s.interventions === 0 && s.undone === 1 && s.timeline < rowsBefore && /2,[0-9]{3}/.test(undoneText), `${name}: P1 the timeline ends at the instant and the intervention is listed as undone with its instant`, { now: s.now, timeline: s.timeline, rows_before: rowsBefore, undone: undoneText.slice(0, 120) });
+    check(s.links_down === 0, `${name}: P1 the link is up again at the earlier instant`, { links_down: s.links_down });
+    // "Step to here" on an early row goes back the same way.
+    const firstTick = await page.locator("#timeline li.row .tick").first().textContent();
+    const target = parseInt(firstTick.replace(/,/g, ""), 10) + 1;
+    await page.locator("#timeline li.row .step-to").first().click();
+    s = await until(page, (x) => x.state === "paused" && x.now !== null && x.now <= target, 60000, "stepped back");
+    check(s.now <= target && s.undone === 1, `${name}: P1 "Step to here" moves back to the row's instant`, { now: s.now, row_tick: firstTick });
+    // Nothing re-applied: the lab's digest.
+    await runToEnd(page);
+    s = await state(page);
+    check(s.chain === lab.chain && s.undone === 1, `${name}: P1 the run continued to the end gives the lab's digest when nothing is re-applied`, { chain: s.chain, expected: lab.chain });
+    // Back again and re-applied: a different digest, the intervention applied.
+    await page.fill("#goto-tick", "1000");
+    await page.click("#goto");
+    await until(page, (x) => x.state === "paused" && x.now !== null && x.now <= 1000, 60000, "went back again");
+    await page.click("#undone .reapply");
+    await until(page, (x) => x.undone === 0 && x.interventions === 1, 10000, "re-applied");
+    await runToEnd(page);
+    s = await state(page);
+    check(s.chain !== lab.chain && s.applied === 1, `${name}: P1 the re-applied intervention applies at its instant and changes the digest`, { chain: s.chain, applied: s.applied });
+    check(addressClean(page.url()), `${name}: P1 the address holds the origin, the path and the lab's name only`, { url: page.url() });
+    await consoleCheck(page, errors, `${name}: P1 no error of the application in the console`);
+    await page.close();
+  } catch (err) {
+    check(false, `${name}: P1`, { error: String(err).split("\n")[0] });
+  }
+
+  // P2 (RFC 009 rules 10 to 12 and 19): a branch from an instant; the parent named and its
+  // record kept; both records replay natively on their own.
+  try {
+    const { page, errors } = await openApp(context);
+    await openLab(page, LAB);
+    await runTo(page, 1200);
+    let s = await state(page);
+    const parentId = s.run_id;
+    await page.click("#select-world");
+    await sleep(300);
+    await page.click("#branch");
+    s = await until(page, (x) => x.parent && x.run_id !== parentId && x.files.some((f) => f.kind === "run-record"), 30000, "branched");
+    // The panels re-render a few times a second (rule 39): the fact follows the state.
+    await sleep(600);
+    const parentFact = await page.textContent('dd[data-fact="parent"]');
+    check(s.parent.run === parentId && parentFact.includes(parentId), `${name}: P2 the world inspector names the parent and the instant`, { parent: s.parent, fact: parentFact });
+    const branchedRow = await page.locator('#timeline li.row[data-kind] .code', { hasText: "run.branched" }).count();
+    check(branchedRow >= 1 && s.checkpoints.length === 1, `${name}: P2 the timeline marks the branch and the branch begins at its instant`, { rows: branchedRow, checkpoints: s.checkpoints });
+    await runTo(page, 1300);
+    check(await selectLink(page, 1, 3), `${name}: P2 the chord r1-r3 is selected`);
+    await page.click("#link-down");
+    await runToEnd(page);
+    s = await state(page);
+    check(s.chain !== lab.chain && s.applied === 1, `${name}: P2 the branch with the chord down ends with another digest`, { chain: s.chain });
+    if (existsSync(runner)) {
+      const [branchDl] = await Promise.all([
+        page.waitForEvent("download", { timeout: 20000 }),
+        (async () => {
+          await page.click("#export-record");
+          await page.waitForSelector("#export-preview", { timeout: 10000 });
+          await page.click("#export-confirm");
+        })(),
+      ]);
+      const branchPath = join(dir, `${name}-branch.florn-run`);
+      await branchDl.saveAs(branchPath);
+      const parentKey = s.files.find((f) => f.kind === "run-record" && f.name.startsWith(parentId)).key;
+      const [parentDl] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click(`#files li[data-key="${parentKey}"] .export-stored`)]);
+      const parentPath = join(dir, `${name}-parent.florn-run`);
+      await parentDl.saveAs(parentPath);
+      for (const [which, file] of [["parent", parentPath], ["branch", branchPath]]) {
+        const { stdout } = await run(runner, ["replay", file, join(root, `scenarios/${LAB}.toml`), "--modules", join(root, "scenarios/modules")]);
+        check(/^replay = matched$/m.test(stdout), `${name}: P2 the ${which}'s record replays natively to a match on its own`, { tail: stdout.trim().split("\n").slice(-2) });
+      }
+    } else {
+      console.log(JSON.stringify({ notice: `${name}: the runner is not built; P2's native replays are skipped` }));
+    }
+    check(addressClean(page.url()), `${name}: P2 the address holds nothing but the origin and the path`, { url: page.url() });
+    await consoleCheck(page, errors, `${name}: P2 no error of the application in the console`);
+    await page.close();
+  } catch (err) {
+    check(false, `${name}: P2`, { error: String(err).split("\n")[0] });
+  }
+
+  // P3 (RFC 009 rules 5 and 6): a checkpoint exported after a preview, the application opened
+  // again, the checkpoint loaded, the run to the lab's digest; another scenario's is refused.
+  try {
+    const { page, errors } = await openApp(context);
+    await openLab(page, LAB);
+    await runTo(page, 2000);
+    await page.click("#select-world");
+    await sleep(300);
+    await page.click("#take-checkpoint");
+    let s = await until(page, (x) => x.checkpoints.length >= 2, 10000, "a checkpoint taken");
+    const last = s.checkpoints.length - 1;
+    const cpInstant = s.checkpoints[last];
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 20000 }),
+      (async () => {
+        await page.click(`#checkpoints li[data-index="${last}"] .export-checkpoint`);
+        await page.waitForSelector("#export-preview", { timeout: 10000 });
+        const preview = await page.textContent("#export-preview");
+        check(/checkpoint|チェックポイント/.test(preview), `${name}: P3 the preview says what the file holds`, { preview: preview.slice(0, 120) });
+        await page.click("#export-confirm");
+      })(),
+    ]);
+    const cpPath = join(dir, `${name}-2000.florn-checkpoint`);
+    await download.saveAs(cpPath);
+    await page.close();
+    const again = await openApp(context);
+    await openLab(again.page, LAB);
+    const [chooser] = await Promise.all([again.page.waitForEvent("filechooser"), again.page.click("#load-checkpoint")]);
+    await chooser.setFiles(cpPath);
+    s = await until(again.page, (x) => x.state === "paused" && x.now !== null && x.now >= 1500, 30000, "the checkpoint loaded");
+    check(s.now === cpInstant && s.files.some((f) => f.kind === "checkpoint"), `${name}: P3 the checkpoint loads at its instant and is kept under Files`, { now: s.now, instant: cpInstant });
+    await runToEnd(again.page);
+    s = await state(again.page);
+    check(s.chain === lab.chain, `${name}: P3 the resumed run ends with the lab's digest`, { chain: s.chain, expected: lab.chain });
+    // Another scenario: refused with the field named.
+    await openLab(again.page, "dv-triangle", 3);
+    const [chooser2] = await Promise.all([again.page.waitForEvent("filechooser"), again.page.click("#load-checkpoint")]);
+    await chooser2.setFiles(cpPath);
+    await until(again.page, (x) => (x.codes || []).includes("checkpoint.mismatch"), 20000, "the mismatch said");
+    await again.page.waitForSelector('li.notice[data-code="checkpoint.mismatch"]', { timeout: 10000 });
+    const refusal = await again.page.textContent('li.notice[data-code="checkpoint.mismatch"]');
+    check(/scenario/.test(refusal) || /シナリオ/.test(refusal), `${name}: P3 a checkpoint of another scenario is refused with the field named`, { refusal: refusal.slice(0, 120) });
+    check(addressClean(again.page.url()), `${name}: P3 the address holds nothing but the origin and the path`, { url: again.page.url() });
+    await consoleCheck(again.page, again.errors, `${name}: P3 no error of the application in the console`);
+    await again.page.close();
+  } catch (err) {
+    check(false, `${name}: P3`, { error: String(err).split("\n")[0] });
+  }
+
+  // P4 (RFC 009 rules 14 and 21): a scenario of more actors than this browser's capacity is
+  // refused resident with the numbers and runs swapping, the status line saying so, to the
+  // digest the native runner gives.
+  try {
+    const { page, errors } = await openApp(context);
+    const count = name === "chromium" ? 130 : 1000;
+    const echoPath = join(root, "scenarios/modules/echo.wasm");
+    const echo = await readFile(echoPath);
+    const hash = (await import("node:crypto")).createHash("sha256").update(echo).digest("hex");
+    let text = `florn = 1\nname = "many"\ndomains = ["core"]\n\n[time]\ntick = "1ns"\nend = "10ns"\n\n[order]\ntie = "by-identity"\n\n[seed]\nroot = 1\n\n[limits.default]\nmemory = "2MiB"\n\n[modules.echo]\nsha256 = "${hash}"\ncontract = "florn:core/guest@0.1.0"\n`;
+    for (let id = 1; id <= count; id++) text += `\n[[actors]]\nid = ${id}\nname = "a${id}"\nkind = "module"\nmodule = "echo"\nports = []\n`;
+    const manyPath = join(dir, `${name}-many.toml`);
+    await writeFile(manyPath, text);
+    const [c1] = await Promise.all([page.waitForEvent("filechooser"), page.click("#import-module")]);
+    await c1.setFiles(echoPath);
+    await until(page, (x) => x.files.some((f) => f.kind === "module"), 20000, "echo imported");
+    const [c2] = await Promise.all([page.waitForEvent("filechooser"), page.click("#open-scenario")]);
+    await c2.setFiles(manyPath);
+    let s = await until(page, (x) => x.state === "ready" && x.nodes === count, 60000, "the scenario ready");
+    await page.selectOption("#speed", "0");
+    await page.click("#run");
+    await page.waitForSelector('li.notice[data-code="host.capacity-exceeded"]', { timeout: 30000 });
+    const refusal = await page.textContent('li.notice[data-code="host.capacity-exceeded"]');
+    s = await state(page);
+    check(s.state === "ready" && /\d/.test(refusal), `${name}: P4 resident, the scenario is refused with the need and the capacity`, { refusal: refusal.slice(0, 120), state: s.state });
+    await page.selectOption("#residency", "swap");
+    await page.click("#run");
+    s = await until(page, (x) => x.state === "ended", 300000, "the swapping run ended");
+    await sleep(600);
+    const statusSwapping = await page.textContent("#status-swapping");
+    check(s.swapping && s.swapping[1] === count && s.swapping[0] < count && /swapping|スワップ/.test(statusSwapping), `${name}: P4 the run swaps and the status line says so with the counts`, { swapping: s.swapping, status: statusSwapping });
+    if (existsSync(runner)) {
+      const { stdout } = await run(runner, ["run", manyPath, "--module", echoPath, "--seed", "1"]);
+      const native = chainOf(stdout);
+      check(native && s.chain === native, `${name}: P4 the swapping run's digest equals the native runner's`, { chain: s.chain, native });
+    }
+    check(addressClean(page.url()), `${name}: P4 the address holds nothing but the origin and the path`, { url: page.url() });
+    await consoleCheck(page, errors, `${name}: P4 no error of the application in the console`);
+    await page.close();
+  } catch (err) {
+    check(false, `${name}: P4`, { error: String(err).split("\n")[0] });
+  }
+
+  // RFC 009 rule 20 (WEB-004): the web application manifest and its icons, from the origin.
+  try {
+    const { page } = await openApp(context);
+    const href = await page.getAttribute('link[rel="manifest"]', "href");
+    const manifest = await page.evaluate(async (h) => {
+      const r = await fetch(h);
+      return { ok: r.ok, type: r.headers.get("content-type"), body: await r.json() };
+    }, href);
+    const iconsOk = await page.evaluate(async (icons) => {
+      const out = [];
+      for (const i of icons) {
+        const r = await fetch(i.src);
+        out.push(r.ok && (r.headers.get("content-type") || "").startsWith("image/png"));
+      }
+      return out.every(Boolean);
+    }, manifest.body.icons);
+    const sameOrigin = new URL(manifest.body.start_url, page.url()).origin === origin && manifest.body.icons.every((i) => new URL(i.src, page.url()).origin === origin);
+    check(manifest.ok && manifest.body.name === "florn" && manifest.body.display === "standalone" && manifest.body.icons.length >= 2 && iconsOk && sameOrigin, `${name}: the application is installable from its own origin: the manifest and its icons`, { type: manifest.type, icons: manifest.body.icons.length, iconsOk, sameOrigin });
+    // Rule 41 on the new panels: every new string has its Japanese.
+    await page.click("#lang-ja");
+    await sleep(300);
+    const filesTitle = await page.textContent("#files-title");
+    const residency = await page.textContent('#residency option[value="swap"]');
+    const loadCp = await page.textContent("#load-checkpoint");
+    check(filesTitle === "このブラウザーに保持" && residency === "容量を超えた分はスワップ" && loadCp === "チェックポイントを読み込む…", `${name}: the new panels are in the chosen language`, { filesTitle, residency, loadCp });
+    await page.click("#lang-en");
+    await page.close();
+  } catch (err) {
+    check(false, `${name}: installable manifest`, { error: String(err).split("\n")[0] });
   }
 
   // Rule 41: the language switches mid-run without a reload and keeps the typed text; every
@@ -406,7 +768,9 @@ for (const name of browsers) {
       }
     }
     const max = Math.max(...Object.values(reached), 0);
-    check(Object.keys(reached).length === landmarks.length && max <= 40, `${name}: every landmark's control is reached by keyboard within 40 presses`, { reached, presses });
+    // The bound grew by the controls 0.3 added before the timeline: the residency choice, the
+    // checkpoint loader, and the Files list (one stop, its row's two buttons).
+    check(Object.keys(reached).length === landmarks.length && max <= 48, `${name}: every landmark's control is reached by keyboard within 48 presses`, { reached, presses });
     // Arrow keys move inside the actors list without leaving it.
     await page.focus('button.actor[data-actor="1"]');
     await page.keyboard.press("ArrowDown");

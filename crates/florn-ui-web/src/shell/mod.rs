@@ -48,9 +48,20 @@ extern "C" {
     /// `shell_scenario` with them.
     #[wasm_bindgen(method, js_name = loadLab)]
     fn load_lab(this: &Bridge, name: &str);
-    /// Ask for a file of a kind (`scenario`, `record`, `module`); the loader calls `shell_file`.
+    /// Ask for a file of a kind (`scenario`, `record`, `module`, `checkpoint`); the loader calls
+    /// `shell_file`.
     #[wasm_bindgen(method, js_name = pickFile)]
     fn pick_file(this: &Bridge, kind: &str);
+    /// Keep a file in origin storage (RFC 009 rule 16), by its hash with its name and kind
+    /// (`enum(file-kind)`); the loader then calls `shell_files` with the list.
+    #[wasm_bindgen(method)]
+    fn store(this: &Bridge, kind: &str, name: &str, bytes: &[u8]);
+    /// Reopen a stored file by its key: the loader hands it back as the file it is.
+    #[wasm_bindgen(method, js_name = openStored)]
+    fn open_stored(this: &Bridge, key: &str);
+    /// Hand a stored file to the person as a download.
+    #[wasm_bindgen(method, js_name = exportStored)]
+    fn export_stored(this: &Bridge, key: &str);
     /// The operating system's reduced-motion preference.
     #[wasm_bindgen(method, js_name = reducedMotion)]
     fn reduced_motion(this: &Bridge) -> bool;
@@ -173,6 +184,12 @@ impl Shared {
     pub fn pick_file(&self, kind: &str) {
         self.bridge.pick_file(kind);
     }
+    pub fn open_stored(&self, key: &str) {
+        self.bridge.open_stored(key);
+    }
+    pub fn export_stored(&self, key: &str) {
+        self.bridge.export_stored(key);
+    }
     pub fn save_scenario(&self) {
         let Some((name, text)) =
             self.read(|vm| (vm.draft.name.committed.clone(), vm.draft.to_toml()))
@@ -182,6 +199,8 @@ impl Shared {
         let file = format!("{}.toml", if name.is_empty() { "scenario" } else { &name });
         self.bridge
             .download(&file, text.as_bytes(), "application/toml");
+        // Saved: kept in this browser too (RFC 009 rule 16).
+        self.bridge.store("manifest", &file, text.as_bytes());
     }
     pub fn about(&self) -> (String, bool, String) {
         (
@@ -210,18 +229,22 @@ pub fn shell_reply(bytes: &[u8]) {
             vm.apply(&env.message);
         }
         s.flush();
-        // A file the Host built goes to the person now.
+        // A file the Host built goes to the person now, and to origin storage (RFC 009 rule
+        // 16); a branch's parent record goes to storage only (rule 11).
         let exported =
             s.vm.try_borrow_mut()
                 .ok()
                 .and_then(|mut vm| vm.take_exported());
-        if let Some((kind, name, bytes)) = exported {
-            let mime = match kind {
-                FileKind::Manifest => "application/toml",
-                FileKind::DiagnosticLog => "application/x-ndjson",
-                _ => "application/octet-stream",
-            };
-            s.bridge.download(&name, &bytes, mime);
+        if let Some(e) = exported {
+            s.bridge.store(e.kind.as_str(), &e.name, &e.bytes);
+            if !e.keep_only {
+                let mime = match e.kind {
+                    FileKind::Manifest => "application/toml",
+                    FileKind::DiagnosticLog => "application/x-ndjson",
+                    _ => "application/octet-stream",
+                };
+                s.bridge.download(&e.name, &e.bytes, mime);
+            }
         }
     });
 }
@@ -250,12 +273,14 @@ pub fn shell_admit(bytes: &[u8]) {
     });
 }
 
-/// A file the person chose: `scenario`, `record` (to replay) or `module`.
+/// A file the person chose or reopened: `scenario`, `record` (to replay), `module` or
+/// `checkpoint` (a run from it, RFC 009 rule 6).
 #[wasm_bindgen]
 pub fn shell_file(kind: &str, bytes: &[u8]) {
     with_shared(|s| match kind {
         "scenario" => s.update(|vm| vm.open_scenario(bytes.to_vec())),
         "record" => s.update(|vm| vm.replay(bytes.to_vec())),
+        "checkpoint" => s.update(|vm| vm.load_checkpoint(bytes.to_vec())),
         "module" => s.update(|vm| {
             vm.admit(bytes.to_vec());
             vm.load_module(bytes.to_vec());
@@ -278,6 +303,31 @@ pub fn shell_labs(names: &str) {
                 .collect(),
         )
     });
+}
+
+/// Origin storage's files (RFC 009 rule 16), one per line as `kind\tname\tkey\tbytes`, and
+/// the cache's size.
+#[wasm_bindgen]
+pub fn shell_files(lines: &str, bytes: f64) {
+    let files = lines
+        .lines()
+        .filter_map(|l| {
+            let mut parts = l.split('\t');
+            Some(florn_ui_model::StoredFile {
+                kind: parts.next()?.to_string(),
+                name: parts.next()?.to_string(),
+                key: parts.next()?.to_string(),
+                bytes: parts.next()?.parse().ok()?,
+            })
+        })
+        .collect();
+    with_shared(|s| s.update(|vm| vm.set_files(files, bytes.max(0.0) as u64)));
+}
+
+/// A file the browser let go from origin storage (rule 16): a plain fact.
+#[wasm_bindgen]
+pub fn shell_evicted(kind: &str, name: &str) {
+    with_shared(|s| s.update(|vm| vm.evicted(kind, name)));
 }
 
 /// Whether the page is cached for offline use (rule 35).
@@ -420,8 +470,14 @@ pub fn shell_state() -> String {
                     format!("\"{}\":[{},{}]", n.id, q.x, q.y)
                 })
                 .collect();
+            let files: Vec<String> = vm
+                .files
+                .iter()
+                .map(|f| format!("{{\"kind\":{},\"name\":{},\"key\":{},\"bytes\":{}}}", js_str(&f.kind), js_str(&f.name), js_str(&f.key), f.bytes))
+                .collect();
+            let checkpoints: Vec<String> = vm.checkpoints.iter().map(|c| c.instant.tick.to_string()).collect();
             format!(
-                "{{\"state\":{},\"now\":{},\"instant\":{},\"handled\":{},\"records\":{},\"chain\":{},\"seed\":{},\"ended\":{},\"replay\":{},\"transport\":{},\"dropped\":{},\"nodes\":{},\"links\":{},\"links_down\":{},\"faulted\":{},\"flights\":{},\"flights_seen\":{},\"selected\":{},\"timeline\":{},\"routes\":{},\"neighbours\":{},\"interventions\":{},\"applied\":{},\"notices\":{},\"draft_problems\":{},\"draft_errors\":{},\"admitted\":{},\"frame_median_ms\":{},\"frame_p95_ms\":{},\"frames\":{},\"offline\":{},\"positions\":{{{}}},\"codes\":[{}]}}",
+                "{{\"state\":{},\"now\":{},\"instant\":{},\"handled\":{},\"records\":{},\"chain\":{},\"seed\":{},\"ended\":{},\"replay\":{},\"transport\":{},\"dropped\":{},\"nodes\":{},\"links\":{},\"links_down\":{},\"faulted\":{},\"flights\":{},\"flights_seen\":{},\"selected\":{},\"timeline\":{},\"routes\":{},\"neighbours\":{},\"interventions\":{},\"applied\":{},\"notices\":{},\"draft_problems\":{},\"draft_errors\":{},\"admitted\":{},\"frame_median_ms\":{},\"frame_p95_ms\":{},\"frames\":{},\"offline\":{},\"positions\":{{{}}},\"codes\":[{}],\"undone\":{},\"go_back\":{},\"checkpoints\":[{}],\"parent\":{},\"run_id\":{},\"files\":[{}],\"storage_bytes\":{},\"swapping\":{},\"limited_by\":{},\"residency\":{}}}",
                 js_str(vm.run.state.as_str()),
                 vm.run.now.map_or("null".into(), |a| a.tick.to_string()),
                 vm.topology.instant,
@@ -455,6 +511,16 @@ pub fn shell_state() -> String {
                 s.offline.get_untracked(),
                 positions.join(","),
                 codes,
+                vm.undone.len(),
+                vm.go_back.as_ref().map_or("null".into(), |g| g.tick.to_string()),
+                checkpoints.join(","),
+                vm.run.parent.as_ref().map_or("null".into(), |(t, p)| format!("{{\"instant\":{t},\"run\":{}}}", js_str(p))),
+                vm.run.run_id.as_deref().map_or("null".into(), js_str),
+                files.join(","),
+                vm.storage_bytes,
+                vm.status.swapping.map_or("null".into(), |(r, a)| format!("[{r},{a}]")),
+                vm.status.limited_by.as_deref().map_or("null".into(), js_str),
+                js_str(vm.residency.as_str()),
             )
         }) {
             out = text;
