@@ -16,10 +16,12 @@ Each release also carries prebuilt binaries for x86-64 Linux, AArch64 Linux and 
 
 ```text
 florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N]
-          [--out <file>] [--trace] [--payloads] [--cost-model N]
+          [--out <file>] [--trace] [--payloads] [--cost-model N] [--residency resident|swap]
+          [--checkpoint-at TICK --checkpoint-out <file>]
 florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]
-          [--to TICK] [--out <file>] [--trace] [--payloads]
+          [--to TICK] [--out <file>] [--trace] [--payloads] [--residency resident|swap]
 florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>]
+          [--residency resident|swap]
 florn admit <module.wasm>
 florn probe [--instances N] [--memory BYTES]
 florn help
@@ -66,7 +68,7 @@ A branch (RFC 009 section 4) is a new run from the current instant of the curren
 
 ## Scenarios with recorded digests
 
-`scenarios/` holds fifteen scenarios over the SDK's guests, the built guest modules under `scenarios/modules`, and `digests.toml` with the chain, the record count and the end of each run, plus every module's source and admitted hash. To check a machine:
+`scenarios/` holds twenty-seven scenarios over the SDK's guests, the built guest modules under `scenarios/modules`, and `digests.toml` with the chain, the record count and the end of each run, plus every module's source and admitted hash. To check a machine:
 
 ```sh
 florn run scenarios/echo-pair.toml --modules scenarios/modules --seed 42

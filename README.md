@@ -40,7 +40,7 @@ The browser application is the release's `florn-app-0.3.0.tar.gz`, served under 
 
 ## More
 
-- [The book](./docs/src/SUMMARY.md): module authors, automation, compatibility, architecture, contributing
+- [The book](./docs/src/SUMMARY.md): module authors, automation, the browser interface and the learning lab (in English and Japanese), compatibility, the release notes, architecture, contributing
 - [Requirements specification](./docs/src/requirements.md) and [external design](./docs/src/external-design.md)
 - [RFCs](./rfcs/README.md) — start with [RFC 001, the determinism contract](./rfcs/done/001-determinism-contract.md)
 - [The conformance kit](./crates/florn-conformance/README.md) and the [shipped scenarios](./scenarios/README.md)

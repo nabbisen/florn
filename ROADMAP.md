@@ -1,7 +1,7 @@
 # florn Roadmap
 
 **Status.** Authorised by the owner on 2026-10-13.
-**Last updated.** 2026-10-13
+**Last updated.** 2026-10-31
 
 florn is planned by milestones, not by dates. A release is made when its exit criteria are met.
 
@@ -20,7 +20,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | Stage 0 | Foundation | Decisions, proofs of concept, foundational RFCs, revised specifications. No product code. | — |
 | Phase 1 | Core on two engines | Deterministic kernel, module admission, guest SDK, headless runner. One guest with an identical trace on both engines. **Released 2026-10-20.** | 0.1.0 |
 | Phase 2 | Network learning lab | Network domain, first protocol guests, browser UI in two languages. **Released 2026-10-29.** | 0.2.0 |
-| Phase 3 | Depth | Checkpoints, backward navigation, branching, import of user modules, a second protocol family. | 0.3.0 |
+| Phase 3 | Depth | Checkpoints, backward navigation, branching, import of user modules, a second protocol family. **Released 2026-10-31.** | 0.3.0 |
 | Phase 4 | Circuit and control | Second domain. Tests whether the core is neutral. | 0.4.0 |
 | Phase 5 | Finance | Third domain. Tests the core under high event volume. | 0.5.0 |
 | Phase 6 | Native application | Native GUI on the native Host. | 0.6.0 |
@@ -77,7 +77,9 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | **Scope** | Network domain contract and link model. Guests in a ladder: echo, a distance-vector protocol, an OSPF single-area subset. Browser UI: topology, run controls, timeline, packet inspector, breaking a link during a run, save, load, replay. English and Japanese. Hosting with versioned paths. |
 | **Not in scope** | BGP. Checkpoints. The native GUI. |
 | **Exit criteria** | The first journeys work and are accepted by the owner: run a bundled example; break a link and follow the reconvergence; save, reload, and replay the same run. The application makes no request to any other origin. |
-| **RFCs** | Network domain. UI external design. |
+| **RFCs** | 008 (accepted 2026-10-24); the 0.2 rules of RFC 005. The UI's external design is `docs/src/external-design.md`. |
+| **Handoff package** | `rfcs/handoffs/008-network-domain/` (2026-10-24): PR-15 to PR-22. |
+| **Released** | 0.2.0 on 2026-10-29; the evidence in `docs/src/releases/0.2.0.md`. |
 
 ## Phase 3 — Depth (0.3.0)
 
@@ -85,7 +87,9 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 |---|---|
 | **Scope** | Checkpoints, backward navigation, branching. Import of user modules through the UI. BGP guest. Usability test with people who did not build florn. **Metering optimisation:** florn's own metering pass, released as cost-model version 2 (see "Metering cost" below). **Actor swapping in the browser:** actors beyond the browser's instance ceiling are held as exported state and re-instantiated on activation. |
 | **Exit criteria** | A run restored from a checkpoint continues with the same digest as an uninterrupted run. A user imports a module and runs it in a topology. The cost benchmark shows at most 1.5× on the protocol-style guest and 2× on the compute-style guest under cost-model version 2, or the owner has decided again on the measured figures. Runs recorded under version 1 still replay. |
-| **Released** | 0.3.0 on 2026-10-31: every criterion has its evidence in `docs/src/releases/0.3.0.md` (the kit's checkpoint tests across the two Hosts; journey J5; the cost figures of both versions, the owner's decision of 2026-10-29 on the one engine over the compute-style target; a 0.1.0 and a 0.2.0 record replayed). The usability test of the handoff's checklist runs at the owner's pace; its findings become issues for 0.3.x or Phase 4. |
+| **RFCs** | 009, 010, 011 (accepted 2026-10-29); the 0.3 rules of RFC 001, 003 and 005. |
+| **Handoff package** | `rfcs/handoffs/009-depth/` (2026-10-29): PR-23 to PR-30. |
+| **Released** | 0.3.0 on 2026-10-31: every criterion has its evidence in `docs/src/releases/0.3.0.md` (the kit's checkpoint tests across the two Hosts; journey J5; the cost figures of both versions, the owner's decision of 2026-10-29 on the one engine over the compute-style target; a 0.1.0 and a 0.2.0 record replayed). The usability test of the handoff's checklist runs at the owner's pace; its findings become issues for 0.3.x or Phase 4. **Accepted by the owner on 2026-10-31.** |
 
 ## Phase 4 — Circuit and control (0.4.0)
 
@@ -128,12 +132,14 @@ Guest contracts, the scenario format, and the Host control interface are declare
 
 | Role | Sessions | From | Trigger to add |
 |---|---|---|---|
-| Developer — runtime | 1 | Stage 0, now | — |
+| Developer — runtime | 1 | Stage 0 | — |
 | Developer — UI | +1 | Stage 0, at POC-7 | When the runtime developer has reported POC-1 and POC-2, or earlier if the owner wants the UI answer sooner |
 | Verifier | +1 | Phase 1, from its first handoff | Phase 1 start |
 | Developer — domain | +1 | Phase 4 | If the circuit domain and the UI are to proceed in parallel; otherwise the runtime developer takes it |
 
 The team grows only when two lanes of work are independent and both are ready. Every added session adds handoffs and reviews that pass through the owner.
+
+Phases 1 to 3 were implemented by the architect on the owner's instruction of 2026-10-13, with the roles above held by one session. From Phase 4 (2026-10-31) the roles are held by separate sessions: the architect designs, plans and reviews; the development team implements and tests from the handoff packages; the owner authorises. The rules between the roles and the authorisations are in `docs/src/contributing.md`.
 
 ## Release cycle
 

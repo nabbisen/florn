@@ -81,8 +81,8 @@ impl Actor for MyGuest {
 florn_guest::actor!(MyGuest);
 ```
 
-Build and admit (the runner comes from `cargo install --path crates/florn` in a checkout of
-florn, or `cargo install --git https://github.com/nabbisen/florn --tag 0.3.0 florn`):
+Build and admit (the runner comes from `cargo install florn`, or from a checkout of florn with
+`cargo install --path crates/florn`, or `cargo install --git https://github.com/nabbisen/florn --tag 0.3.0 florn`):
 
 ```sh
 rustup target add wasm32-unknown-unknown

@@ -6,7 +6,7 @@ The view model of florn's user interface (RFC 005 rule 37): what is shown, over 
 
 | Module | What |
 |---|---|
-| `lib.rs` | `ViewModel`: the scenario, the run as the status line shows it, the status notices (transport, dropped records, limiting factor), the selection and the inspector, the interventions asked and applied, the outbox; what a person does (`open_scenario`, `new_run`, `run`, `pause`, `step`, `step_to`, `set_link`, `set_node`, `intervene`, `replay`, export) and what the Host says (`apply`, `display`) |
+| `lib.rs` | `ViewModel`: the scenario, the run as the status line shows it, the status notices (transport, dropped records, limiting factor), the selection and the inspector, the interventions asked and applied, the outbox; what a person does (`open_scenario`, `new_run`, `run`, `pause`, `step`, `step_to`, `goto` and `confirm_go_back` with the undone interventions to `reapply` or `discard_undone`, `rewind`, `branch`, `take_checkpoint`, `load_checkpoint`, `set_residency`, `set_link`, `set_node`, `intervene`, `replay`, export with `keep_only`, the kept files through `set_files` and `evicted`) and what the Host says (`apply`, `display`) |
 | `topology.rs` | The actors as nodes and the connections as links, each link's state from the domain's events, the flights and the activity from the display stream, the viewport |
 | `timeline.rs` | The ordered record of the run from the trace and the notifications: activations, faults, interventions, scheduled changes, domain events, the reports the view reads; filters by actor, kind and window |
 | `inspector.rs` | The selected actor, connection, message or world: configuration as fields, status and faults, the latest reports decoded by the module's layouts, a message's bytes and decoded fields |

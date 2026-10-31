@@ -31,6 +31,7 @@ The browser Host runs the same scenarios through its test page: `ci/browser/run.
 | `bench_compute` | Multiplies two 64×64 matrices | The cost benchmark, B2 |
 | `realloc_loop` (text, in the kit) | A `cabi_realloc` that loops | Budget before lowering |
 | `crossing` (text, in the kit) | Returns at once; echoes a payload | The crossing benchmark |
+| `net_echo`, `distance_vector`, `ospf`, `bgp` (the `florn-guest-network` examples) | The network ladder of RFC 008 and RFC 011 | `network.rs`, `ladder.rs`, `ospf.rs`, `bgp.rs`; the shipped `net-*`, `dv-*`, `ospf-*` and `bgp-*` scenarios |
 
 ## The tables
 
@@ -66,8 +67,8 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 | Effects | `rfc_001::an_activation_that_faults_commits_nothing` |
 | Randomness | `rfc_002::a_fault_restores_the_stream_to_the_start_of_the_activation`; `rfc_001::a_third_actor_changes_no_draw_of_the_first_two` |
 | Telemetry | `rfc_002::telemetry_channels_and_quota_are_enforced_and_text_reaches_the_log` |
-| Compound activation | Waits for a domain world (Phase 2) |
-| Two domains | Waits for a domain world (Phase 2) |
+| Compound activation | Not yet written: no shipped domain declares one. The circuit domain (Phase 4) is the first, and its RFC names the test (RFC 002 rules 44 and 45) |
+| Two domains | Not yet written: a guest with two domain worlds first exists with the circuit domain (RFC 002 rule 48) |
 | No ambient access | `rfc_002::no_ambient_access` |
 | SDK | Every test: the guests are built from the SDK with the toolchain alone |
 
@@ -85,10 +86,14 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 | Memory | `rfc_001::memory_within_the_limit_is_never_refused` |
 | Estimate before instantiate | `rfc_003::an_estimate_above_capacity_is_refused_before_anything_is_instantiated` |
 | Capacity probe | the runner's `probe_prints_the_capacity_and_bad_arguments_print_usage` (`crates/florn/tests/cli.rs`) |
-| Export and restore (AC-006) | `ac::ac_006_…` natively; the browser half waits for the restore command of release 0.3, since the control interface of 0.1 carries no restore |
-| Versions | `rfc_003::a_checkpoint_of_another_version_is_refused_naming_the_field`; cost-model version 2 does not exist yet |
+| Export and restore (AC-006) | `ac::ac_006_…` natively; in the browser, `ci/browser/run.js` restores a native checkpoint in every browser and a browser checkpoint natively (RFC 009 rule 6) |
+| Versions | `rfc_003::a_checkpoint_of_another_version_is_refused_naming_the_field`; `cost_model_2.rs` for version 2 against version 1 (RFC 010) |
 | Cost benchmark | `rfc_003::the_cost_benchmark_produces_its_figures`; the figures from `figures` |
 | NaN probe | `rfc_003::the_nan_probe_reports_five_patterns`; the bits per architecture from `figures` in CI |
+
+### RFC 008 to 011
+
+The later RFCs have their tests by file rather than by table: `rfc_008.rs` and `network.rs` (the domain interface and the link model), `ladder.rs`, `ospf.rs` and `bgp.rs` (the guests), `display.rs` (the display stream), `checkpoints.rs`, `navigation.rs`, `branching.rs`, `swapping.rs` and `retention.rs` (RFC 009), `cost_model_2.rs` (RFC 010), `ui.rs` (the view model over the real Host). Each test names the rule it verifies in its name or its comment.
 
 ### RFC 005 section 11, the rows that apply in 0.1
 

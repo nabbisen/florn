@@ -1,6 +1,6 @@
 # The browser interface
 
-The application of release 0.2 (RFC 005 section 8; the external design, section 3): one window, one scenario, one run at a time, in English or Japanese. The Host runs in a worker; the shell on the main thread shows what the view model holds and draws the scene on a canvas.
+The application of release 0.3 (RFC 005 section 8; the external design, section 3): one window, one scenario, one run at a time, in English or Japanese. The Host runs in a worker; the shell on the main thread shows what the view model holds and draws the scene on a canvas.
 
 ## Running it
 
@@ -11,6 +11,8 @@ cd ci/browser && npm ci && node serve.js
 ```
 
 Then open `http://127.0.0.1:8765/`. The server sets the isolation headers and the policy of RFC 005 rule 33; a host that cannot set them still serves the application, which then says in its status line that telemetry uses messages. After one visit the application starts offline and says "Available offline".
+
+Each release ships the built application as `florn-app-<version>.tar.gz`. Serve its contents, with the headers above, at a path that does not change between versions (for example `…/0.3.0/`); the application never updates itself in place, and the person chooses the version they open. The SHA-256 of every file of the bundle is in the release notes.
 
 ## What is on the screen
 
@@ -46,6 +48,12 @@ What you open, save, import or export is kept in this browser as a cache, listed
 
 The application is installable where the browser offers it: a web application manifest and its icons come from the application's own origin, the service worker is the one that already serves it offline, and nothing else is added. Installation changes no behaviour: the same files, the same version at the same path, the same offline start. No address ever carries content: the URL names at most a bundled lab and the version's path; scenarios, run records and checkpoints travel only as files you export after their preview.
 
+## Language
+
+The language is switched in the header, without a reload and without losing what is being typed. Japanese text enters the form fields through the input method and is drawn on the canvas as typed. Every sentence shown comes whole from the catalogue; nothing is assembled from fragments. The codes are the same in every language.
+
 ## What the conformance kit checks
 
 `ci/browser/journeys.js` drives the journeys J1 to J5 and the procedures P1 to P4 of the acceptance criteria in Chromium, Firefox and WebKit (J5: a module imported from a file with both hashes shown, placed, run and replayed, the kept file exporting byte for byte; P1: going back with the discard notice and the undone list, re-applied; P2: a branch with its parent named and both records replaying natively; P3: a checkpoint exported, the application opened again, the checkpoint loaded and run to the lab's digest, another scenario's refused; P4: a scenario beyond the capacity refused resident and run swapping to the runner's digest), and the checks of release 0.2: the lab runs and its routes converge in the views; a link taken down is listed with its instant and the run reconverges; a frame decodes in the inspector; the exported run record replays to a match; the saved scenario reloads and replays the saved run to the same digest; the triangle authored from an empty scenario runs to the digest the runner recorded. It also switches the language mid-run and checks the typed text stays, reaches every landmark by keyboard within a bound, starts the application offline, measures the draw time, and asserts the network log holds one origin.
+
+The [learning lab](./lab.md) chapter walks through the OSPF lab in order.

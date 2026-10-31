@@ -493,20 +493,20 @@ Retired identifiers are kept here so that references in older material still res
 
 ## 24. Open items
 
-Items that remain open and where they are decided.
+Where each item left open at acceptance was decided; items 3, 6 and 7 wait for the domain RFCs and the native shell.
 
 | # | Item | Decided in |
 |---|---|---|
-| 1 | Exact WIT types, error model, and core contract | RFC 002 |
-| 2 | Browser support matrix and required features | After the transport PoC; WEB-011 |
+| 1 | Exact WIT types, error model, and core contract | RFC 002 and RFC 007, implemented in 0.1.0 |
+| 2 | Browser support matrix and required features | Chromium, Firefox and WebKit, checked in CI from 0.1.0; the isolation headers and the message fallback settled by the transport PoC (RFC 005 rule 33); WEB-011 |
 | 3 | Numerical libraries for circuit and finance | Domain RFCs, under SEC-012 |
-| 4 | Manifest and package format | RFC 004 |
-| 5 | UI toolkit for the browser | UI shell PoC; RFC 005 |
+| 4 | Manifest and package format | RFC 004, implemented in 0.1.0 |
+| 5 | UI toolkit for the browser | Leptos, confirmed by the UI shell PoC; RFC 005 rule 38; shipped in 0.2.0 |
 | 6 | UI toolkit for the native application | `0.6` design |
 | 7 | Tolerances per continuous domain | Domain RFCs |
-| 8 | Default limits and budgets | Measurement in `0.1`; NFR-013 |
-| 9 | Accessibility conformance target | UI external design |
-| 10 | Whether metered work is compared across Hosts | RFC 001 open question 5 |
+| 8 | Default limits and budgets | Measured and fixed in 0.1.0 (RFC 001 and RFC 003 open questions; the budget default 100,000,000); NFR-013 |
+| 9 | Accessibility conformance target | WCAG 2.2 AA, external design §10 |
+| 10 | Whether metered work is compared across Hosts | Yes: the count is identical under every engine by construction (RFC 003's note on RFC 001 open question 5) |
 | 11 | Native capabilities, TAP/TUN, hardware-in-the-loop | After `0.6` |
 
 ## 25. Change history

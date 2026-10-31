@@ -8,11 +8,13 @@ Every change runs this before it is pushed; continuous integration runs the same
 cargo fmt --all
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy --locked --target wasm32-unknown-unknown -p florn-engine-web -p florn-platform-web -p florn-ui-web -- -D warnings
+cargo clippy --locked --target wasm32-unknown-unknown -p florn-ui-web --features shell --bin florn-ui-web -- -D warnings
 cargo test --workspace --locked
 cargo deny check licenses advisories bans sources
 python3 -I ci/check-deps.py
 ci/check-rfc-index.sh
 ci/forbidden-words.sh
+ci/check-shell-exports.sh
 ```
 
 After any change to the SDK or an example guest, regenerate the shipped modules and digests, and commit them:
@@ -44,7 +46,39 @@ Fuzzing needs the nightly toolchain and `cargo-fuzz`; `ci/fuzz.sh 60` runs every
 - Every message a person sees is a code with typed parameters from the catalogue of RFC 007; the English table in `florn-cli` is the source text, kept equal to the catalogue by a test.
 - A change of a file format or of an encoding needs a new version number and a new recorded value in the kit's format tests; a silent edit fails them.
 - Decisions are recorded as RFCs under `rfcs/` and never deleted; `rfcs/README.md` is the index, checked in CI.
-- Commit messages: a digest subject; a body of at most 400 characters when needed.
+- Commit messages: a digest subject; a body of at most 400 characters when needed; no section sign, the word "section" instead.
+- A change is one unit of the handoff's pull-request plan; unrelated refactoring, cleanup and feature work are not combined.
+- Private working files live outside the repository; a public file cites no private path.
+
+## Roles
+
+florn is developed by a small team under one owner. Each role answers for what the table says and for nothing else; a question that belongs to another role is put to that role in writing, not settled in place.
+
+| Role | Answers for | Does not |
+|---|---|---|
+| Owner | Direction, priorities and scope; the roadmap and every change to it; the acceptance of an RFC and of a phase; the approval of every release; the publication of the crates; the repository's settings, secrets and collaborators | — |
+| Architect | Requirements, external design, RFCs and the handoff package of each phase; the release cycle and the release recommendation; the review of every change against the RFCs and the handoff before it is merged; the decision register | Decide scope, a release or a version on the owner's behalf; implement in the team's place beyond narrow emergency support the owner asks for |
+| Developer | Implementation from an accepted RFC and its handoff; the unit tests and the kit's tests the handoff names; the routine above; a review request with evidence for every change | Change a requirement, a contract, a file format, a security boundary or a dependency without a change request; tag, release or publish |
+| Verifier | Acceptance checks written from the RFC and the handoff, independently of the implementation | Edit a failing check to make it pass; read the implementation before the check is written |
+
+A developer who finds a defect in the design reports it to the architect, with a proposal when there is one, and does not redesign in place. A failing acceptance check is resolved by changing the implementation or by a ruling from the architect.
+
+## Authorisations
+
+**Status.** Proposed on 2026-10-31 at the Phase 4 entry; in force when the owner authorises it. Until then the owner's standing authorisations apply as given.
+
+| Action | Who | Gate |
+|---|---|---|
+| Commit and push to a branch | developer, architect | The routine green locally; the commit message rules below |
+| Open a pull request to `main` | developer, architect | CI green on the branch; the review request written |
+| Merge to `main` | architect, after the review | The review's outcome recorded; the shipped modules and digests regenerated when the SDK, a guest or admission changed; the progress table of the handoff updated in the same change or the next |
+| Amend an RFC, the roadmap, a contract or a file format | architect | An RFC amendment or a new RFC; the owner's acceptance when the roadmap or an open question reserves the decision to the owner |
+| Tag a release | architect, on the owner's approval of the release recommendation | The release checklist of `ROADMAP.md`; the release notes; the RFC index; the version bumped first |
+| Publish the crates | owner | From the tagged commit; `ci/publish.sh --dry-run` after the version bump |
+| Add or change a dependency | developer, in the pull request that needs it | Exact pin; licence on the allow-list; `cargo deny` green; the reason in the pull request |
+| Repository settings, secrets, collaborators | owner | — |
+
+Every session acts under the owner's account, so the repository cannot tell the roles apart; the controls above are procedural, and the branch protection of `main` (a pull request and green status checks required for everyone) is the one the repository enforces.
 
 ## Publishing to crates.io
 
