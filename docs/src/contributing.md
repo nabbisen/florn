@@ -41,13 +41,13 @@ Fuzzing needs the nightly toolchain and `cargo-fuzz`; `ci/fuzz.sh 60` runs every
 
 ## Rules
 
-- Every dependency is pinned to an exact version in `Cargo.toml` and added by the pull request that needs it, with its licence on the allow-list of `deny.toml` (RFC 006 rule 6). A version is changed by a pull request that says why.
+- Every dependency is pinned to an exact version in `Cargo.toml` and added by the change that needs it, with its licence on the allow-list of `deny.toml` (RFC 006 rule 6). A version is changed by a pull request that says why.
 - `unsafe` appears only in the adapters, the ABI crate and the guest SDK, with the invariant stated at each use; every other crate forbids it.
 - Every message a person sees is a code with typed parameters from the catalogue of RFC 007; the English table in `florn-cli` is the source text, kept equal to the catalogue by a test.
 - A change of a file format or of an encoding needs a new version number and a new recorded value in the kit's format tests; a silent edit fails them.
 - Decisions are recorded as RFCs under `rfcs/` and never deleted; `rfcs/README.md` is the index, checked in CI.
 - Commit messages: a digest subject; a body of at most 400 characters when needed; no section sign, the word "section" instead.
-- A change is one unit of the handoff's pull-request plan; unrelated refactoring, cleanup and feature work are not combined.
+- A change is one unit of the handoff's plan (its units are named PR-NN and are commits on `main`); unrelated refactoring, cleanup and feature work are not combined.
 - Private working files live outside the repository; a public file cites no private path.
 
 ## Roles
@@ -65,20 +65,19 @@ A developer who finds a defect in the design reports it to the architect, with a
 
 ## Authorisations
 
-**Status.** Proposed on 2026-10-31 at the Phase 4 entry; in force when the owner authorises it. Until then the owner's standing authorisations apply as given.
+**Status.** Decided by the owner on 2026-10-31: the work is serial, on `main` alone, and the roles exchange files, not prompts. No architect's job and no development team's job run at the same time, so there is one change in flight at any moment and no branch beside `main`.
 
 | Action | Who | Gate |
 |---|---|---|
-| Commit and push to a branch | developer, architect | The routine green locally; the commit message rules below |
-| Open a pull request to `main` | developer, architect | CI green on the branch; the review request written |
-| Merge to `main` | architect, after the review | The review's outcome recorded; the shipped modules and digests regenerated when the SDK, a guest or admission changed; the progress table of the handoff updated in the same change or the next |
+| Commit and push to `main` | developer, architect | The routine green locally; the commit message rules above; one unit of the handoff's plan per change; nothing else in flight |
+| Accept a change as done | architect, from the review request file, after the push | CI green on `main`; the review's outcome recorded; the shipped modules and digests regenerated when the SDK, a guest or admission changed; the progress table of the handoff updated in the same change or the next. A change the review rejects is corrected by a following commit, never by rewriting history |
 | Amend an RFC, the roadmap, a contract or a file format | architect | An RFC amendment or a new RFC; the owner's acceptance when the roadmap or an open question reserves the decision to the owner |
 | Tag a release | architect, on the owner's approval of the release recommendation | The release checklist of `ROADMAP.md`; the release notes; the RFC index; the version bumped first |
 | Publish the crates | owner | From the tagged commit; `ci/publish.sh --dry-run` after the version bump |
-| Add or change a dependency | developer, in the pull request that needs it | Exact pin; licence on the allow-list; `cargo deny` green; the reason in the pull request |
+| Add or change a dependency | developer, in the change that needs it | Exact pin; licence on the allow-list; `cargo deny` green; the reason in the commit message |
 | Repository settings, secrets, collaborators | owner | — |
 
-Every session acts under the owner's account, so the repository cannot tell the roles apart; the controls above are procedural, and the branch protection of `main` (a pull request and green status checks required for everyone) is the one the repository enforces.
+Every session acts under the owner's account, so the repository cannot tell the roles apart: the controls are the routine, CI on `main`, and the review request and review files that every change leaves behind.
 
 ## Publishing to crates.io
 
