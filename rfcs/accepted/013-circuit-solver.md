@@ -33,8 +33,8 @@ The solver is Host code of `florn-domain-circuit`. It advances the plant from on
 | `on-non-convergence` | `"stop-run"` or `"hold"` | `"stop-run"` | Rule 17 |
 | `faulted-policy` | `"drop"` or `"stop-run"` | `"drop"` | RFC 012 rule 17 |
 | `detect-interval` | time, at least 1 tick | `max-step` | The longest gap between two advances when the scenario has a detector (RFC 012 rule 8) |
-| `max-breakpoints` | integer `1..=1000000` | `65536` | The most pending breakpoints (RFC 012 rule 9); more ends the run with `run.limit-exceeded` |
-| `max-unknowns` | integer `1..=2048` | `256` | The bound of rule 18 (NUM-003); dense factorisation is cubic, so the default keeps a learner's run responsive |
+| `max-breakpoints` | integer, `1` to the Host's maximum (rule 18) | `65536` | The most pending breakpoints (RFC 012 rule 9); more ends the run with `run.limit-exceeded` |
+| `max-unknowns` | integer, `1` to the Host's maximum (rule 18) | `256` | The bound of rule 18 (NUM-003); dense factorisation is cubic, so the default keeps a learner's run responsive |
 | `tolerance.atol` | number, zero or more | `1e-9` | Rule 20: the absolute tolerance, a bare number in the SI unit of the value compared (RFC 004 rule 28: the tolerance applies to values of several dimensions, so no one unit could be written) |
 | `tolerance.rtol` | number in `[0, 1)` | `1e-6` | Rule 20: the relative tolerance |
 
@@ -102,7 +102,14 @@ At constant step Gear 2 reduces to `α = 3/(2h)`, `history = (4·x_n − x_{n−
 
 ## 8. Size and memory
 
-**Rule 18.** The estimate (NUM-003), made by the domain's `validate` before anything is instantiated (the admission estimate counts guest instances and memory only): with `n` unknowns of rule 3 the solver needs `8·n²` bytes for the dense matrix of rule 22, `8·6n` for the vectors and history, `32 × max-breakpoints` for the pending breakpoints at their bound (RFC 012 rule 9), and the guest device's own memory is the module's (RFC 003); `n > max-unknowns` is refused at scenario load with `circuit.too-large` naming `n`, the bound and the bytes (RFC 012 rule 28). The default bound of 256 unknowns is 0.5 MiB of matrix and about ten milliseconds per factorisation; it is a profile field so that a larger plant on the native Host is one line.
+**Rule 18.** The estimate (NUM-003), made by the domain's `validate` before anything is instantiated (the admission estimate counts guest instances and memory only): with `n` unknowns of rule 3 the solver needs `8·n²` bytes for the dense matrix of rule 22, `8·6n` for the vectors and history, `32 × max-breakpoints` for the pending breakpoints at their bound (RFC 012 rule 9), and the guest device's own memory is the module's (RFC 003); `n > max-unknowns` is refused at scenario load with `circuit.too-large` naming `n`, the bound and the bytes (RFC 012 rule 28). The default bound of 256 unknowns is 0.5 MiB of matrix and about ten milliseconds per factorisation; it is a profile field that a scenario can lower and can raise up to the Host's maximum, so that a larger plant on the native Host is one line. **Host maxima** (RFC 001 rule 13: a scenario may lower a limit and cannot raise it above the Host's maximum; the form of RFC 003 rule 19), which the Host gives the domain when it builds it:
+
+| Name | Default | Host maximum, browser | Host maximum, native |
+|---|---|---|---|
+| `max-unknowns` | 256 | 512 (2 MiB of matrix) | 1,024 (8 MiB) |
+| `max-breakpoints` | 65,536 | 262,144 (8 MiB) | 1,000,000 (32 MB) |
+
+The maxima are starting figures: the unit that writes the solver measures one factorisation at each maximum on every engine and records the time and the memory with the figures of a release; the measurement may lower them, and only an amendment raises them. A profile value above the Host's maximum is `circuit.profile-value`.
 
 ## 9. Numbers across Hosts
 
@@ -142,7 +149,7 @@ The outcome is **`matched`** when every stored chain point is equal; **`within-t
 | Breakpoints | A change at tick T acts from the step that starts at T (RFC 012 rule 9); the history is cut there and the next three steps are backward Euler |
 | Failure | `hostile-diverge` (a `bad-device` whose stamps never converge) ends with `non-convergence` under `stop-run` and continues frozen under `hold`, controllers still sampling; the attempts per step never exceed `max-rejections` |
 | Initial solve | A plant that needs `gmin` stepping and one that needs source stepping start; a plant with no solution, a capacitor with an `ic` directly across a voltage source and an inductor without an `ic` across one are refused with `circuit.no-operating-point` before the first event; a current source into a capacitor without an `ic` warns `circuit.floating-node`; a capacitor without an `ic` across a voltage source starts at the source's voltage, and an inductor without an `ic` fed by a current source starts at that current; a guest device's initial-solve calls leave one record, keyed as its `init` |
-| Estimate | A scenario above `max-unknowns` is refused before anything is instantiated, naming the bytes |
+| Estimate | A scenario above `max-unknowns` is refused before anything is instantiated, naming the bytes; a profile value above the Host's maximum, in the browser and natively, is `circuit.profile-value` |
 | Controls | `cargo clippy` fails on a `std` `exp` or `f64::min` placed in the crate; `ci/check-deps.py` fails on a second dependency; the flag script fails on a `target-cpu` in a scratch copy; `bit_identity` fails on a `libm` call missing from its table; each is a test of the control, not only of the code |
 | Bits | `bit_identity` and every circuit scenario's results are compared across x86-64, AArch64, Chromium, Firefox and WebKit by rule 20: the kit reports `matched` or `within-tolerance` per pair and the release notes print the table; the expectation of rule 19 is a figure, not a promise |
 | Comparison | A run compared with itself is `matched`; its payload-less record is `matched` where the chains agree and, across Hosts and doctored so that a chain differs, `needs-payloads` (on one build, `diverged`); a doctored last-bit difference in one report, and a difference in consumed work alone, are `within-tolerance` across Hosts and `diverged` on one build; a numeric difference beyond the tolerance, a different `condition` tick and a different record count are `diverged`, each with its `replay` code |
