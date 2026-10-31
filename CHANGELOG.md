@@ -17,6 +17,13 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - Small documentation corrections: the roles table says the architect reviews after the push, as the owner decided; PHY-006 reads `0.4` dense and `later` sparse; the contracts page lists `florn:network`; two traceability and heading slips of the external design.
 - The roadmap records the Phase 4 plan the owner authorised on 2026-10-31: the milestones M0 to M6, the verifier arrangement, the patch-release rule and release 0.3.1.
 - The Phase 4 handoff package `rfcs/handoffs/012-circuit-domain/`: twenty-six units (PR-31 to PR-56) in six milestones, the checks per unit, and the brief for a verifier session.
+- Gates that can fail (PR-31): `ci/check-rfc-invariants.sh` (an RFC's status line names its folder's state; relative links in the RFCs, the index and the handoff packages resolve), `ci/check-private-paths.sh` (no tracked file names the private working folder), and `ci/test-gates.sh`, which plants one violation at a time in a scratch copy and checks that each control rejects it. The browser kit's page opener, `ci/browser/open.js`, opens a page again once in a fresh context after a navigation timeout or a crash and counts and prints the retries; its rule has a test without a browser. A test that the key sets of `locales/en.json` and `locales/ja.json` are equal.
+
+### Fixed
+- `ci/fuzz.sh` always exited 0 (it piped each run into `tail`) and read a failing `cargo fuzz list` as no targets; it now exits non-zero when a target crashes, when the list fails or when it is empty. The fuzz job saves its corpus between runs and uploads the crash inputs.
+- `ci/check-rfc-index.sh` did not fail for an indexed file that is missing (its loop ran in a subshell and lost the status); it does, and it checks the handoff packages' links too.
+- The browser kit no longer spends two navigations of two minutes on the offline start of a page that is cached (30 seconds each), and the journeys write their run record to their temporary directory: `ci/browser/*-many.florn-run` are no longer tracked.
+- Five references to the private working folder in the three earlier handoff packages are replaced by what they pointed at.
 
 ## [0.3.0] - 2026-10-31
 

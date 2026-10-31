@@ -57,5 +57,5 @@ The acceptance criteria that demonstrate them are AC-001 to AC-007 of the requir
 | Contracts | `contracts/florn-core/wit/` |
 | Example scenarios with recorded digests | `scenarios/` |
 | Documentation for module authors and automation users | `docs/src/` (new chapters in PR-14) |
-| The verifier's acceptance records | `.git-exclude/reviewed/phase1/<task>/README.md` (private, as in Stage 0) |
-| Questions to the architect | `.git-exclude/review-requests/phase1/<task>/README.md`, with the RFC rule cited |
+| The verifier's acceptance records | The verifier's private records, one folder per task (not in the repository, as in Stage 0) |
+| Questions to the architect | A file to the architect, one folder per task in the private review-request area, with the RFC rule cited |

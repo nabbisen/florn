@@ -1,6 +1,6 @@
 # Phase 3 — Acceptance and QA checklist
 
-Entry point: [`README.md`](./README.md). The owner's checks for release 0.3.0, one per pull request, journey J5 and the navigation and branching procedures, the usability test, and the release review. Records go under `.git-exclude/reviewed/phase3/<ID>/README.md` as Phase 1's section D says.
+Entry point: [`README.md`](./README.md). The owner's checks for release 0.3.0, one per pull request, journey J5 and the navigation and branching procedures, the usability test, and the release review. Records go in the verifier's private records, one per ID, as Phase 1's section D says.
 
 ## A. The journeys and procedures (external design section 2; RFC 009 section 7)
 

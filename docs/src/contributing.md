@@ -13,8 +13,11 @@ cargo test --workspace --locked
 cargo deny check licenses advisories bans sources
 python3 -I ci/check-deps.py
 ci/check-rfc-index.sh
+ci/check-rfc-invariants.sh
+ci/check-private-paths.sh
 ci/forbidden-words.sh
 ci/check-shell-exports.sh
+ci/test-gates.sh
 ```
 
 After any change to the SDK or an example guest, regenerate the shipped modules and digests, and commit them:

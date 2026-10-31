@@ -1,6 +1,6 @@
 # Phase 2 — Acceptance and QA checklist
 
-Entry point: [`README.md`](./README.md). The owner's checks for release 0.2.0, one per pull request, and the journeys of the external design as procedures. Records go under `.git-exclude/reviewed/phase2/<ID>/README.md` as Phase 1's section D says.
+Entry point: [`README.md`](./README.md). The owner's checks for release 0.2.0, one per pull request, and the journeys of the external design as procedures. Records go in the verifier's private records, one per ID, as Phase 1's section D says.
 
 ## A. The journeys (external design §2; requirements §22.2)
 

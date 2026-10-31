@@ -683,7 +683,7 @@ for (const name of browsers) {
     const statusSwapping = await page.textContent("#status-swapping");
     check(s.swapping && s.swapping[1] === count && s.swapping[0] < count && /swapping|スワップ/.test(statusSwapping), `${name}: P4 the run swaps and the status line says so with the counts`, { swapping: s.swapping, status: statusSwapping });
     if (existsSync(runner)) {
-      const { stdout } = await run(runner, ["run", manyPath, "--module", echoPath, "--seed", "1"]);
+      const { stdout } = await run(runner, ["run", manyPath, "--module", echoPath, "--seed", "1", "--out", join(dir, `${name}-many.florn-run`)]);
       const native = chainOf(stdout);
       check(native && s.chain === native, `${name}: P4 the swapping run's digest equals the native runner's`, { chain: s.chain, native });
     }

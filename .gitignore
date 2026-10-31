@@ -8,3 +8,4 @@
 /crates/florn-ui-web/www/florn_shell.js
 /crates/florn-ui-web/www/florn_shell_bg.wasm
 /crates/florn-ui-web/www/checkpoints
+/ci/browser/*.florn-run

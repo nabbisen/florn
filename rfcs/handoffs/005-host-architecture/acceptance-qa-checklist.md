@@ -1,6 +1,6 @@
 # Phase 1 — Acceptance and QA checklist
 
-Entry point: [`README.md`](./README.md). For the verifier. Each item is a procedure with an expected result; the result is recorded, with the commit it was run against, in `.git-exclude/reviewed/phase1/<item>/README.md`. An item passes only when it passes on every engine it names.
+Entry point: [`README.md`](./README.md). For the verifier. Each item is a procedure with an expected result; the result is recorded, with the commit it was run against, in the verifier's private records, one folder per item. An item passes only when it passes on every engine it names.
 
 ## A. The acceptance criteria of release 0.1 (requirements §22.1)
 
@@ -38,4 +38,4 @@ Run the seven steps of RFC 006 rule 5 and record each: data flows added (none ex
 
 ## D. How to record
 
-One file per item, `.git-exclude/reviewed/phase1/<ID>/README.md`, with: the commit hash, the command lines run, the output or a pointer to the CI run, pass or fail per engine, and any question for the architect with the RFC rule it concerns. A failed item is a question, not a fix: the developer and the architect answer it in the PR.
+One private record per item, with: the commit hash, the command lines run, the output or a pointer to the CI run, pass or fail per engine, and any question for the architect with the RFC rule it concerns. A failed item is a question, not a fix: the developer and the architect answer it in the PR.

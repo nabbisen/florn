@@ -146,8 +146,29 @@ jobs:
           key: fuzz-${{ hashFiles('fuzz/Cargo.lock', 'Cargo.lock') }}
       - name: cargo-fuzz
         run: command -v cargo-fuzz || cargo install cargo-fuzz --version 0.13.2 --locked
-      - name: Every target, three minutes each
+      # The corpus grows from run to run: restore the latest, save the new one even if a target
+      # crashed, so that the inputs that found it are kept.
+      - name: Restore the corpus
+        uses: actions/cache/restore@v4
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: fuzz-corpus-
+      - name: Every target, three minutes each (fails when a target crashes)
         run: ci/fuzz.sh 180
+      - name: Save the corpus
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-${{ github.run_id }}
+      - name: Crash inputs, if any
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts
+          if-no-files-found: ignore
 
   licences:
     name: licences and advisories (RFC 006 rule 6)
@@ -176,7 +197,13 @@ jobs:
         run: command -v mdbook || cargo install mdbook --version 0.5.4 --locked
       - name: Build the book
         run: mdbook build docs
-      - name: RFC index is consistent
+      - name: RFC index is consistent (both directions)
         run: ci/check-rfc-index.sh
+      - name: RFC invariants (the status line is the folder; relative links resolve)
+        run: ci/check-rfc-invariants.sh
+      - name: No public file names a private path
+        run: ci/check-private-paths.sh
+      - name: The controls fail when a violation is planted (fuzz, index, invariants, private paths, the opener)
+        run: ci/test-gates.sh
       - name: Forbidden words in catalogues (RFC 006 §6)
         run: ci/forbidden-words.sh

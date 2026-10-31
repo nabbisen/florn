@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { chromium, firefox, webkit } from "playwright";
 import { startServer } from "./serve.js";
+import { makeOpener } from "./open.js";
 
 const arg = (k, d) => {
   const i = process.argv.indexOf(k);
@@ -83,29 +84,31 @@ for (const name of browsers) {
     check(false, `${name}: launch`, { error: String(err).split("\n")[0] });
     continue;
   }
-  const context = await browser.newContext();
   const foreign = new Set();
-  context.on("request", (r) => {
-    const u = new URL(r.url());
-    if (u.origin !== origin && u.origin !== plain.origin) foreign.add(u.origin);
-  });
   const consoleErrors = [];
-  const open = async (query, timeout = 900000, at = origin) => {
-    const page = await context.newPage();
+  // Every context the opener makes, the first and the fresh ones of a retry, is watched the same.
+  const watchContext = (ctx) =>
+    ctx.on("request", (r) => {
+      const u = new URL(r.url());
+      if (u.origin !== origin && u.origin !== plain.origin) foreign.add(u.origin);
+    });
+  const watchPage = (page) => {
     page.on("console", (m) => {
       if (m.type() === "error") consoleErrors.push(m.text());
     });
     page.on("pageerror", (e) => consoleErrors.push(String(e)));
-    try {
-      // Navigation under a loaded runner (WebKit on the shared macOS runner has taken longer
-      // than Playwright's 30 s to start a page) gets two minutes; the work has `timeout`.
-      await page.goto(`${at}/kit.html?${query}`, { timeout: 120000 });
-      await page.waitForSelector("#out[data-done='1']", { timeout });
-      return JSON.parse(await page.textContent("#out"));
-    } finally {
-      await page.close();
-    }
   };
+  const context = await browser.newContext();
+  watchContext(context);
+  // A navigation that times out or a page that crashes is opened again once in a fresh context,
+  // counted and printed (open.js); the count is printed at the end of the browser's run.
+  const { open, stats: openStats } = makeOpener({
+    firstContext: context,
+    newContext: () => browser.newContext(),
+    origin,
+    attachPage: watchPage,
+    attachContext: watchContext,
+  });
   const t = (ms) => ({ ms: Math.round(ms) });
 
   // Every shipped scenario: the recorded chain, record count and end; the admitted hashes.
@@ -386,7 +389,9 @@ for (const name of browsers) {
     await warmCache();
     await context.setOffline(true);
     try {
-      return await open(`scenario=${s}&seed=${digests.runs[s].seed}`, 120000);
+      // A cached page starts at once or not at all: 30 s to navigate, one minute for the work,
+      // and no fresh context, which would not hold the cache.
+      return await open(`scenario=${s}&seed=${digests.runs[s].seed}`, 60000, origin, { retry: false, navTimeout: 30000 });
     } finally {
       await context.setOffline(false);
     }
@@ -429,6 +434,7 @@ for (const name of browsers) {
 
   check(foreign.size === 0, `${name}: the network log holds only the page's origins`, { foreign: [...foreign] });
   check(consoleErrors.length === 0, `${name}: no error in the console`, { errors: consoleErrors.slice(0, 5) });
+  console.log(JSON.stringify({ browser: name, opens: openStats.opens, retries: openStats.retries }));
   await browser.close();
 }
 server.close();
