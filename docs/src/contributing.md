@@ -57,7 +57,7 @@ florn is developed by a small team under one owner. Each role answers for what t
 | Role | Answers for | Does not |
 |---|---|---|
 | Owner | Direction, priorities and scope; the roadmap and every change to it; the acceptance of an RFC and of a phase; the approval of every release; the publication of the crates; the repository's settings, secrets and collaborators | — |
-| Architect | Requirements, external design, RFCs and the handoff package of each phase; the release cycle and the release recommendation; the review of every change against the RFCs and the handoff before it is merged; the decision register | Decide scope, a release or a version on the owner's behalf; implement in the team's place beyond narrow emergency support the owner asks for |
+| Architect | Requirements, external design, RFCs and the handoff package of each phase; the release cycle and the release recommendation; the review of every change against the RFCs and the handoff, from its review request, after the push (the work is serial and on `main` alone); the decision register | Decide scope, a release or a version on the owner's behalf; implement in the team's place beyond narrow emergency support the owner asks for |
 | Developer | Implementation from an accepted RFC and its handoff; the unit tests and the kit's tests the handoff names; the routine above; a review request with evidence for every change | Change a requirement, a contract, a file format, a security boundary or a dependency without a change request; tag, release or publish |
 | Verifier | Acceptance checks written from the RFC and the handoff, independently of the implementation | Edit a failing check to make it pass; read the implementation before the check is written |
 

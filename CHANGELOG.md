@@ -14,6 +14,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - Open questions of RFC 001, 002, 003, 005 and 010 that later work had decided are struck through in place with what decided them (RFC 010's: the metering local is an `i64`); the compatibility page says that a domain event that calls no actor leaves no record and from which release the display stream's version is read.
 - RFC 012 and 013 amended on 2026-10-31 on the development team's reading of the code: finding F-16 (the Host never calls `cabi_post_*` after a list result of an export, which RFC 002 rule 2 requires, so the device's `evaluate` would leave a buffer in the guest's memory at every call), and Host maxima, in the browser and natively, for `max-unknowns` and `max-breakpoints`.
 - RFC 012 and 013 amended again on 2026-10-31 on the development team's onboarding report: the channel numbers of the built-ins are fixed (they are in the trace), a Host maximum of 16 pins for a guest device, `two-devices` is a test fixture and not a scenario, `circuit.no-ground` needs at least one net, the replay reads the record's trace and payloads, answers gain fields as a trailing optional section, and the results file carries a version line.
+- Small documentation corrections: the roles table says the architect reviews after the push, as the owner decided; PHY-006 reads `0.4` dense and `later` sparse; the contracts page lists `florn:network`; two traceability and heading slips of the external design.
 
 ## [0.3.0] - 2026-10-31
 

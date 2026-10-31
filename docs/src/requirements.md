@@ -284,7 +284,7 @@ The control interface is the fourth contract, between the Host and any front end
 | PHY-003 | **Nodal analysis.** The circuit solver shall use modified nodal analysis as its baseline formulation. | `0.4` | study | test |
 | PHY-004 | **Nonlinear iteration.** The solver shall provide Newton-type iteration with convergence control. | `0.4` | study | test |
 | PHY-005 | **Transient integration.** The solver shall support trapezoidal and Gear-type integration. | `0.4` | study | test |
-| PHY-006 | **Sparse solving.** Large systems shall be stored sparsely and solved with sparse direct or iterative methods, using permissively licensed pure-Rust libraries. | `0.4` | study | analyse |
+| PHY-006 | **Sparse solving.** Large systems shall be stored sparsely and solved with sparse direct or iterative methods, using permissively licensed pure-Rust libraries. | `0.4` dense, `later` sparse (RFC 013 rule 22) | study | analyse |
 | PHY-007 | **Mechanical coupling.** The domain should support rigid-body or constraint-based coupling. | `later` | study | test |
 | PHY-008 | **Controller software-in-the-loop.** A controller guest shall receive sampled inputs from the world and return outputs that the Host applies to the world. | `0.4` | study | test |
 | PHY-009 | **Time coupling.** The circuit domain RFC shall define how solver steps and the event queue advance together: sample instants, solver-detected conditions as events, and step boundaries on ticks. *Derived: discrete and continuous time were never reconciled.* | `0.4` | derived | test |

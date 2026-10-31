@@ -320,7 +320,7 @@ Catalogue defaults for the run controls and the main nouns, English and Japanese
 | Learning lab · Package · Run record · Diagnostic log | 学習ラボ · パッケージ · 実行記録ファイル · 診断ログ |
 | Plant · Device model · Sampled controller · Net · Signal · Sample · Waveform · Set point · Load | プラント · デバイスモデル · サンプル制御器 · ネット · 信号 · サンプル · 波形 · 目標値 · 負荷 |
 
-## 9. What this revision removed, and where it went
+## 9. What revision 2 removed, and where it went
 
 | Revision 1 content | Now |
 |---|---|
@@ -364,7 +364,7 @@ Proposed 2026-10-31; the owner's decision is recorded here when taken.
 | 1 | ARCH-007, WEB-001, WEB-002, WEB-009, WEB-010, SEC-001 to SEC-003, SEC-010, MIG-006 |
 | 2 | §2.1, §22.2, §22.3 |
 | 3.1 | UI-003, UI-007, UI-008, UI-009, UI-011, UI-012, UI-014, DES-011, DES-012, WEB-007, NFR-004 |
-| 3.2 | UI-001, UI-004, UI-005, OBS-004, OBS-009, NET-008, PHY-011 |
+| 3.2 | UI-001, UI-004, UI-005, OBS-004, OBS-009, NET-008, FIN-007, PHY-011 |
 | 3.3 | UI-003, DES-004, RFC 001 §2.1, RFC 004 rule 14 |
 | 3.4 | UI-002, BUS-001, BUS-008, DATA-010, SEC-005, RFC 004 §3, §4, §7 |
 | 3.5 | DES-011, RFC 001 §7 |

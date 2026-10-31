@@ -6,3 +6,4 @@ byte-identical to the block in the RFC that defines it, and a test in `florn-abi
 | Package | File | Defined in |
 |---|---|---|
 | `florn:core@0.1.0` | `florn-core/wit/core.wit` | RFC 002 §4 |
+| `florn:network@0.1.0` | `florn-network/wit/network.wit` | RFC 008 §6 |
