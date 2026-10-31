@@ -16,6 +16,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - RFC 012 and 013 amended again on 2026-10-31 on the development team's onboarding report: the channel numbers of the built-ins are fixed (they are in the trace), a Host maximum of 16 pins for a guest device, `two-devices` is a test fixture and not a scenario, `circuit.no-ground` needs at least one net, the replay reads the record's trace and payloads, answers gain fields as a trailing optional section, and the results file carries a version line.
 - Small documentation corrections: the roles table says the architect reviews after the push, as the owner decided; PHY-006 reads `0.4` dense and `later` sparse; the contracts page lists `florn:network`; two traceability and heading slips of the external design.
 - The roadmap records the Phase 4 plan the owner authorised on 2026-10-31: the milestones M0 to M6, the verifier arrangement, the patch-release rule and release 0.3.1.
+- The Phase 4 handoff package `rfcs/handoffs/012-circuit-domain/`: twenty-six units (PR-31 to PR-56) in six milestones, the checks per unit, and the brief for a verifier session.
 
 ## [0.3.0] - 2026-10-31
 
