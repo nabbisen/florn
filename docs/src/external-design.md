@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| **Document** | florn external design, revision 2 |
-| **Status** | Accepted 2026-10-14, with the five decisions of §10 taken. Supersedes the draft of 2026-09-28. |
+| **Document** | florn external design, revision 3 |
+| **Status** | Revision 3 **proposed** 2026-10-31 for the owner's acceptance: the circuit workspace, with the decisions of §10.1. Revision 2 was accepted 2026-10-14, with the five decisions of §10 taken, and supersedes the draft of 2026-09-28. |
 | **Owner** | nabbisen |
 | **Scope** | What a person or a program sees of florn: the system's boundaries, the personas and their journeys, the user interface, the control interface, the files, the failure semantics, the hosting, and the vocabulary. |
 | **Not here** | How the Host is built (RFC 005), what a guest is (RFC 002), how a module is admitted and limited (RFC 003), the scenario model and package (RFC 004), determinism (RFC 001), the threat model (RFC 006), the error catalogue (RFC 007). This document cites them and does not restate them. |
-| **Change history** | Revision 1, 2026-09-28: draft, with a role model, a workspace model, an authorization matrix, a data model, and a threat model. Revision 2, 2026-10-14: the role, workspace, and authorization models are retired (florn is a single-user local tool, SEC-010); the data model and the threat model moved to the RFCs; the user interface, the personas, the control interface, and the vocabulary are designed from the accepted requirements, RFC 001 to 005, and the Stage 0 proofs of concept. Accepted the same day; §10 records the decisions. Amended 2026-10-20 (release 0.1.0): the runner's replay takes the scenario and the modules again. Amended 2026-10-31 (after release 0.3.0): the checkpoint file in §3.9, the runner's `resume` and the 0.3 options, the measured capacity figure. |
+| **Change history** | Revision 1, 2026-09-28: draft, with a role model, a workspace model, an authorization matrix, a data model, and a threat model. Revision 2, 2026-10-14: the role, workspace, and authorization models are retired (florn is a single-user local tool, SEC-010); the data model and the threat model moved to the RFCs; the user interface, the personas, the control interface, and the vocabulary are designed from the accepted requirements, RFC 001 to 005, and the Stage 0 proofs of concept. Accepted the same day; §10 records the decisions. Amended 2026-10-20 (release 0.1.0): the runner's replay takes the scenario and the modules again. Amended 2026-10-31 (after release 0.3.0): the checkpoint file in §3.9, the runner's `resume` and the 0.3 options, the measured capacity figure. Revision 3, 2026-10-31 (release 0.4.0, proposed): the circuit workspace of RFC 012 to 014 — journey J7, the schematic and the plots (§3.2), the inspectors of a plant (§3.6), the states of a plant that stops converging and of a replay compared within tolerance or not at all (§3.8), the additions to the control interface (§4), the circuit's terms (§8), the decisions of §10.1, and the traceability row of §3.2; the Newcomer persona's planning cell. |
 
 Requirement identifiers refer to the [requirements specification](./requirements.md). RFC numbers refer to `rfcs/` in the repository.
 
@@ -35,7 +35,7 @@ A sixth party, native external resources — real network interfaces, host files
 | **Module author** | The developer, then the owner | The guest contract, the SDK, the conformance kit | Release 0.1 |
 | **Automation user** | The verifier and continuous integration | The headless runner, manifests, run records, digests | Release 0.1 |
 | **Domain developer** | The developer | The core crates, a domain's world and contract | Release 0.2 |
-| **Newcomer** | Nobody yet: a person who did not build florn | The same graphical interface | Before any public release |
+| **Newcomer** | Nobody yet: a person who did not build florn. The first test with such people — alone with the application, journeys J1, J3, J4, J5 and the procedure of going back — is planned for release 0.3 and runs at the owner's pace; its findings become issues | The same graphical interface | Release 0.3, with that test |
 
 The learner-operator wants to understand *why* a system behaves as it does by watching it and changing conditions; does not want to read a protocol specification first, to configure a solver, or to guess what a control will do; and succeeds when, after a session, they can explain what they saw. The newcomer is the design target for clarity: the interface shows the minimum first, and the owner's familiarity with florn is not the standard (UI-012).
 
@@ -51,6 +51,7 @@ A journey is one complete task. A release is accepted when its journeys work (re
 | J2 | Build a topology from nothing: place routers, connect them, set link delay and loss. | 0.2 | AC-011 |
 | J5 | Import a module from a file, see its manifest and hash, place it in a topology, run. | 0.3 | §22.3 |
 | J6 | Run the same scenario headless on the Native Host and compare the digest with the browser's. | 0.1 | AC-001, AC-003 |
+| J7 | Open the motor lab, run it, watch the speed settle and the controller's samples step along it, see the load step, change the set point, export the run with its trace and payloads, and replay it to a match or a match within tolerance. | 0.4 | §22.3 |
 
 Across all journeys: the language switches without reload and Japanese is typed through an input method (AC-012); no request leaves the origin (AC-013); the application starts offline (AC-014); every control works by keyboard (AC-015); the owner confirms that each control did what its label led them to expect (AC-016).
 
@@ -91,10 +92,10 @@ One window, one scenario, one run at a time.
 |---|---|---|
 | Header | Scenario name; run controls; language; status line (logical time, pacing, offline state, capacity or swapping notice when relevant) | UI-003, UI-011, WEB-007 |
 | Actor list | Every actor by name, in a list that is one Tab stop; arrow keys move inside it; Enter selects. The accessible twin of the canvas. | UI-008 |
-| Topology or scene | The domain's view: nodes, connections, moving messages; a waveform scene for the circuit domain; a book and tape for finance. Drawn by the scene layer on a 2D canvas (RFC 005 §8). | UI-001, NET-008, PHY-011, FIN-007 |
+| Topology or scene | The domain's view: nodes, connections, moving messages; for the circuit domain a schematic of the plant (RFC 014 rule 6); a book and tape for finance. Drawn by the scene layer on a 2D canvas (RFC 005 §8). | UI-001, NET-008, PHY-011, FIN-007 |
 | Inspector | The selected element's details (§3.6). Fields are enabled only when something is selected. | UI-004 |
 | Timeline | The ordered events of the run (§3.7). | OBS-004 |
-| Plots | Telemetry over time, when a domain defines them. Visible together with the rest when the window allows (UI-005); otherwise a tab. | OBS-005, PHY-011 |
+| Plots | Sampled values over logical time, when a domain defines them: for the circuit domain the sensors' and the controllers' series, with each controller sample marked as a step (RFC 014 rules 1 to 8). Visible together with the rest when the window allows (UI-005); otherwise a tab. | PHY-011, UI-005, OBS-009 |
 
 Each domain has its workspace with the same frame and run controls and its own scene, inspectors, and plots (UI-001, OBS-009). Panels can be resized; none can be lost: a hidden panel is reachable from the header.
 
@@ -125,6 +126,8 @@ The status line always shows the current instant as a time with a unit and as a 
 
 Every scenario has an `end` (RFC 004 rule 14). The interface asks for it when a scenario is created and shows it before the run starts.
 
+In release 0.4 a circuit scenario is loaded (a bundled lab, or a file), its parameters, solver profile and interventions are edited, and it is saved; placing built-ins and drawing nets is a later release, and the interface says so where the palette would be (RFC 014 rule 16). For the circuit domain this is a recorded limitation of UI-002.
+
 ### 3.5 Interventions
 
 An intervention is any change the user makes to the running world: breaking or restoring a link, changing a parameter, adding or removing an actor, continuing past `end`.
@@ -142,7 +145,10 @@ An intervention is any change the user makes to the running world: breaking or r
 | Actor | Name and identity; kind and module hash; configuration as declared by the manifest with units; status (running, faulted with the fault kind and metered work, not resident); the faults of this run; the telemetry channels with their latest values and a link to the plot; "open in timeline". | Reads the guest's memory; calls the guest (DES-012). Inspection that needs guest code runs on a copy restored from exported state (RFC 005 rule 19). |
 | Connection | Name and identity; its ports; the domain's attributes with units; the messages in flight on it. | |
 | Message | Origin, sequence number, instant sent and delivered; the raw bytes; the decoded fields where the domain provides a decoder (NET-007). | Decodes with guest code. |
-| World | The domain's state: a solver's step and convergence, a venue's book, the link table. | |
+| World | The domain's state: for a plant the solver's step proposal, method, last iterations and rejected attempts and, when it stops, why and what to change (RFC 013 rule 17; RFC 014 rule 9); a venue's book; the link table. | |
+| Built-in (circuit) | Its kind and parameters as written; from the last accepted step its pin voltages and current; a sensor's last sample. | Advances the plant to show a value (RFC 012 rule 8). |
+| Controller (circuit) | Its parameters and its last `control` report: what it read, what it set, the error it computed. | Calls the guest. |
+| Net and signal (circuit) | A net's voltage; a signal's held value, its unit and its producer. | |
 
 Editing in an inspector before a run changes the scenario; during a run it is an intervention (§3.5).
 
@@ -167,6 +173,9 @@ Every message the Host produces for the user is a stable code with typed paramet
 | The scenario is larger than this browser can hold | "This scenario needs 300 resident actors; this browser can hold 123. Run it on the Native Host, or reduce the scenario." (From release 0.3: "…or let florn swap actors, which slows the run by about 10×.") |
 | Shared memory is unavailable | One line in the status area: "Telemetry uses messages on this page; shared memory is unavailable." The run is unaffected. |
 | Replay diverges | "Replay diverged between records 12,000 and 22,000. The run's inputs or this version of florn differ from the recorded ones. Export both run records to compare." |
+| Replay matches within tolerance (a plant, on another Host) | "Replay matches within tolerance: 14 of 2,000 values differ in the last bits; the largest difference is 2.2e-16 rad/s, on m1.speed at 0.41 s." |
+| Replay cannot be compared (a plant) | "The digests differ and this record has no payloads, so the values cannot be compared. Export the run with its trace and payloads." |
+| A plant stops converging | "The plant stopped at 0.41 s: the solver could not converge at its smallest step (device d1, 50 iterations). Raise `newton.max-iterations`, choose `gear2`, lower `min-step` where it is above one tick, check the device model, or let the plant `hold` while the controller keeps sampling." |
 | The machine failed the Host | "The run ended: the machine could not provide memory within the limits. This condition is not reproducible; it is recorded in the diagnostic log." (RFC 001 rule 65) |
 
 Three families are never mixed (CTL-004): a value a guest receives from a domain function is the guest's business and is not shown as an error; a fault is a trace record and a state of an actor; an error of the user's input is a state of the form.
@@ -251,6 +260,8 @@ Rules that every client can rely on: a command is validated before it acts, and 
 
 The headless runner (`florn` on the command line) is the automation user's front end: `florn run <scenario> [--seed N]` prints the digest and writes a run record; `florn replay <run> <scenario> --modules <dir>` prints the comparison (a run record carries the hashes of the scenario and the modules, not their bytes, so both are given again and checked; amended 2026-10-20 with release 0.1.0); `florn admit <module>` prints the manifest and the admission result; `florn probe` prints the capacity (AUTO-001). The whole control interface also has a **text form on standard streams**, designed now on one assumption and implemented with the native shell in Phase 6, or earlier if a script needs it first. The assumption: `florn serve --stdio` reads one command or query per line and writes one notification or answer per line, each a JSON object with the same names, fields, and codes as the canonical interface (RFC 005 §6), with binary payloads as base64 and the interface version in the first line each way. Nothing in the interface is text-specific, so this form can be added without changing a client's model; the native shell's in-process transport and this text transport are designed together because they are the two transports the browser does not use. Release 0.3.0 added `florn resume <checkpoint> <scenario>`, which continues a run from a checkpoint file, and the run inputs `--cost-model N` (RFC 010) and `--residency resident|swap` (RFC 009); the usage text of `florn help` is the reference (amended 2026-10-31).
 
+Release 0.4.0 adds to version 1 (RFC 012 section 11): `trace-window` entries carry the payloads of the reports, a new `inspect` query answers for a built-in (its kind, parameters and state), a net, a signal and the world, `replay` answers `matched`, `within-tolerance`, `diverged` or `needs-payloads` (RFC 013 rule 20), and the display stream's version is 2.
+
 ## 5. Failure and recovery semantics
 
 What the user sees and what is recorded, for every class of failure.
@@ -307,6 +318,7 @@ Catalogue defaults for the run controls and the main nouns, English and Japanese
 | Scenario · Run (noun) · Actor · Connection · Port · Message · Timer · Fault · Intervention · Scheduled change | シナリオ · 実行記録 · アクター · 接続 · ポート · メッセージ · タイマー · フォールト · 介入 · 予定変更 |
 | Replay · Playback · Checkpoint · Trace · Digest | 再実行 · 再生 · チェックポイント · トレース · ダイジェスト |
 | Learning lab · Package · Run record · Diagnostic log | 学習ラボ · パッケージ · 実行記録ファイル · 診断ログ |
+| Plant · Device model · Sampled controller · Net · Signal · Sample · Waveform · Set point · Load | プラント · デバイスモデル · サンプル制御器 · ネット · 信号 · サンプル · 波形 · 目標値 · 負荷 |
 
 ## 9. What this revision removed, and where it went
 
@@ -334,6 +346,17 @@ Decided by the owner on 2026-10-14.
 | 4 | The native shell (§3.14) | **Accepted** for release 0.6, with the decision scheduled: evaluation and spike at the start of Phase 6, before implementation. |
 | 5 | A text form of the control interface (§4) | **Designed now on a stated assumption**, implemented with the native shell in Phase 6, or earlier if a script needs it. |
 
+### 10.1 Decisions of revision 3
+
+Proposed 2026-10-31; the owner's decision is recorded here when taken.
+
+| # | Decision | Recommendation |
+|---|---|---|
+| 6 | The plots panel shows the sensors' series by default and the controllers' off (RFC 014 rule 7) | Accept |
+| 7 | The Japanese terms of the circuit domain in §8 | Accept as defaults, to be improved as the Japanese catalogue was |
+| 8 | Graphical authoring of a plant is not in 0.4 and is recorded as a limitation of UI-002 for the circuit domain (§3.4; RFC 014 rule 16) | Accept |
+| 9 | J7 is the acceptance journey of release 0.4, beside the exit criterion of the roadmap | Accept |
+
 ## 11. Traceability
 
 | Section | Requirements |
@@ -341,11 +364,11 @@ Decided by the owner on 2026-10-14.
 | 1 | ARCH-007, WEB-001, WEB-002, WEB-009, WEB-010, SEC-001 to SEC-003, SEC-010, MIG-006 |
 | 2 | §2.1, §22.2, §22.3 |
 | 3.1 | UI-003, UI-007, UI-008, UI-009, UI-011, UI-012, UI-014, DES-011, DES-012, WEB-007, NFR-004 |
-| 3.2 | UI-001, UI-004, UI-005, OBS-004, OBS-009, NET-008 |
+| 3.2 | UI-001, UI-004, UI-005, OBS-004, OBS-009, NET-008, PHY-011 |
 | 3.3 | UI-003, DES-004, RFC 001 §2.1, RFC 004 rule 14 |
 | 3.4 | UI-002, BUS-001, BUS-008, DATA-010, SEC-005, RFC 004 §3, §4, §7 |
 | 3.5 | DES-011, RFC 001 §7 |
-| 3.6 | UI-004, OBS-005, OBS-006, NET-007, DES-012 |
+| 3.6 | UI-004, UI-009, OBS-005, OBS-006, NET-007, PHY-011, DES-012 |
 | 3.7 | OBS-004, NET-009 |
 | 3.8 | UI-009, CTL-003, CTL-004, RFC 001 rule 65 |
 | 3.9 | DATA-002, DATA-004, DATA-006, WEB-005, WEB-012, SEC-006, SEC-007, SEC-008, ACT-009 |
