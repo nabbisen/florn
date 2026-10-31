@@ -98,6 +98,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | **Scope** | Circuit domain contract: device models and sampled controllers as separate kinds. Nodal analysis with nonlinear iteration and transient integration. One controller guest against one plant. Waveform view. |
 | **Purpose beyond the feature** | To test the core. Any change the core needs for this domain is a finding against the core. |
 | **Exit criteria** | A controller guest and a Host-side plant run in closed loop. Results under both Hosts agree within the documented tolerance. |
+| **RFCs** | 012, 013, 014 (accepted 2026-10-31). |
 
 ## Phase 5 — Finance (0.5.0)
 

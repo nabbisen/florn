@@ -1,6 +1,6 @@
 # RFC 013 — The circuit solver: modified nodal analysis, Newton iteration, transient integration, step control, and the tolerance of Tier 2
 
-**Status.** Proposed 2026-10-31, for release 0.4.0 (Phase 4 of the roadmap). Companion of RFC 012, which owns the domain's types, contract and time coupling; this RFC owns the numbers: how the plant is formulated, solved, stepped and compared across Hosts.
+**Status.** Accepted 2026-10-31, the owner's word on the day it was proposed, as proposed; for release 0.4.0 (Phase 4 of the roadmap). Companion of RFC 012, which owns the domain's types, contract and time coupling; this RFC owns the numbers: how the plant is formulated, solved, stepped and compared across Hosts.
 
 **Tracks.** Requirements PHY-003, PHY-004, PHY-005, PHY-006, PHY-010, PHY-012, NUM-001, NUM-002, NUM-003, NUM-005, NUM-006, AUTO-004, AUTO-005, DES-006, NFR-004. Requirement IDs refer to `docs/src/requirements.md`.
 

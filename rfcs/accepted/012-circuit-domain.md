@@ -1,6 +1,6 @@
 # RFC 012 — Circuit domain: nets, signals, the plant in the Host, device models and sampled controllers, the `florn:circuit` contract, the time coupling
 
-**Status.** Proposed 2026-10-31, for release 0.4.0 (Phase 4 of the roadmap). The second domain RFC; it enters the Host by the interface of RFC 008 section 2 unchanged, and every place where it could not is a finding against the core, listed in section 11. Companions: RFC 013 (the solver) and RFC 014 (waveforms and the circuit workspace).
+**Status.** Accepted 2026-10-31, the owner's word on the day it was proposed, as proposed; for release 0.4.0 (Phase 4 of the roadmap). The second domain RFC; it enters the Host by the interface of RFC 008 section 2 unchanged, and every place where it could not is a finding against the core, listed in section 11. Companions: RFC 013 (the solver) and RFC 014 (waveforms and the circuit workspace). The handoff package is the next architect's first deliverable.
 
 **Tracks.** Requirements PHY-001, PHY-002, PHY-008, PHY-009, PHY-012, BUS-009, ARCH-006, ARCH-010, NUM-005, NUM-006, UI-009, AUTO-005, DATA-001, DATA-010, DES-001, DES-006. Requirement IDs refer to `docs/src/requirements.md`.
 

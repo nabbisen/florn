@@ -1,6 +1,6 @@
 # RFC 014 — Waveforms and the circuit workspace: the display path for sampled values, the plots panel, the schematic scene, the solver in the inspectors, the motor lab
 
-**Status.** Proposed 2026-10-31, for release 0.4.0 (Phase 4 of the roadmap). Companion of RFC 012 (the domain) and RFC 013 (the solver); this RFC owns what a person sees of a circuit run in the application and in the runner, and the external design's revision 3 that goes with it.
+**Status.** Accepted 2026-10-31, the owner's word on the day it was proposed, as proposed; for release 0.4.0 (Phase 4 of the roadmap). Companion of RFC 012 (the domain) and RFC 013 (the solver); this RFC owns what a person sees of a circuit run in the application and in the runner, and the external design's revision 3 that goes with it.
 
 **Tracks.** Requirements PHY-011, UI-001, UI-004, UI-005, UI-008, UI-009, OBS-003, OBS-005, OBS-009, NFR-004, AC-008 (its form, for the new journey). Requirement IDs refer to `docs/src/requirements.md`.
 
