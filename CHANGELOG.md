@@ -4,7 +4,12 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- RFC 012 (the circuit domain), RFC 013 (its solver) and RFC 014 (waveforms and the circuit workspace) proposed and accepted on 2026-10-31 for release 0.4.0 (Phase 4), with the Phase 4 entry in `ROADMAP.md`.
+- Roles and authorisations in `docs/src/contributing.md`, decided by the owner on 2026-10-31: the work is serial, on `main` alone, and the roles exchange files.
+
+### Changed
+- RFC 012, 013 and 014 amended on 2026-10-31 after an independent review of them against the code and RFC 001 to 011: at most one guest device model per scenario in 0.4; the plant advances on demand and the inputs that change it are recorded as breakpoints; the Tier 2 comparison is specified over numeric payloads and needs both runs' payload bytes; the integration formulas, the local error estimate, the Newton criteria and the controls that keep floating-point results identical across engines are fixed; the findings against the core are fourteen (F-1 to F-15, F-4 struck), and the user-interface scope is stated. A second independent reader checked the result against the code and a model of the rules, in three passes, and its corrections are in it: the junction limiter lives in the device, the initial solve and its stages, the pairing and outcomes of the comparison (a replay without payloads is `needs-payloads`, and the tolerance applies across Hosts only), the error estimate of variable-step Gear 2, the plant's single pending advance, the bound on pending breakpoints, and the golden scenario `rc-step`.
 
 ## [0.3.0] - 2026-10-31
 
