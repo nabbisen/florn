@@ -37,7 +37,11 @@ RFC enters it.
 
 ### Proposed
 
-_None at present._
+| ID | Title | Proposed | For |
+|----|-------|----------|-----|
+| 012 | [Circuit domain: nets, signals, the plant in the Host, device models and sampled controllers, the `florn:circuit` contract, the time coupling](./proposed/012-circuit-domain.md) | 2026-10-31 | 0.4.0 |
+| 013 | [The circuit solver: modified nodal analysis, Newton iteration, transient integration, step control, and the tolerance of Tier 2](./proposed/013-circuit-solver.md) | 2026-10-31 | 0.4.0 |
+| 014 | [Waveforms and the circuit workspace: the display path for sampled values, the plots panel, the schematic scene, the solver in the inspectors, the motor lab](./proposed/014-waveforms-and-circuit-workspace.md) | 2026-10-31 | 0.4.0 |
 
 ### Accepted
 
