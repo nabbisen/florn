@@ -98,7 +98,10 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | **Scope** | Circuit domain contract: device models and sampled controllers as separate kinds. Nodal analysis with nonlinear iteration and transient integration. One controller guest against one plant. Waveform view. |
 | **Purpose beyond the feature** | To test the core. Any change the core needs for this domain is a finding against the core. |
 | **Exit criteria** | A controller guest and a Host-side plant run in closed loop. Results under both Hosts agree within the documented tolerance. |
-| **RFCs** | 012, 013, 014 (accepted 2026-10-31). |
+| **RFCs** | 012, 013, 014 (accepted 2026-10-31 and amended the same day on the owner's decisions D1, D3 and D4, AD-25). |
+| **Handoff package** | `rfcs/handoffs/012-circuit-domain/` (2026-10-31): PR-31 to PR-56, in the milestones below. |
+| **Milestones** | Planned by evidence, not by date; each ends with a report to the owner. **M0** the package: amended RFCs, external design revision 3, the handoff package. **M1** hardening and the patch release 0.3.1: gates that can fail, a bounded parser, the runner's exit codes, the authoring draft that keeps built-ins. **M2** the core prepared: the test layout, the split of the Host's run file, float call shapes and the post-return call, the kernel's discard and the call-in handle, several and composed worlds, effect-recording imports and the start hook, units with dimensions, the comparison outcomes, the display kind and the inspect query; no circuit code. **M3** the closed loop, headless: the domain, the integration, the on-demand advance, the controller contract and the cross-engine results; this is the exit criterion. **M4** the second kind of actor: the device contract, the composed world, the detector. **M5** the application: series and plots, the schematic and the inspectors, the lab and journey J7. **M6** release 0.4.0. |
+| **Verification** | A development-team session in the verifier role, never the implementer of the unit, checks four units: the kernel's discard (PR-38), the comparison (PR-42), the integration and its goldens (PR-45) and the cross-engine results with their controls (PR-48). In every other unit the controls are the developer's tests, CI and the architect's review. |
 
 ## Phase 5 — Finance (0.5.0)
 
@@ -148,7 +151,7 @@ Phases 1 to 3 were implemented by the architect on the owner's instruction of 20
 |---|---|
 | Versioning | Semantic versioning. Before 1.0.0, a minor version may change a contract. |
 | Tags | No prefix: `0.1.0`. |
-| Cadence | A release is made when the exit criteria of its phase are met. There are no time-boxed releases. Patch releases correct defects. |
+| Cadence | A release is made when the exit criteria of its phase are met. There are no time-boxed releases. Patch releases correct defects: only one that accepts hostile input unsafely, gives a wrong result or digest, or loses data, found by the owner's checks, the usability test or the team; the architect reports it with a recommendation and the owner authorises. Release 0.3.1 (authorised 2026-10-31) corrects the parser that a hostile scenario can make allocate without bound and makes the gates able to fail. |
 | Change record | `CHANGELOG.md`. Implemented RFCs move to `rfcs/done/` with the release in their status. |
 
 ### Release checklist
