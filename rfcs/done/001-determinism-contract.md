@@ -420,8 +420,8 @@ Each property has a test in the conformance kit. The tests run under both Hosts.
 
 | # | Question | Decided by |
 |---|---|---|
-| 1 | Are NaN values made canonical inside a guest, at the cost of speed, or only at the contract and in the trace? | Measurement in the proof of concept on limits |
-| 2 | Which generator, which derivation, which digest? Proposal: a ChaCha generator, keys derived with BLAKE3, digest with BLAKE3. | This RFC, before acceptance |
+| 1 | ~~Are NaN values made canonical inside a guest, at the cost of speed, or only at the contract and in the trace?~~ Resolved 2026-10-14 by RFC 003 section 9: not inside a guest; canonical at the contract and in the trace (rules 47 and 59). | — |
+| 2 | ~~Which generator, which derivation, which digest?~~ Resolved 2026-10-14 by RFC 005 rule 22: ChaCha with 8 rounds, keys derived with BLAKE3, digest with BLAKE3. | — |
 | 3 | ~~The default limits of rule 13.~~ The microstep and event limits stand at 1,000,000 per tick and 10,000,000 per instant (RFC 004 §3.4); the actor limits are RFC 003 rule 19, measured 2026-10-20. | — |
 | 4 | ~~The interval of rule 48.~~ Resolved 2026-10-20: 1,000 records (RFC 005 rule 23). | — |
-| 5 | Is the consumed work of rule 46 part of what is compared under Tier 2? It is equal under every engine if rule 66 holds. | After the proof of concept on limits |
+| 5 | ~~Is the consumed work of rule 46 part of what is compared under Tier 2?~~ Resolved 2026-10-14 by RFC 003 (its consequences table): yes, by construction, since it is equal under every engine (rule 66). A continuous domain may exempt it from the cross-Host comparison (RFC 013 rule 20). | — |

@@ -430,5 +430,5 @@ Each property has a test in the conformance kit (AUTO-007). The guest half runs 
 |---|---|---|
 | 1 | Labelled random streams for a guest (several independent streams per actor, RFC 001 rule 28) — needed by any 0.2 guest? | The network RFC; until then one stream per actor. |
 | 2 | The exact revision of the Component Model canonical ABI the shared lifting crate implements, and whether the flat-value limit is pinned by florn or followed from the specification. | RFC 005, when the crate is written. |
-| 3 | The default quota values of §5 (`payload`, `pending-timers`, `telemetry-per-activation`, `effects-per-activation`). | RFC 003, from measurement in Phase 1. |
-| 4 | Whether a Component is accepted on import in 0.3 (rule 6) or not at all. | The owner, with WEB-005. |
+| 3 | ~~The default quota values of §5 (`payload`, `pending-timers`, `telemetry-per-activation`, `effects-per-activation`).~~ Resolved 2026-10-20 by RFC 003 rule 19 (PR-13). | — |
+| 4 | ~~Whether a Component is accepted on import in 0.3 (rule 6) or not at all.~~ Resolved 2026-10-29 (AD-21b): refused in 0.3 with `module.component` and the way to a core module (RFC 009 rule 18). | — |

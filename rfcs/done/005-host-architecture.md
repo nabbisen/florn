@@ -350,5 +350,5 @@ florn/
 | 2 | ~~The chain interval (rule 23).~~ Resolved 2026-10-20 by PR-13: 1,000 records; the reasoning is in rule 23. | — |
 | 3 | ~~The telemetry record size and the fallback's cost and notice (rule 14).~~ Resolved 2026-10-14 by the proof of concept on telemetry transport; see rule 14. | — |
 | 4 | A text form of the control interface on standard streams for automation beyond the four commands of rule 31. | Phase 2, with the first script that needs it. |
-| 5 | The swapping policy and whether a scenario beyond capacity is refused or swapped (rule 17). | Phase 3, with the proof of concept on snapshot and restore and the owner. |
+| 5 | ~~The swapping policy and whether a scenario beyond capacity is refused or swapped (rule 17).~~ Resolved 2026-10-29 by RFC 009 rules 13 and 14 (PR-27): the least recently activated actor leaves; a scenario beyond capacity is refused by default and swapped on request. | — |
 | 6 | The native shell (rule 38). | Phase 6. |

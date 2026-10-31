@@ -93,4 +93,4 @@ Between two checks an activation executes at most one check-free path of the fun
 | # | Question | Decided by |
 |---|---|---|
 | 1 | ~~The default when the target is missed on one engine but met on the others (rule 9): version 2 everywhere, version 1 everywhere, or the measured figures published and the owner's choice~~ Decided 2026-10-29: version 2 everywhere, on the figures (Chromium's compute-style at 2.99 the one miss, three times better than version 1). | — |
-| 2 | Whether the per-segment local is an `i64` (this RFC) or an `i32` with a check when it could overflow; the choice is a measurement | The implementing pull request |
+| 2 | ~~Whether the per-segment local is an `i64` (this RFC) or an `i32` with a check when it could overflow.~~ Decided by PR-24: an `i64` (`florn-admission/src/meter.rs`, the local is pushed with `ValType::I64`; the charge is `local.get; i64.const; i64.add; local.set`). | — |
