@@ -226,7 +226,7 @@ The conformance target of UI-008 is **WCAG 2.2 level AA** for everything that is
 
 | Rule | Detail |
 |---|---|
-| Every user-visible string comes from a catalogue; keys are checked at compile time; a missing key is a build error. | UI-011; verified in the UI proof of concept |
+| Every user-visible string comes from a catalogue; keys are checked by tests; a missing key is a failing test. | UI-011; verified in the UI proof of concept |
 | First release: English and Japanese. The language switches without reload and keeps everything the user typed. | AC-012 |
 | Strings are whole sentences with named placeholders; no concatenation of fragments; plural forms per language. | Japanese and English order their parts differently. |
 | Numbers, units, and times are formatted in the interface from values with units; the logical world knows no locale (RFC 001 rule 63). | DES-010, DATA-010 |

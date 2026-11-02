@@ -24,6 +24,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - `ci/check-rfc-index.sh` did not fail for an indexed file that is missing (its loop ran in a subshell and lost the status); it does, and it checks the handoff packages' links too.
 - The browser kit no longer spends two navigations of two minutes on the offline start of a page that is cached (30 seconds each), and the journeys write their run record to their temporary directory: `ci/browser/*-many.florn-run` are no longer tracked.
 - Five references to the private working folder in the three earlier handoff packages are replaced by what they pointed at.
+- RFC 007 and the external design say a missing translation key is a failing test and not a build error, which is what the label compiler does (found by PR-31).
 
 ## [0.3.0] - 2026-10-31
 
