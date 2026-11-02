@@ -310,3 +310,62 @@ fn help_prints_the_usage_and_exits_with_0() {
         "{text}"
     );
 }
+
+/// A number with an enormous exponent is refused with the field named, and the runner never
+/// builds a text of the number's size (SEC-005; RFC 004 rules 23 and 39). Before the bound,
+/// `end = "1e2000000000s"` made the runner ask for two gigabytes and abort. On Linux the runner
+/// runs under a 1 GiB address-space limit, so that a regression aborts instead of passing on a
+/// large machine; elsewhere the limit is not available and the outcome alone is checked.
+#[test]
+fn a_quantity_with_an_enormous_exponent_is_refused_under_a_memory_limit() {
+    let d = dir("exponent");
+    let (scenario, modules) = write_scenario(&d);
+    let text = std::fs::read_to_string(&scenario).unwrap();
+    let huge = text
+        .lines()
+        .map(|l| {
+            if l.starts_with("end = ") {
+                "end = \"1e2000000000s\"".to_string()
+            } else {
+                l.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        huge.contains("1e2000000000s"),
+        "the scenario's end was replaced"
+    );
+    let path = d.join("huge.toml");
+    std::fs::write(&path, huge).unwrap();
+
+    let args = [
+        "run",
+        path.to_str().unwrap(),
+        "--modules",
+        modules.to_str().unwrap(),
+    ];
+    let mut cmd = if cfg!(target_os = "linux") {
+        let mut c = Command::new("sh");
+        c.args([
+            "-c",
+            "ulimit -v 1048576; exec \"$0\" \"$@\"",
+            env!("CARGO_BIN_EXE_florn"),
+        ]);
+        c
+    } else {
+        florn()
+    };
+    let out = cmd.args(args).output().unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "refused, not aborted: {err}");
+    assert!(
+        err.contains("quantity.out-of-range") && err.contains("time.end"),
+        "the code and the field are named: {err}"
+    );
+    assert!(
+        err.len() < 2_000,
+        "the message is bounded: {} bytes",
+        err.len()
+    );
+}

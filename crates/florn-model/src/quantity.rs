@@ -52,15 +52,37 @@ pub struct Decimal {
     pub exponent: i32,
 }
 
+/// Why a decimal is refused. Crate-internal: the public parsers say `None` or `Malformed`, and the
+/// manifest parser asks for the reason to name the field with the right code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DecimalRefusal {
+    /// Not a decimal.
+    Malformed,
+    /// A decimal whose exponent, once normalised, lies beyond [`Decimal::MAX_EXPONENT`].
+    OutOfRange,
+}
+
 impl Decimal {
-    /// Parse `123`, `0.5`, `1e-3`, `2.5E6`. No sign, no spaces, at least one digit.
+    /// The largest magnitude of a normalised exponent that is accepted (SEC-005: nothing is
+    /// allocated from a number the input chose). A decimal is at most 39 digits of mantissa and an
+    /// exponent of this size, so its shortest text is at most about 1,050 characters. The range of
+    /// a 64-bit float, the widest thing a quantity is converted to, is within 330.
+    pub const MAX_EXPONENT: i32 = 1000;
+
+    /// Parse `123`, `0.5`, `1e-3`, `2.5E6`. No sign, no spaces, at least one digit. `None` for
+    /// a text that is no decimal and for one whose exponent is beyond [`Self::MAX_EXPONENT`].
     pub fn parse(text: &str) -> Option<Self> {
-        let (num, exp) = match text.find(['e', 'E']) {
-            Some(i) => (&text[..i], text[i + 1..].parse::<i32>().ok()?),
-            None => (text, 0),
+        Self::parse_classified(text).ok()
+    }
+
+    pub(crate) fn parse_classified(text: &str) -> Result<Self, DecimalRefusal> {
+        use DecimalRefusal::{Malformed, OutOfRange};
+        let (num, exp_text) = match text.find(['e', 'E']) {
+            Some(i) => (&text[..i], Some(&text[i + 1..])),
+            None => (text, None),
         };
         if num.is_empty() {
-            return None;
+            return Err(Malformed);
         }
         let (int, frac) = match num.find('.') {
             Some(i) => (&num[..i], &num[i + 1..]),
@@ -70,16 +92,43 @@ impl Decimal {
             || !int.bytes().all(|b| b.is_ascii_digit())
             || !frac.bytes().all(|b| b.is_ascii_digit())
         {
-            return None;
+            return Err(Malformed);
         }
+        // The exponent as written, saturated: its digits may be any number of them, and a value
+        // far beyond the bound is out of range, not malformed.
+        let exp: i64 = match exp_text {
+            None => 0,
+            Some(t) => {
+                let (negative, digits) = match t.as_bytes().first() {
+                    Some(b'-') => (true, &t[1..]),
+                    Some(b'+') => (false, &t[1..]),
+                    _ => (false, t),
+                };
+                if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err(Malformed);
+                }
+                let magnitude = digits
+                    .bytes()
+                    .fold(0i64, |v, b| (v * 10 + i64::from(b - b'0')).min(1 << 40));
+                if negative { -magnitude } else { magnitude }
+            }
+        };
         let digits = format!("{int}{frac}");
         let mantissa: u128 = if digits.is_empty() {
             0
         } else {
-            digits.parse().ok()?
+            digits.parse().map_err(|_| Malformed)?
         };
-        let exponent = exp.checked_sub(i32::try_from(frac.len()).ok()?)?;
-        Some(Self { mantissa, exponent }.normalised())
+        let exponent = exp - frac.len() as i64;
+        let d = Self {
+            mantissa,
+            exponent: exponent.clamp(i64::from(i32::MIN) / 2, i64::from(i32::MAX) / 2) as i32,
+        }
+        .normalised();
+        if d.exponent.unsigned_abs() > Self::MAX_EXPONENT as u32 {
+            return Err(OutOfRange);
+        }
+        Ok(d)
     }
     pub fn normalised(mut self) -> Self {
         if self.mantissa == 0 {
@@ -107,10 +156,16 @@ impl Decimal {
     }
     /// Shortest decimal text that reads back as the same value: plain digits with a point where
     /// needed, never an exponent, no trailing zeros, no leading zeros but one before a point.
+    /// The one exception is a value no parser produces, whose exponent is beyond
+    /// [`Self::MAX_EXPONENT`]: it is written `<mantissa>e<exponent>`, so that the text is bounded
+    /// whatever built the value.
     pub fn shortest(self) -> String {
         let d = self.normalised();
         if d.mantissa == 0 {
             return "0".into();
+        }
+        if d.exponent.unsigned_abs() > Self::MAX_EXPONENT as u32 {
+            return format!("{}e{}", d.mantissa, d.exponent);
         }
         let digits = d.mantissa.to_string();
         if d.exponent >= 0 {
@@ -149,9 +204,43 @@ pub enum QuantityError {
     Malformed,
 }
 
+/// Why a token is refused, with the reason the public [`QuantityError`] does not carry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum QuantityRefusal {
+    MissingUnit,
+    Malformed,
+    /// A number and a unit, the number beyond [`Decimal::MAX_EXPONENT`]: both as written and cut
+    /// to [`SHOWN`] characters, so that the message about it is bounded.
+    OutOfRange {
+        number: String,
+        unit: String,
+    },
+}
+
+/// The most characters of a refused token that an error carries.
+const SHOWN: usize = 64;
+
+fn shown(text: &str) -> String {
+    match text.char_indices().nth(SHOWN) {
+        Some((i, _)) => format!("{}…", &text[..i]),
+        None => text.to_string(),
+    }
+}
+
 impl Quantity {
     /// Parse `5ms`, `0.5mH`, `1e-3s`, `24V`, `0.01USD`. A bare number is [`QuantityError::MissingUnit`].
+    /// A number whose exponent is beyond [`Decimal::MAX_EXPONENT`] is [`QuantityError::Malformed`]
+    /// here; the manifest parser asks for the reason and reports `quantity.out-of-range`.
     pub fn parse(token: &str) -> Result<Self, QuantityError> {
+        Self::classify(token).map_err(|e| match e {
+            QuantityRefusal::MissingUnit => QuantityError::MissingUnit,
+            QuantityRefusal::Malformed | QuantityRefusal::OutOfRange { .. } => {
+                QuantityError::Malformed
+            }
+        })
+    }
+
+    pub(crate) fn classify(token: &str) -> Result<Self, QuantityRefusal> {
         let token = token.trim();
         let split = token
             .find(|c: char| {
@@ -177,22 +266,32 @@ impl Quantity {
         }
         let (num, unit) = token.split_at(split);
         if num.contains(['-', '+']) && !num.contains(['e', 'E']) {
-            return Err(QuantityError::Malformed);
+            return Err(QuantityRefusal::Malformed);
         }
-        let number = Decimal::parse(num).ok_or(QuantityError::Malformed)?;
+        let number = match Decimal::parse_classified(num) {
+            Ok(n) => Some(n),
+            Err(DecimalRefusal::OutOfRange) => None,
+            Err(DecimalRefusal::Malformed) => return Err(QuantityRefusal::Malformed),
+        };
         if unit.is_empty() {
-            return Err(QuantityError::MissingUnit);
+            return Err(QuantityRefusal::MissingUnit);
         }
         if !unit
             .chars()
             .all(|c| c.is_alphanumeric() || c == 'µ' || c == '/' || c == '%')
         {
-            return Err(QuantityError::Malformed);
+            return Err(QuantityRefusal::Malformed);
         }
-        Ok(Self {
-            number,
-            unit: unit.to_string(),
-        })
+        match number {
+            Some(number) => Ok(Self {
+                number,
+                unit: unit.to_string(),
+            }),
+            None => Err(QuantityRefusal::OutOfRange {
+                number: shown(num),
+                unit: shown(unit),
+            }),
+        }
     }
 
     pub fn as_pair(&self) -> (String, String) {

@@ -9,7 +9,7 @@ use toml::Value;
 
 use crate::error::{Error, Errors, Kind};
 use crate::manifest::*;
-use crate::quantity::{Quantity, QuantityError, TickLength};
+use crate::quantity::{Quantity, QuantityRefusal, TickLength};
 use crate::{HostMaxima, maxima};
 
 impl Manifest {
@@ -218,9 +218,21 @@ impl Parser {
         required: bool,
     ) -> Option<Quantity> {
         match v {
-            Some(Value::String(s)) => match Quantity::parse(s) {
+            Some(Value::String(s)) => match Quantity::classify(s) {
                 Ok(q) => Some(q),
-                Err(QuantityError::MissingUnit) => {
+                Err(QuantityRefusal::OutOfRange { number, unit }) => {
+                    // A number beyond what a quantity may hold (Decimal::MAX_EXPONENT): refused
+                    // with the value as written, cut, never built into a text of its own size.
+                    self.err(
+                        Kind::QuantityOutOfRange {
+                            field: field.into(),
+                            value: (number, unit),
+                        },
+                        field,
+                    );
+                    None
+                }
+                Err(QuantityRefusal::MissingUnit) => {
                     self.err(
                         Kind::QuantityMissingUnit {
                             field: field.into(),
@@ -230,7 +242,7 @@ impl Parser {
                     );
                     None
                 }
-                Err(QuantityError::Malformed) => {
+                Err(QuantityRefusal::Malformed) => {
                     self.err(
                         Kind::ManifestType {
                             field: field.into(),

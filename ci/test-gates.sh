@@ -2,7 +2,8 @@
 # A control that has never failed has not been shown to work. This script plants one violation at
 # a time in a scratch copy and checks that the control rejects it, and that the same control
 # passes the copy without the violation. It changes nothing in the repository.
-#   - ci/fuzz.sh: a fuzz run that exits 77, a list that is empty, a list that fails
+#   - ci/fuzz.sh: a fuzz run that exits 77, a list that is empty, a list that fails, and
+#     the dictionary that goes to the target of its name
 #   - ci/check-rfc-index.sh: an indexed file that is missing, a file that is not indexed
 #   - ci/check-rfc-invariants.sh: a status line that disagrees with its folder, no status line,
 #     a broken relative link (and a broken link inside a code fence, which is an example)
@@ -47,7 +48,7 @@ case "$*" in
   *"fuzz list"*)
     if [ -n "${FAKE_LIST_RC:-}" ]; then exit "$FAKE_LIST_RC"; fi
     printf '%s\n' ${FAKE_TARGETS-alpha beta} ;;
-  *"fuzz run"*) exit "${FAKE_RC:-0}" ;;
+  *"fuzz run"*) [ -z "${FAKE_LOG:-}" ] || echo "$*" >>"$FAKE_LOG"; exit "${FAKE_RC:-0}" ;;
 esac
 EOF
 chmod +x "$scratch/bin/cargo"
@@ -56,6 +57,15 @@ expect pass "fuzz.sh passes when every target runs clean" fuzz FAKE_RC=0
 expect fail "fuzz.sh fails when a target exits 77" fuzz FAKE_RC=77
 expect fail "fuzz.sh fails when the list of targets is empty" fuzz FAKE_TARGETS=
 expect fail "fuzz.sh fails when cargo fuzz list fails" fuzz FAKE_LIST_RC=1
+# The dictionary is passed to the target whose name it bears, and to no other.
+dict_given() {
+  : >"$scratch/args"
+  fuzz FAKE_LOG="$scratch/args" FAKE_TARGETS="manifest module" >/dev/null 2>&1 || return 1
+  [ "$(grep -c -- '-dict=.*/fuzz/dictionaries/manifest.dict' "$scratch/args")" = 1 ] &&
+    [ "$(grep -c -- '-dict=' "$scratch/args")" = 1 ] &&
+    ! grep -- 'fuzz run module' "$scratch/args" | grep -q -- '-dict='
+}
+expect pass "fuzz.sh gives fuzz/dictionaries/manifest.dict to the manifest target only" dict_given
 
 # --- ci/check-rfc-index.sh -------------------------------------------------------------------
 fresh

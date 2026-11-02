@@ -2,7 +2,8 @@
 # Run every fuzz target for the seconds given (RFC 006 rule 7). Needs the nightly toolchain and
 # cargo-fuzz. Exits non-zero when a target crashes, when `cargo fuzz list` fails, or when it
 # lists no target: a gate that cannot fail is not a gate. A crash leaves its input under
-# fuzz/artifacts/<target>/, which CI uploads. Usage: ci/fuzz.sh [seconds]
+# fuzz/artifacts/<target>/, which CI uploads. A file fuzz/dictionaries/<target>.dict is given to
+# that target as its dictionary. Usage: ci/fuzz.sh [seconds]
 set -eu
 seconds="${1:-60}"
 cd "$(dirname "$0")/.."
@@ -16,7 +17,11 @@ trap 'rm -f "$log"' EXIT
 status=0
 for target in $targets; do
   echo "== $target for ${seconds}s"
-  if cargo +nightly fuzz run "$target" -- -max_total_time="$seconds" -max_len=65536 >"$log" 2>&1; then
+  # A dictionary of the target's name, if there is one, gives the fuzzer the shapes of its input.
+  dict=""
+  if [ -f "fuzz/dictionaries/$target.dict" ]; then dict="-dict=$PWD/fuzz/dictionaries/$target.dict"; fi
+  # shellcheck disable=SC2086
+  if cargo +nightly fuzz run "$target" -- -max_total_time="$seconds" -max_len=65536 $dict >"$log" 2>&1; then
     tail -3 "$log"
   else
     rc=$?
