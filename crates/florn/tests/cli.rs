@@ -369,3 +369,47 @@ fn a_quantity_with_an_enormous_exponent_is_refused_under_a_memory_limit() {
         err.len()
     );
 }
+
+/// Zero is a whole number of ticks in every tick length (RFC 004 rule 25): a run with `end = 0` is
+/// a scenario, and it ends at once with `end-reached`; the two activations of `init` at tick 0 are
+/// all it holds, as those of any run that ends before its first timer.
+#[test]
+fn a_run_with_an_end_of_zero_ends_at_once() {
+    let d = dir("zero-end");
+    let (scenario, modules) = write_scenario(&d);
+    let text = std::fs::read_to_string(&scenario).unwrap();
+    for end in ["0s", "0ns", "0.000ms"] {
+        let zero = text
+            .lines()
+            .map(|l| {
+                if l.starts_with("end = ") {
+                    format!("end = \"{end}\"")
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let path = d.join("zero.toml");
+        std::fs::write(&path, zero).unwrap();
+        let out = florn()
+            .args([
+                "run",
+                path.to_str().unwrap(),
+                "--modules",
+                modules.to_str().unwrap(),
+                "--out",
+                d.join("zero.florn-run").to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        let (stdout, stderr) = (
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        );
+        assert_eq!(out.status.code(), Some(0), "{end}: {stderr}");
+        assert_eq!(value(&stdout, "ended"), Some("end-reached"), "{end}");
+        assert_eq!(value(&stdout, "handled"), Some("0"), "{end}");
+        assert_eq!(value(&stdout, "records"), Some("2"), "{end}: the two inits");
+    }
+}

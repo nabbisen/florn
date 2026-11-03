@@ -63,6 +63,12 @@ pub struct Draft {
     pub changes: Vec<DraftChange>,
     /// The Host's refusals of the last load that name no field, and every one in order.
     pub errors: Vec<Notification>,
+    /// The actors of the scenario this draft was made from that it could not take, as (identity,
+    /// name): a built-in has no module, and the summary does not carry the built-in's name, so
+    /// the draft cannot write it back. A draft that dropped an actor is not the scenario it was
+    /// made from, and its manifest need not even load (a connection names the dropped actor); it
+    /// is not applied while this is not empty (see [`Draft::can_apply`]).
+    pub dropped: Vec<(u32, String)>,
     next_actor: u32,
     next_connection: u32,
 }
@@ -90,6 +96,7 @@ impl Draft {
             connections: Vec::new(),
             changes: Vec::new(),
             errors: Vec::new(),
+            dropped: Vec::new(),
             next_actor: 1,
             next_connection: FIRST_CONNECTION_ID,
         }
@@ -116,7 +123,10 @@ impl Draft {
             });
         }
         for a in &s.actors {
-            let Some(module) = &a.module else { continue };
+            let Some(module) = &a.module else {
+                d.dropped.push((a.id, a.name.clone()));
+                continue;
+            };
             let summary = s.modules.iter().find(|m| m.name == *module);
             // What the manifest sets, as set (the file round-trips to the same scenario);
             // the declared parameters it leaves to the module, as empty optional fields.
@@ -177,6 +187,13 @@ impl Draft {
             });
         }
         d
+    }
+
+    /// Whether the draft may be applied as the scenario: not when it dropped an actor of the
+    /// scenario it was made from (the person is told which, and starts a new scenario or opens
+    /// another one). Safety before function: a draft never replaces a scenario with a lesser one.
+    pub fn can_apply(&self) -> bool {
+        self.dropped.is_empty()
     }
 
     pub fn add_module(&mut self, m: DraftModule) {

@@ -282,3 +282,27 @@ fn a_byte_quantity_beyond_u128_is_out_of_range_and_not_not_whole() {
     let (code, _, _) = only_error(&scenario("1s", "0.5B"));
     assert_eq!(code, "quantity.not-whole-unit");
 }
+
+/// RFC 004 rule 25: a duration is refused only when it is not whole in ticks; zero is whole in
+/// every tick length, however it is written. (It was refused as "not whole", with the smallest
+/// tick `1fs` named, because the normalised zero has the exponent 0.)
+#[test]
+fn zero_is_a_whole_number_of_ticks_in_every_tick_length() {
+    for tick in [TickLength::Ns, TickLength::Ps, TickLength::Fs] {
+        for text in ["0s", "0ns", "0fs", "0.000ms", "0e5s", "0e-5us", "000ps"] {
+            let q = Quantity::parse(text).unwrap();
+            assert_eq!(q.to_ticks(tick), Ok(Some(0)), "{text} at {tick:?}");
+        }
+    }
+    assert_eq!(Quantity::parse("0B").unwrap().to_bytes(), Ok(Some(0)));
+    assert_eq!(Quantity::parse("0.0MiB").unwrap().to_bytes(), Ok(Some(0)));
+    assert_eq!(Decimal::parse("0").unwrap().as_integer_at(6), Some(0));
+    // A zero in a scenario's fields.
+    assert!(parse(&scenario_at("1ns", "0s", "1MiB")).is_ok());
+    assert!(parse(&scenario_at("1fs", "0e30s", "1MiB")).is_ok());
+    // Not zero, and not whole, keeps its code; a unit that is no time unit keeps its own.
+    let (code, _, _) = only_error(&scenario_at("1ns", "0.5ns", "1MiB"));
+    assert_eq!(code, "quantity.not-whole-ticks");
+    let (code, _, _) = only_error(&scenario_at("1ns", "0y", "1MiB"));
+    assert_eq!(code, "quantity.unknown-unit");
+}

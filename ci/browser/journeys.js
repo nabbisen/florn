@@ -694,6 +694,39 @@ for (const name of browsers) {
     check(false, `${name}: P4`, { error: String(err).split("\n")[0] });
   }
 
+  // PR-33: the draft cannot take a built-in actor (the summary carries no built-in's name), and a
+  // draft that dropped an actor is not the scenario it was made from. It is said, in the language
+  // of the page, and the draft is neither applied nor saved; the scenario that is loaded still runs.
+  try {
+    const { page, errors } = await openApp(context);
+    const [m1] = await Promise.all([page.waitForEvent("filechooser"), page.click("#import-module")]);
+    await m1.setFiles(join(root, "scenarios/modules/net_echo.wasm"));
+    await until(page, (x) => x.files.some((f) => f.kind === "module"), 20000, "net_echo imported");
+    const [m2] = await Promise.all([page.waitForEvent("filechooser"), page.click("#open-scenario")]);
+    await m2.setFiles(join(root, "scenarios/net-blackhole.toml"));
+    await until(page, (x) => x.state === "ready" && x.nodes === 2, 30000, "net-blackhole ready");
+    await page.click("#authoring-title");
+    const said = (await page.textContent("#draft-dropped")) || "";
+    const savedSaid = (await page.textContent("#save-dropped")) || "";
+    check(/could not be taken into the editor/.test(said) && said === savedSaid, `${name}: PR-33 a draft that dropped a built-in says which actor, beside the draft and beside Save`, { said });
+    check((await page.isDisabled("#apply-draft")) && (await page.isDisabled("#save-scenario")), `${name}: PR-33 such a draft can be neither applied nor saved`);
+    await page.click("#lang-ja");
+    await sleep(300);
+    const saidJa = (await page.textContent("#draft-dropped")) || "";
+    check(/エディターに取り込めない/.test(saidJa), `${name}: PR-33 the sentence is in Japanese when the page is`, { said: saidJa });
+    await page.click("#lang-en");
+    await runToEnd(page);
+    check((await state(page)).state === "ended", `${name}: PR-33 the scenario that is loaded still runs to its end`);
+    // A new scenario has nothing dropped: the buttons work again.
+    await page.click("#new-draft");
+    await sleep(200);
+    check(((await page.textContent("#draft-dropped")) || "") === "" && !(await page.isDisabled("#apply-draft")), `${name}: PR-33 a new scenario can be applied again`);
+    await consoleCheck(page, errors, `${name}: PR-33 no error of the application in the console`);
+    await page.close();
+  } catch (err) {
+    check(false, `${name}: PR-33`, { error: String(err).split("\n")[0] });
+  }
+
   // RFC 011 rule 8 (checklist C29): the BGP lab opens from the list with its story, its peer
   // and route reports decode in the inspector, a frame decodes, and the run ends with the
   // recorded digest.

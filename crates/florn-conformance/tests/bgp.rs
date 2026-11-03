@@ -205,6 +205,34 @@ fn a_hold_of_an_enormous_number_is_out_of_range_at_load() {
     }
 }
 
+/// The module declares `keepalive` with the default `0s`, which means a third of `hold`
+/// (RFC 011 rule 2). A zero duration was refused as not whole in ticks, so a router that left
+/// `keepalive` out could not be loaded; it loads, and its sessions come up.
+#[test]
+fn a_router_without_keepalive_loads_and_keeps_a_third_of_hold() {
+    let router = |id: u32, as_: u32| {
+        router(id, "bgp", 1)
+            .with("as", as_.to_string())
+            .with("hold", format!("\"{HOLD}ns\""))
+    };
+    let s = Scenario::new("bgp-default-keepalive", 400)
+        .domain("network")
+        .actor(router(1, 1).with("networks", "\"10.1.0.0/16\""))
+        .actor(router(2, 2))
+        .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")]);
+    assert!(host::refused(&s).is_empty(), "{:?}", host::refused(&s));
+    let run = host::run(&s);
+    assert!(host::faults(&run).is_empty());
+    let up: Vec<String> = states(&run, 1, 0).into_iter().map(|(_, s)| s).collect();
+    assert_eq!(up, ["open-sent", "open-confirm", "established"]);
+    // Still established after several holds: keepalives went out, at a third of `hold`.
+    let sent = sends(&run, 1).len();
+    assert!(
+        sent > 8,
+        "{sent} frames in 400 ticks at a keepalive of {KEEPALIVE}"
+    );
+}
+
 #[test]
 fn the_hold_timer_expires_hold_ticks_after_the_last_valid_frame_on_both_sides() {
     // r2 sends a keepalive every 200 ticks, beyond r1's hold of 90: r1's hold timer expires

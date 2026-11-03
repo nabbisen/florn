@@ -807,3 +807,57 @@ fn p4_swapping_is_said_and_the_files_of_storage_are_listed() {
             .any(|n| n.notification.code == "storage.evicted")
     );
 }
+
+/// A draft cannot take a built-in (the summary carries no built-in's name), and a draft that
+/// dropped an actor is not the scenario it was made from: its manifest need not even load, for a
+/// connection names the actor that is gone. So it is told, and it is not applied (safety before
+/// function); the scenario that is loaded stays and runs as it was.
+#[test]
+fn a_draft_that_dropped_a_built_in_is_not_applied() {
+    let blackhole = shipped::all()
+        .into_iter()
+        .find(|s| s.scenario.name == "net-blackhole")
+        .unwrap()
+        .scenario;
+    let mut c = controller();
+    let mut vm = ViewModel::new();
+    vm.connect();
+    pump(&mut c, &mut vm);
+    vm.open_scenario(blackhole.text(&blackhole.hashes()).into_bytes());
+    pump(&mut c, &mut vm);
+    for bytes in blackhole.modules().into_values() {
+        vm.load_module(bytes);
+    }
+    pump(&mut c, &mut vm);
+    let summary = vm.scenario.clone().expect("the scenario is loaded");
+    let builtin: Vec<(u32, String)> = summary
+        .actors
+        .iter()
+        .filter(|a| a.module.is_none())
+        .map(|a| (a.id, a.name.clone()))
+        .collect();
+    assert_eq!(builtin.len(), 1, "net-blackhole has one built-in");
+    assert_eq!(vm.draft.dropped, builtin, "the draft says which it dropped");
+    assert!(!vm.draft.can_apply());
+    // Applying sends nothing and changes nothing: the loaded scenario is still the Host's.
+    vm.load_draft();
+    assert!(vm.take_outbox().is_empty(), "nothing is sent");
+    assert_eq!(
+        vm.scenario.as_ref().map(|s| s.sha256.clone()),
+        Some(summary.sha256.clone())
+    );
+    // The scenario still runs as it was.
+    vm.new_run(Some(1));
+    pump(&mut c, &mut vm);
+    advance_to(&mut c, &mut vm, 100, 50);
+    assert!(vm.topology.instant >= 100, "the run advanced");
+    // A new scenario starts without the loss; so does a scenario without a built-in.
+    vm.draft = florn_ui_model::Draft::new("scenario");
+    assert!(vm.draft.dropped.is_empty() && vm.draft.can_apply());
+    let mut c2 = controller();
+    let mut vm2 = ViewModel::new();
+    open_triangle(&mut c2, &mut vm2);
+    assert!(vm2.draft.dropped.is_empty() && vm2.draft.can_apply());
+    vm2.load_draft();
+    assert!(!vm2.take_outbox().is_empty(), "a whole draft is applied");
+}

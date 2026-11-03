@@ -254,8 +254,13 @@ impl ViewModel {
         self.query(Query::Scenario);
         self.query(Query::RunState);
     }
-    /// Load the draft as the scenario: the Host's refusals come back to the fields.
+    /// Load the draft as the scenario: the Host's refusals come back to the fields. A draft that
+    /// dropped an actor of its scenario is not loaded (`Draft::can_apply`): nothing is sent, and
+    /// the scenario that is loaded stays as it is.
     pub fn load_draft(&mut self) {
+        if !self.draft.can_apply() {
+            return;
+        }
         self.draft.commit_all();
         self.draft.apply_errors(&[]);
         let text = self.draft.to_toml();

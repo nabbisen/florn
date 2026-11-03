@@ -191,8 +191,14 @@ impl Shared {
         self.bridge.export_stored(key);
     }
     pub fn save_scenario(&self) {
-        let Some((name, text)) =
-            self.read(|vm| (vm.draft.name.committed.clone(), vm.draft.to_toml()))
+        // A draft that could not take an actor of its scenario is not the scenario: not saved.
+        let Some((name, text)) = self
+            .read(|vm| {
+                vm.draft
+                    .can_apply()
+                    .then(|| (vm.draft.name.committed.clone(), vm.draft.to_toml()))
+            })
+            .flatten()
         else {
             return;
         };

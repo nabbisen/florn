@@ -197,6 +197,7 @@
  "label.inspector.fault": "{code} at tick {at} after {metered} units of work",
  "label.authoring.place": "Place {module}",
  "label.authoring.problems": "{count} problems",
+ "label.authoring.dropped": "These actors could not be taken into the editor, so the draft is neither applied nor saved: {actors}. The scenario that is loaded still runs as it was.",
  "label.interventions.applied_at": "applied at tick {at}",
  "label.status.swapping": "swapping: {resident} of {actors} actors resident",
  "label.inspector.checkpoint": "tick {instant}, {records} records, {bytes}",

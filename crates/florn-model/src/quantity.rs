@@ -170,14 +170,16 @@ impl Decimal {
     /// the digits of a `u128`, not by the exponent.
     pub(crate) fn scaled(self, unit_exponent: i32) -> Scaled {
         let d = self.normalised();
+        // Zero is whole at every scale (RFC 004 rule 25): a normalised zero has the exponent 0,
+        // which is no digit below the unit.
+        if d.mantissa == 0 {
+            return Scaled::Whole(0);
+        }
         let shift = i64::from(d.exponent) - i64::from(unit_exponent);
         if shift < 0 {
             return Scaled::Fraction; // digits below the unit: not whole
         }
         let mut v = d.mantissa;
-        if v == 0 {
-            return Scaled::Whole(0); // nothing to multiply, whatever the shift
-        }
         for _ in 0..shift {
             match v.checked_mul(10) {
                 Some(next) => v = next,
@@ -237,7 +239,9 @@ pub enum QuantityError {
 }
 
 /// Why a token is refused, with the reason [`QuantityError`] does not carry (see
-/// [`Quantity::classify`]).
+/// [`Quantity::classify`]). Not part of the stable API: it is public for the crates of this
+/// workspace and may change in a release that is not a patch release.
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum QuantityRefusal {
@@ -276,7 +280,10 @@ impl Quantity {
     }
 
     /// [`Self::parse`] with the reason it refuses. A front end names a field with the reason: a
-    /// number out of range is `quantity.out-of-range`, a text that is no quantity is not.
+    /// number out of range is `quantity.out-of-range`, a text that is no quantity is not. Not
+    /// part of the stable API: it is public for the crates of this workspace and may change in a
+    /// release that is not a patch release.
+    #[doc(hidden)]
     pub fn classify(token: &str) -> Result<Self, QuantityRefusal> {
         let token = token.trim();
         let split = token

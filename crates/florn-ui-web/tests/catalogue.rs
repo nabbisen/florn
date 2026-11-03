@@ -151,3 +151,18 @@ fn both_catalogues_cover_every_code_and_enumeration_exactly() {
         assert!(!te.trim().is_empty() && !tj.trim().is_empty());
     }
 }
+
+/// The sentence that says which actors a draft could not take names them in both languages.
+#[test]
+fn the_sentence_about_dropped_actors_has_its_placeholder_in_both_languages() {
+    for (name, text) in [
+        ("en", include_str!("../catalogue/en.json")),
+        ("ja", include_str!("../catalogue/ja.json")),
+    ] {
+        let line = text
+            .lines()
+            .find(|l| l.contains("\"label.authoring.dropped\""))
+            .unwrap_or_else(|| panic!("{name}: the sentence exists"));
+        assert!(line.contains("{actors}"), "{name}: {line}");
+    }
+}

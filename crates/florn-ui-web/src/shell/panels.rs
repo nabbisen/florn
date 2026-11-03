@@ -15,6 +15,7 @@ use florn_ui_model::{Inspector, Point, Selection, ViewModel};
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
+use super::catalogue::Lang;
 use super::i18n_gen::i18n::*;
 use super::{SPEEDS, Shared, StepUnit, attach_canvas, catalogue, lang_of};
 
@@ -327,6 +328,20 @@ fn Header(shared: Shared) -> impl IntoView {
     }
 }
 
+/// The sentence that says which actors a draft could not take, or nothing when it took them all
+/// (the draft is then not applied and not saved: `Draft::can_apply`).
+fn dropped_sentence(lang: Lang, dropped: &[(u32, String)]) -> String {
+    if dropped.is_empty() {
+        return String::new();
+    }
+    let actors = dropped
+        .iter()
+        .map(|(id, name)| format!("{name} ({id})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    catalogue::label(lang, "authoring.dropped", &[("actors", actors)])
+}
+
 #[component]
 fn Labs(shared: Shared) -> impl IntoView {
     let i18n = use_i18n();
@@ -357,6 +372,11 @@ fn Labs(shared: Shared) -> impl IntoView {
             })
             .unwrap_or_default()
         })
+    };
+    // A draft that could not take an actor is not saved (`Draft::can_apply`): said beside the button.
+    let dropped = move || -> Vec<(u32, String)> {
+        rev.track();
+        sv.with_value(|s| s.read(|vm| vm.draft.dropped.clone()).unwrap_or_default())
     };
     let file_focus = RwSignal::new(0usize);
     let storage_note = move || -> String {
@@ -396,12 +416,13 @@ fn Labs(shared: Shared) -> impl IntoView {
             <p class="help">{t!(i18n, files.cache_note)}</p>
             <div class="buttons">
                 <button type="button" id="open-scenario" on:click=move |_| sv.with_value(|s| s.pick_file("scenario"))>{t!(i18n, files.open_scenario)}</button>
-                <button type="button" id="save-scenario" on:click=move |_| sv.with_value(|s| s.save_scenario())>{t!(i18n, files.save_scenario)}</button>
+                <button type="button" id="save-scenario" prop:disabled=move || !dropped().is_empty() on:click=move |_| sv.with_value(|s| s.save_scenario())>{t!(i18n, files.save_scenario)}</button>
                 <button type="button" id="import-module" on:click=move |_| sv.with_value(|s| s.pick_file("module"))>{t!(i18n, files.import_module)}</button>
                 <button type="button" id="export-record" on:click=move |_| sv.with_value(|s| s.update(|vm| vm.preview_export(ExportKind::RunRecord { trace: true, payloads: false })))>{t!(i18n, files.export_record)}</button>
                 <button type="button" id="replay-record" on:click=move |_| sv.with_value(|s| s.pick_file("record"))>{t!(i18n, files.replay_record)}</button>
                 <button type="button" id="load-checkpoint" on:click=move |_| sv.with_value(|s| s.pick_file("checkpoint"))>{t!(i18n, files.load_checkpoint)}</button>
             </div>
+            <p id="save-dropped" class="problems">{move || dropped_sentence(lang_of(i18n.get_locale()), &dropped())}</p>
             <p class="help">{t!(i18n, files.replay_note)}</p>
             <h3 id="files-title">{t!(i18n, files.stored)}</h3>
             <p class="help" id="storage-note">{storage_note}</p>
@@ -1409,6 +1430,11 @@ fn Authoring(shared: Shared) -> impl IntoView {
             .unwrap_or_default()
         })
     };
+    let dropped = move || -> Vec<(u32, String)> {
+        rev.track();
+        draft_rev.track();
+        sv.with_value(|s| s.read(|vm| vm.draft.dropped.clone()).unwrap_or_default())
+    };
     let ports_ref = NodeRef::<leptos::html::Input>::new();
     let place = move |name: String, ty: String, ports: u32| {
         let ports = ports_ref
@@ -1568,8 +1594,9 @@ fn Authoring(shared: Shared) -> impl IntoView {
             <p class="help">{t!(i18n, authoring.help)}</p>
             <div class="buttons">
                 <button type="button" id="new-draft" on:click=new_draft>{t!(i18n, authoring.new)}</button>
-                <button type="button" id="apply-draft" on:click=apply>{t!(i18n, authoring.apply)}</button>
+                <button type="button" id="apply-draft" prop:disabled=move || !dropped().is_empty() on:click=apply>{t!(i18n, authoring.apply)}</button>
             </div>
+            <p id="draft-dropped" class="problems">{move || dropped_sentence(lang_of(i18n.get_locale()), &dropped())}</p>
             <form id="draft-fields" on:submit=|ev| ev.prevent_default()>
                 {move || top_fields().into_iter().enumerate().map(|(i, f)| field_view("draft".into(), i, f)).collect_view()}
             </form>

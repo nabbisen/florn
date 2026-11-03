@@ -197,6 +197,7 @@
  "label.inspector.fault": "ティック {at} に {metered} 単位の作業の後 {code}",
  "label.authoring.place": "{module} を置く",
  "label.authoring.problems": "問題 {count} 件",
+ "label.authoring.dropped": "次のアクターはエディターに取り込めないため、この下書きは適用も保存もできません: {actors}。読み込み済みのシナリオはそのまま実行できます。",
  "label.status.swapping": "スワップ中: {actors}個のアクターのうち{resident}個が常駐",
  "label.inspector.checkpoint": "ティック{instant}、レコード{records}件、{bytes}",
  "label.inspector.parent": "実行{parent}のティック{instant}から",
