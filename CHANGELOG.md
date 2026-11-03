@@ -17,6 +17,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - Small documentation corrections: the roles table says the architect reviews after the push, as the owner decided; PHY-006 reads `0.4` dense and `later` sparse; the contracts page lists `florn:network`; two traceability and heading slips of the external design.
 - The roadmap records the Phase 4 plan the owner authorised on 2026-10-31: the milestones M0 to M6, the verifier arrangement, the patch-release rule and release 0.3.1.
 - The Phase 4 handoff package `rfcs/handoffs/012-circuit-domain/`: twenty-six units (PR-31 to PR-56) in six milestones, the checks per unit, and the brief for a verifier session.
+- The fuzz job starts the `run_toml` and `record` targets from files the runner makes of the shipped scenarios (`ci/fuzz-seeds.sh`: 15 `run.toml` and 15 run records, with and without the trace and payloads), as it starts the manifest target from the scenarios themselves, and gives the record target an input length of 256 KiB, because a seed longer than the limit is cut off and a cut ZIP is no file. The seeds make a find likelier and promise none. Three new controls in `ci/test-gates.sh` (the seeds reach the right directories and no other; a runner that fails fails the script; the input lengths), 24 in all. The checkpoint target is not seeded: a checkpoint holds every actor's memory, a real one is 1.2 to 5 MB, and the cached corpus grew by 350 MB in two minutes (PR-34a).
 
 ## [0.3.1] - 2026-11-03
 

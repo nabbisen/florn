@@ -3,8 +3,8 @@
 # a time in a scratch copy and checks that the control rejects it, and that the same control
 # passes the copy without the violation. It changes nothing in the repository.
 #   - ci/fuzz.sh: a fuzz run that exits 77, a list that is empty, a list that fails,
-#     the dictionary that goes to the target of its name, the RSS limit of every target, and the
-#     seeds of the manifest target
+#     the dictionary that goes to the target of its name, the RSS limit of every target, the seeds
+#     of the manifest target and of the runner's run.toml and record, and the record's input length
 #   - ci/check-rfc-index.sh: an indexed file that is missing, a file that is not indexed
 #   - ci/check-rfc-invariants.sh: a status line that disagrees with its folder, no status line,
 #     a broken relative link (and a broken link inside a code fence, which is an example)
@@ -56,7 +56,7 @@ chmod +x "$scratch/bin/cargo"
 # The script runs in a scratch tree of its own: it copies seeds into a corpus directory, and this
 # script changes nothing in the repository.
 mkdir -p "$scratch/f/ci" "$scratch/f/scenarios" "$scratch/f/fuzz"
-cp ci/fuzz.sh "$scratch/f/ci/"
+cp ci/fuzz.sh ci/fuzz-seeds.sh "$scratch/f/ci/"
 cp scenarios/*.toml "$scratch/f/scenarios/"
 cp -r fuzz/dictionaries "$scratch/f/fuzz/dictionaries"
 fuzz() { env "$@" PATH="$scratch/bin:$PATH" "$scratch/f/ci/fuzz.sh" 1; }
@@ -90,6 +90,50 @@ seeds_given() {
     [ "$(ls "$scratch/f/fuzz/corpus/manifest" | wc -l)" = "$(($(ls scenarios/*.toml | wc -l) - 1))" ]
 }
 expect pass "fuzz.sh copies the shipped scenarios into the manifest corpus and nowhere else" seeds_given
+
+# The seeds of the runner's formats (ci/fuzz-seeds.sh), with a fake runner that writes a ZIP with a
+# run.toml in it and a few bytes of checkpoint, and exits with 3 for zero-delay as the real one does.
+cat >"$scratch/bin/florn" <<'FAKE'
+#!/bin/sh
+out=""; ck=""; scen=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    run | --trace | --payloads) ;;
+    --out) out=$2; shift ;;
+    --checkpoint-out) ck=$2; shift ;;
+    --modules | --seed | --checkpoint-at) shift ;;
+    *) scen=$1 ;;
+  esac
+  shift
+done
+[ -z "${FAKE_RUNNER_RC:-}" ] || exit "$FAKE_RUNNER_RC"
+python3 -I -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w"); z.writestr("run.toml", "x = 1\n"); z.close()' "$out"
+[ -z "$ck" ] || printf 'CKPT' >"$ck"
+case "$scen" in *zero-delay*) exit 3 ;; esac
+FAKE
+chmod +x "$scratch/bin/florn"
+runner_seeds() {
+  rm -rf "$scratch/f/fuzz/corpus"
+  fuzz FLORN_RUNNER="$scratch/bin/florn" FAKE_TARGETS="run_toml record checkpoint module" >/dev/null 2>&1 || return 1
+  c="$scratch/f/fuzz/corpus"
+  [ "$(ls "$c/run_toml" | wc -l)" -gt 5 ] &&
+    [ "$(ls "$c/run_toml" | wc -l)" = "$(ls "$c/record" | wc -l)" ] &&
+    grep -q '^x = 1' "$c/run_toml/zero-delay-plain.toml" &&
+    [ "$(head -c 2 "$c/record/zero-delay-plain.florn-run")" = PK ] &&
+    [ ! -e "$c/checkpoint" ] && [ ! -e "$c/module" ] && [ ! -e "$c/manifest" ]
+}
+expect pass "fuzz.sh seeds run_toml and record from the runner's files, and no other target" runner_seeds
+# A runner that fails is a broken gate, not a missing seed.
+expect fail "fuzz.sh fails when the runner cannot make the seeds" fuzz FLORN_RUNNER="$scratch/bin/florn" FAKE_RUNNER_RC=1 FAKE_TARGETS="record"
+# A seed longer than -max_len would be cut off: the record target, whose files are longer, gets more.
+max_len_given() {
+  : >"$scratch/args"
+  fuzz FLORN_RUNNER="$scratch/bin/florn" FAKE_LOG="$scratch/args" FAKE_TARGETS="record checkpoint module" >/dev/null 2>&1 || return 1
+  grep 'fuzz run record' "$scratch/args" | grep -q -- '-max_len=262144 ' &&
+    grep 'fuzz run checkpoint' "$scratch/args" | grep -q -- '-max_len=65536 ' &&
+    grep 'fuzz run module' "$scratch/args" | grep -q -- '-max_len=65536 '
+}
+expect pass "fuzz.sh gives the record target the input length its files need, and the others 64 KiB" max_len_given
 
 # --- ci/check-rfc-index.sh -------------------------------------------------------------------
 fresh
