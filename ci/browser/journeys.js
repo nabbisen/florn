@@ -706,9 +706,13 @@ for (const name of browsers) {
     await m2.setFiles(join(root, "scenarios/net-blackhole.toml"));
     await until(page, (x) => x.state === "ready" && x.nodes === 2, 30000, "net-blackhole ready");
     await page.click("#authoring-title");
+    // The page paints what the model holds a moment after the model says it is ready.
+    await page.waitForFunction(() => (document.querySelector("#draft-dropped")?.textContent || "") !== "", null, { timeout: 10000 });
+    await page.waitForFunction(() => (document.querySelector("#save-dropped")?.textContent || "") !== "", null, { timeout: 10000 });
     const said = (await page.textContent("#draft-dropped")) || "";
     const savedSaid = (await page.textContent("#save-dropped")) || "";
     check(/could not be taken into the editor/.test(said) && said === savedSaid, `${name}: PR-33 a draft that dropped a built-in says which actor, beside the draft and beside Save`, { said });
+    await page.waitForFunction(() => document.querySelector("#apply-draft")?.disabled && document.querySelector("#save-scenario")?.disabled, null, { timeout: 10000 }).catch(() => {});
     check((await page.isDisabled("#apply-draft")) && (await page.isDisabled("#save-scenario")), `${name}: PR-33 such a draft can be neither applied nor saved`);
     await page.click("#lang-ja");
     await sleep(300);
@@ -719,7 +723,7 @@ for (const name of browsers) {
     check((await state(page)).state === "ended", `${name}: PR-33 the scenario that is loaded still runs to its end`);
     // A new scenario has nothing dropped: the buttons work again.
     await page.click("#new-draft");
-    await sleep(200);
+    await page.waitForFunction(() => (document.querySelector("#draft-dropped")?.textContent || "") === "", null, { timeout: 10000 }).catch(() => {});
     check(((await page.textContent("#draft-dropped")) || "") === "" && !(await page.isDisabled("#apply-draft")), `${name}: PR-33 a new scenario can be applied again`);
     await consoleCheck(page, errors, `${name}: PR-33 no error of the application in the console`);
     await page.close();
