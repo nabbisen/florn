@@ -95,11 +95,18 @@ fn encode_one(
             out.extend_from_slice(s.as_bytes());
         }
         (ParamType::Bytes, DomainValue::Text(s)) => {
-            let bytes: Vec<u8> = (0..s.len())
-                .step_by(2)
-                .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-                .collect::<Result<_, _>>()
-                .map_err(|_| wrong())?;
+            // `value_fits` has checked an even number of hexadecimal digits; the pairs are read
+            // by bytes and by digits all the same, so that no slice depends on that check.
+            let bytes: Vec<u8> = s
+                .as_bytes()
+                .chunks(2)
+                .map(|p| {
+                    let hi = char::from(p[0]).to_digit(16)?;
+                    let lo = char::from(*p.get(1)?).to_digit(16)?;
+                    Some((hi * 16 + lo) as u8)
+                })
+                .collect::<Option<_>>()
+                .ok_or_else(wrong)?;
             out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
             out.extend_from_slice(&bytes);
         }

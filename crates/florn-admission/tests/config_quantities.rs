@@ -128,3 +128,33 @@ fn a_value_in_range_is_encoded_as_before() {
     let bytes = encode_config(1, &module("real", "ohm"), &config, TickLength::Ns, &Ohms).unwrap();
     assert_eq!(bytes, 1.5f64.to_le_bytes());
 }
+
+/// A `bytes` parameter is hexadecimal text read by pairs: a text of an odd length, one with a
+/// multi-byte character or a sign is the wrong type, never a slice past the end or across a
+/// character (RFC 005 rule 5: a failure is never a panic).
+#[test]
+fn a_bytes_parameter_that_is_not_hexadecimal_is_the_wrong_type_and_never_panics() {
+    let bytes = |text: &str| {
+        let config: DomainMap = [("p".to_string(), DomainValue::Text(text.to_string()))]
+            .into_iter()
+            .collect();
+        encode_config(1, &module("bytes", ""), &config, TickLength::Ns, &NoUnits)
+    };
+    for bad in [
+        "abc",
+        "a",
+        "aЛa",
+        "Л",
+        "+a",
+        "-1",
+        "0g",
+        "ab cd",
+        "あいうえ",
+    ] {
+        let e = bytes(bad).expect_err(bad);
+        assert_eq!(e.codes(), ["config.type"], "{bad:?}");
+    }
+    assert_eq!(bytes("").unwrap(), [0, 0, 0, 0]);
+    assert_eq!(bytes("00ff10").unwrap(), [3, 0, 0, 0, 0x00, 0xff, 0x10]);
+    assert_eq!(bytes("AbCd").unwrap(), [2, 0, 0, 0, 0xab, 0xcd]);
+}

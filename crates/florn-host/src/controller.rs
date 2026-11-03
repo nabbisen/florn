@@ -1530,14 +1530,7 @@ fn module_summary(name: &str, m: &ModuleManifest, source: &[u8; 32]) -> ModuleSu
 
 /// A 64-hex digest's bytes.
 fn hex_digest(text: &str) -> Option<[u8; 32]> {
-    if text.len() != 64 {
-        return None;
-    }
-    let mut out = [0u8; 32];
-    for (i, b) in out.iter_mut().enumerate() {
-        *b = u8::from_str_radix(&text[2 * i..2 * i + 2], 16).ok()?;
-    }
-    Some(out)
+    crate::world::unhex(text)?.try_into().ok()
 }
 
 /// `[limits.<class>]` as text: counts bare, bytes with the unit `B`.

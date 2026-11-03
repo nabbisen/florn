@@ -1154,12 +1154,18 @@ impl Parser {
 }
 
 fn parse_hex32(s: &str) -> Option<[u8; 32]> {
-    if s.len() != 64 {
+    // By bytes and by digits: a text of 64 bytes may hold a multi-byte character, which a slice
+    // by two bytes would split (a panic on input the scenario chose), and `from_str_radix` would
+    // accept a leading `+`.
+    let b = s.as_bytes();
+    if b.len() != 64 {
         return None;
     }
     let mut out = [0u8; 32];
-    for (i, b) in out.iter_mut().enumerate() {
-        *b = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
+    for (i, o) in out.iter_mut().enumerate() {
+        let hi = char::from(b[2 * i]).to_digit(16)?;
+        let lo = char::from(b[2 * i + 1]).to_digit(16)?;
+        *o = (hi * 16 + lo) as u8;
     }
     Some(out)
 }

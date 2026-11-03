@@ -146,11 +146,37 @@ impl Intervention {
 }
 
 pub fn unhex(s: &str) -> Option<Vec<u8>> {
-    if !s.len().is_multiple_of(2) {
+    // By bytes and by digits, as `parse_hex32`: text from a file may hold a multi-byte character.
+    let b = s.as_bytes();
+    if !b.len().is_multiple_of(2) {
         return None;
     }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
+    b.chunks(2)
+        .map(|p| {
+            let hi = char::from(p[0]).to_digit(16)?;
+            let lo = char::from(p[1]).to_digit(16)?;
+            Some((hi * 16 + lo) as u8)
+        })
         .collect()
+}
+
+#[cfg(test)]
+mod hex_tests {
+    use super::unhex;
+
+    #[test]
+    fn hex_is_read_by_digits_and_never_splits_a_character() {
+        assert_eq!(unhex("00ff10"), Some(vec![0, 0xff, 0x10]));
+        assert_eq!(unhex("AbCd"), Some(vec![0xab, 0xcd]));
+        assert_eq!(unhex(""), Some(Vec::new()));
+        assert_eq!(unhex("abc"), None);
+        assert_eq!(unhex("0g"), None);
+        // A sign is not a digit, though `from_str_radix` takes one.
+        assert_eq!(unhex("+a"), None);
+        assert_eq!(unhex("-1"), None);
+        // An even number of bytes with a multi-byte character across a pair: refused, no panic.
+        assert_eq!(unhex("aЛa"), None);
+        assert_eq!(unhex("Л"), None);
+        assert_eq!(unhex(&"あ".repeat(4)), None);
+    }
 }
