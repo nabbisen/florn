@@ -20,7 +20,7 @@ pub mod quantity;
 pub use error::{Error, Errors, Kind, Param};
 pub use manifest::*;
 pub use package::{Package, PackageMeta};
-pub use quantity::{Decimal, Quantity, TickLength};
+pub use quantity::{Decimal, Quantity, QuantityRefusal, TickLength};
 
 /// The maxima that bound every allocation a manifest could size (RFC 004 rule 39, RFC 006 §7).
 /// Host constants, as RFC 003 rule 19 records them after the Phase 1 measurements.

@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use florn_conformance::host::{self, reports, sends, texts};
 use florn_conformance::scenario::{Scenario, router};
 use florn_conformance::shipped;
+use florn_control::Severity;
 use florn_domain_network::NetworkDomain;
 use florn_host::domain::Domain;
 
@@ -159,6 +160,49 @@ fn the_lab_establishes_chooses_by_local_preference_reroutes_after_the_break_and_
     assert_eq!(routes(&run, 3)[0].5, 20);
     // Every text a router logged is the hold timer's or none: nothing refused in the lab.
     assert!(texts(&run).is_empty(), "{:?}", texts(&run));
+}
+
+/// RFC 008 rule 17: the lab's module declares `route` in the BGP layout the view reads, so the
+/// lab loads with nothing to warn of. The log of a run holds `info` entries (the capacity, an
+/// admission, a domain event); a warning or an error in it is a finding, and `texts` alone does
+/// not see one, for it counts only what a router wrote.
+#[test]
+fn the_lab_starts_with_no_warning_in_its_log() {
+    for scenario in [shipped::bgp_lab(), shipped::bgp_outside()] {
+        let run = host::start(&scenario);
+        let unwelcome: Vec<String> = run
+            .log()
+            .entries()
+            .iter()
+            .filter(|e| e.notification.severity != Severity::Info)
+            .map(|e| e.notification.code.clone())
+            .collect();
+        assert!(unwelcome.is_empty(), "{unwelcome:?}");
+    }
+}
+
+/// A module's `config` is bounded as the scenario's own quantities are (RFC 004 rule 23;
+/// SEC-005): a `hold` of an enormous number is refused at load as `quantity.out-of-range`, not
+/// as the wrong type and not by allocating for it.
+#[test]
+fn a_hold_of_an_enormous_number_is_out_of_range_at_load() {
+    for hold in [
+        "\"1e2000000000s\"".to_string(),
+        "\"1e50s\"".to_string(),
+        format!("\"{}ns\"", "9".repeat(40)),
+    ] {
+        let s = Scenario::new("bgp-huge-hold", 100)
+            .domain("network")
+            .actor(
+                router(1, "bgp", 1)
+                    .with("as", "1")
+                    .with("hold", hold.clone())
+                    .with("keepalive", format!("\"{KEEPALIVE}ns\"")),
+            )
+            .actor(bgp(2, 1, 2))
+            .link("network/link", &[(1, 0), (2, 0)], &[("delay", "\"2ns\"")]);
+        assert_eq!(host::refused(&s), ["quantity.out-of-range"], "{hold}");
+    }
 }
 
 #[test]

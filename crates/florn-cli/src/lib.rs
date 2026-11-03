@@ -410,16 +410,22 @@ fn finish(
         _ => return Err("the run record was not written".into()),
     }
     // A run fault (a limit of RFC 001 rule 13, or a Host fault) is its own exit code, so that a
-    // script can tell it from a refusal; the `ended` line names the reason.
-    Ok(
-        if state.ended.as_deref() != Some("end-reached") && args.to.is_none() {
-            ExitCode::from(3)
-        } else if state.reproducible {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::from(1)
-        },
-    )
+    // script can tell it from a refusal; the `ended` line names the reason. The code follows the
+    // end reason whether or not `--to` was given: a run stopped by `--to` before its end has no
+    // reason yet (`ended` is absent) and is judged as any run is, by whether it reproduces; a run
+    // that ended for another reason than reaching its end, a fault met on the way to `--to`
+    // included, is a fault. A run asked for to its end that has no reason is a fault as before.
+    let faulted = match state.ended.as_deref() {
+        Some(reason) => reason != "end-reached",
+        None => args.to.is_none(),
+    };
+    Ok(if faulted {
+        ExitCode::from(3)
+    } else if state.reproducible {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    })
 }
 
 fn cmd_replay(args: &Args) -> Result<ExitCode, String> {

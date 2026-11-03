@@ -281,3 +281,84 @@ fn the_sdk_guests_admit_and_run() {
         );
     }
 }
+
+/// The exit code follows the end reason (RFC 005 rule 31), also for a run stopped with `--to`: a
+/// run fault met on the way to the tick is exit code 3, and a run stopped before any fault is not.
+#[test]
+fn a_run_fault_met_on_the_way_to_the_tick_of_resume_exits_with_3() {
+    let guests = guests();
+    let d = dir("resume-fault");
+    // A chain without delay that begins late: a1 pings at tick 50, a2 and a1 echo at once, for ever.
+    let text = scenario(
+        &guests,
+        100,
+        &[(1, "pinger", 1), (2, "pinger", 1)],
+        &[vec![(1, 0), (2, 0)]],
+    )
+    .replace(
+        "id = 1\nname = \"a1\"\nkind = \"module\"\nmodule = \"pinger\"\nports = [{ id = 0, name = \"p0\", type = \"core/port\" }]\n",
+        "id = 1\nname = \"a1\"\nkind = \"module\"\nmodule = \"pinger\"\nports = [{ id = 0, name = \"p0\", type = \"core/port\" }]\n[actors.config]\nperiod = 50\necho = true\n",
+    )
+    .replace(
+        "id = 2\nname = \"a2\"\nkind = \"module\"\nmodule = \"pinger\"\nports = [{ id = 0, name = \"p0\", type = \"core/port\" }]\n",
+        "id = 2\nname = \"a2\"\nkind = \"module\"\nmodule = \"pinger\"\nports = [{ id = 0, name = \"p0\", type = \"core/port\" }]\n[actors.config]\nperiod = 0\necho = true\n",
+    );
+    let scen = d.join("late-chain.toml");
+    std::fs::write(&scen, text).unwrap();
+    let checkpoint = d.join("before.florn-checkpoint");
+    let run = florn()
+        .args([
+            "run",
+            scen.to_str().unwrap(),
+            "--modules",
+            guests.to_str().unwrap(),
+            "--seed",
+            "1",
+            "--checkpoint-at",
+            "30",
+            "--checkpoint-out",
+            checkpoint.to_str().unwrap(),
+            "--out",
+            d.join("whole.florn-run").to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(
+        run.status.code(),
+        Some(3),
+        "the run itself meets the fault at tick 50: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let resume = |to: Option<&str>, out: &str| {
+        let mut c = florn();
+        c.args([
+            "resume",
+            checkpoint.to_str().unwrap(),
+            scen.to_str().unwrap(),
+            "--modules",
+            guests.to_str().unwrap(),
+            "--out",
+            d.join(out).to_str().unwrap(),
+        ]);
+        if let Some(to) = to {
+            c.args(["--to", to]);
+        }
+        let o = c.output().unwrap();
+        (
+            o.status.code(),
+            String::from_utf8_lossy(&o.stdout).into_owned(),
+            String::from_utf8_lossy(&o.stderr).into_owned(),
+        )
+    };
+    // Stopped at tick 40, before the fault: no end reason yet, a reproducible run: 0.
+    let (code, stdout, stderr) = resume(Some("40"), "to-40.florn-run");
+    assert_eq!(code, Some(0), "{stderr}");
+    assert_eq!(value(&stdout, "ended"), None, "{stdout}");
+    // Asked to tick 80, the fault at tick 50 ends the run on the way: 3, as without `--to`.
+    let (code, stdout, stderr) = resume(Some("80"), "to-80.florn-run");
+    assert_eq!(value(&stdout, "ended"), Some("host-fault"), "{stdout}");
+    assert_eq!(code, Some(3), "{stderr}");
+    let (code, stdout, stderr) = resume(None, "whole-resume.florn-run");
+    assert_eq!(value(&stdout, "ended"), Some("host-fault"), "{stdout}");
+    assert_eq!(code, Some(3), "{stderr}");
+}

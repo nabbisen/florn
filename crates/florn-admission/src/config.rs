@@ -1,7 +1,7 @@
 //! The config encoder (RFC 002 rules 13 and 14): a scenario's `config` against the module's
 //! declared parameters, in declaration order, defaults filled, each value encoded as rule 13 says.
 
-use florn_model::{Decimal, DomainMap, DomainValue, Quantity, TickLength};
+use florn_model::{Decimal, DomainMap, DomainValue, Quantity, QuantityRefusal, TickLength};
 
 use crate::error::{Error, Errors, Kind};
 use crate::manifest::{ModuleManifest, Param, ParamType, value_fits};
@@ -60,6 +60,20 @@ fn encode_one(
             path,
         )
     };
+    // A number beyond what a quantity holds is out of range, not of the wrong type (RFC 004 rule
+    // 23; SEC-005): the value as written, cut, and the parameter's path.
+    if let (ParamType::Ticks | ParamType::Integer | ParamType::Real, DomainValue::Text(s)) =
+        (param.ty, value)
+        && let Err(QuantityRefusal::OutOfRange { number, unit }) = Quantity::classify(s)
+    {
+        return Err(Error::at(
+            Kind::Model(Box::new(florn_model::Kind::QuantityOutOfRange {
+                field: path.to_string(),
+                value: (number, unit),
+            })),
+            path,
+        ));
+    }
     if !value_fits(param.ty, value) {
         return Err(wrong());
     }

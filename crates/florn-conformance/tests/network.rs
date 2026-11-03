@@ -337,6 +337,30 @@ fn every_code_of_rule_18_in_one_pass() {
     )
     .unwrap();
     assert!(d.validate_module("x", &m).is_empty());
+    // The table of section 7 gives `route` two layouts, the distance-vector one above and the
+    // BGP one (RFC 011 rule 8); either is read, and a near miss of either is not.
+    let route = |fields: &str| {
+        parse_manifest(&format!(
+            "florn-module = 1\nworld = \"florn:network/router@0.1.0\"\nkind = \"x\"\n[[telemetry]]\nchannel = 2\nname = \"route\"\nfields = [{fields}]\n"
+        ))
+        .unwrap()
+    };
+    let bgp = "{ name = \"prefix\", type = \"text\" }, { name = \"next-hop\", type = \"u64\" }, { name = \"path-length\", type = \"u64\" }, { name = \"local-pref\", type = \"u64\" }, { name = \"med\", type = \"u64\" }, { name = \"winner\", type = \"text\" }";
+    assert!(d.validate_module("x", &route(bgp)).is_empty());
+    // A field renamed, a field of another type, a field missing, the order changed.
+    for near_miss in [
+        bgp.replace("med", "metric"),
+        bgp.replace("\"winner\", type = \"text\"", "\"winner\", type = \"u64\""),
+        bgp.replace(", { name = \"winner\", type = \"text\" }", ""),
+        bgp.replace(
+            "{ name = \"local-pref\", type = \"u64\" }, { name = \"med\", type = \"u64\" }",
+            "{ name = \"med\", type = \"u64\" }, { name = \"local-pref\", type = \"u64\" }",
+        ),
+    ] {
+        let ns = d.validate_module("x", &route(&near_miss));
+        let codes: Vec<&str> = ns.iter().map(|n| n.code.as_str()).collect();
+        assert_eq!(codes, vec!["network.telemetry-layout"], "{near_miss}");
+    }
 }
 
 #[test]

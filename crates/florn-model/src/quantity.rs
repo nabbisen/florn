@@ -58,8 +58,19 @@ pub struct Decimal {
 pub(crate) enum DecimalRefusal {
     /// Not a decimal.
     Malformed,
-    /// A decimal whose exponent, once normalised, lies beyond [`Decimal::MAX_EXPONENT`].
+    /// A decimal whose exponent, once normalised, lies beyond [`Decimal::MAX_EXPONENT`], or whose
+    /// digits do not fit the mantissa.
     OutOfRange,
+}
+
+/// A value in units of a power of ten: see [`Decimal::scaled`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Scaled {
+    Whole(u128),
+    /// Digits below the unit.
+    Fraction,
+    /// Whole, but beyond a `u128`.
+    TooLarge,
 }
 
 impl Decimal {
@@ -70,7 +81,8 @@ impl Decimal {
     pub const MAX_EXPONENT: i32 = 1000;
 
     /// Parse `123`, `0.5`, `1e-3`, `2.5E6`. No sign, no spaces, at least one digit. `None` for
-    /// a text that is no decimal and for one whose exponent is beyond [`Self::MAX_EXPONENT`].
+    /// a text that is no decimal, for one whose exponent is beyond [`Self::MAX_EXPONENT`] and for
+    /// one of more than 39 significant digits (the mantissa is a `u128`).
     pub fn parse(text: &str) -> Option<Self> {
         Self::parse_classified(text).ok()
     }
@@ -113,11 +125,13 @@ impl Decimal {
                 if negative { -magnitude } else { magnitude }
             }
         };
+        // The digits are all decimal digits here, so the only way to fail is to exceed what the
+        // mantissa holds (39 digits): a number, too large, not a text that is no number.
         let digits = format!("{int}{frac}");
         let mantissa: u128 = if digits.is_empty() {
             0
         } else {
-            digits.parse().map_err(|_| Malformed)?
+            digits.parse().map_err(|_| OutOfRange)?
         };
         let exponent = exp - frac.len() as i64;
         let d = Self {
@@ -141,18 +155,36 @@ impl Decimal {
         }
         self
     }
-    /// The value as an integer multiple of `10^unit_exponent`, if it is whole at that scale.
+    /// The value as an integer multiple of `10^unit_exponent`, if it is whole at that scale and
+    /// fits a `u128`; `None` for both a value with digits below the unit and one too large. The
+    /// crate's own callers that must tell them apart use `scaled`.
     pub fn as_integer_at(self, unit_exponent: i32) -> Option<u128> {
+        match self.scaled(unit_exponent) {
+            Scaled::Whole(v) => Some(v),
+            Scaled::Fraction | Scaled::TooLarge => None,
+        }
+    }
+
+    /// The value in units of `10^unit_exponent`: whole, with digits below the unit, or whole but
+    /// beyond a `u128`. The multiplication stops at the first overflow, so the work is bounded by
+    /// the digits of a `u128`, not by the exponent.
+    pub(crate) fn scaled(self, unit_exponent: i32) -> Scaled {
         let d = self.normalised();
-        let shift = d.exponent - unit_exponent;
+        let shift = i64::from(d.exponent) - i64::from(unit_exponent);
         if shift < 0 {
-            return None; // digits below the unit: not whole
+            return Scaled::Fraction; // digits below the unit: not whole
         }
         let mut v = d.mantissa;
-        for _ in 0..shift {
-            v = v.checked_mul(10)?;
+        if v == 0 {
+            return Scaled::Whole(0); // nothing to multiply, whatever the shift
         }
-        Some(v)
+        for _ in 0..shift {
+            match v.checked_mul(10) {
+                Some(next) => v = next,
+                None => return Scaled::TooLarge,
+            }
+        }
+        Scaled::Whole(v)
     }
     /// Shortest decimal text that reads back as the same value: plain digits with a point where
     /// needed, never an exponent, no trailing zeros, no leading zeros but one before a point.
@@ -204,13 +236,16 @@ pub enum QuantityError {
     Malformed,
 }
 
-/// Why a token is refused, with the reason the public [`QuantityError`] does not carry.
+/// Why a token is refused, with the reason [`QuantityError`] does not carry (see
+/// [`Quantity::classify`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum QuantityRefusal {
+#[non_exhaustive]
+pub enum QuantityRefusal {
     MissingUnit,
     Malformed,
-    /// A number and a unit, the number beyond [`Decimal::MAX_EXPONENT`]: both as written and cut
-    /// to [`SHOWN`] characters, so that the message about it is bounded.
+    /// A number and a unit, the number beyond what a quantity holds (an exponent past
+    /// [`Decimal::MAX_EXPONENT`], or more than 39 significant digits): both as written and cut to
+    /// 64 characters, so that the message about it is bounded.
     OutOfRange {
         number: String,
         unit: String,
@@ -229,8 +264,8 @@ fn shown(text: &str) -> String {
 
 impl Quantity {
     /// Parse `5ms`, `0.5mH`, `1e-3s`, `24V`, `0.01USD`. A bare number is [`QuantityError::MissingUnit`].
-    /// A number whose exponent is beyond [`Decimal::MAX_EXPONENT`] is [`QuantityError::Malformed`]
-    /// here; the manifest parser asks for the reason and reports `quantity.out-of-range`.
+    /// A number beyond what a quantity holds is [`QuantityError::Malformed`] here;
+    /// [`Self::classify`] gives the reason, and the manifest parser reports `quantity.out-of-range`.
     pub fn parse(token: &str) -> Result<Self, QuantityError> {
         Self::classify(token).map_err(|e| match e {
             QuantityRefusal::MissingUnit => QuantityError::MissingUnit,
@@ -240,7 +275,9 @@ impl Quantity {
         })
     }
 
-    pub(crate) fn classify(token: &str) -> Result<Self, QuantityRefusal> {
+    /// [`Self::parse`] with the reason it refuses. A front end names a field with the reason: a
+    /// number out of range is `quantity.out-of-range`, a text that is no quantity is not.
+    pub fn classify(token: &str) -> Result<Self, QuantityRefusal> {
         let token = token.trim();
         let split = token
             .find(|c: char| {
@@ -314,7 +351,8 @@ impl Quantity {
     /// Convert a time quantity to ticks (rule 25). `Err(None)` when the unit is not a time unit;
     /// `Err(Some(smallest))` when the value is not a whole number of ticks, naming the smallest tick
     /// length that would make it whole (or `Fs` if none does); `Ok(None)` when the value does not
-    /// fit 64 bits of ticks.
+    /// fit 64 bits of ticks, however far beyond: a value too large for the arithmetic is this, not
+    /// "not whole", and no tick length is named for it.
     pub fn to_ticks(&self, tick: TickLength) -> Result<Option<u64>, Option<TickLength>> {
         let unit_exp = Self::time_unit_femto_exponent(&self.unit).ok_or(None)?;
         // value in femtoseconds = number × 10^(unit_exp); ticks = value_fs / 10^(tick_exp)
@@ -322,19 +360,27 @@ impl Quantity {
             mantissa: self.number.mantissa,
             exponent: self.number.exponent + unit_exp as i32,
         };
-        match femto.as_integer_at(tick.femto_exponent() as i32) {
-            Some(t) => Ok(u64::try_from(t).ok()),
-            None => {
-                let smallest = [TickLength::Ns, TickLength::Ps, TickLength::Fs]
-                    .into_iter()
-                    .find(|t| femto.as_integer_at(t.femto_exponent() as i32).is_some());
-                Err(Some(smallest.unwrap_or(TickLength::Fs)))
+        match femto.scaled(tick.femto_exponent() as i32) {
+            Scaled::Whole(t) => Ok(u64::try_from(t).ok()),
+            Scaled::TooLarge => Ok(None),
+            Scaled::Fraction => {
+                for finer in [TickLength::Ns, TickLength::Ps, TickLength::Fs] {
+                    match femto.scaled(finer.femto_exponent() as i32) {
+                        Scaled::Whole(_) => return Err(Some(finer)),
+                        // Whole at a finer tick but beyond a `u128` there: out of range, and the
+                        // finer tick would not help.
+                        Scaled::TooLarge => return Ok(None),
+                        Scaled::Fraction => {}
+                    }
+                }
+                Err(Some(TickLength::Fs))
             }
         }
     }
 
     /// Convert a byte quantity (rule 26): `B`, `KiB`, `MiB`. `Err(false)` when the unit is not a
-    /// byte unit; `Err(true)` when the value is not a whole number of bytes.
+    /// byte unit; `Err(true)` when the value is not a whole number of bytes; `Ok(None)` when it
+    /// does not fit 64 bits, however far beyond.
     pub fn to_bytes(&self) -> Result<Option<u64>, bool> {
         let factor: u128 = match self.unit.as_str() {
             "B" => 1,
@@ -343,10 +389,13 @@ impl Quantity {
             "GiB" => 1024 * 1024 * 1024,
             _ => return Err(false),
         };
-        let whole = self.number.as_integer_at(0).ok_or(true)?;
-        Ok(whole
-            .checked_mul(factor)
-            .and_then(|b| u64::try_from(b).ok()))
+        match self.number.scaled(0) {
+            Scaled::Whole(whole) => Ok(whole
+                .checked_mul(factor)
+                .and_then(|b| u64::try_from(b).ok())),
+            Scaled::TooLarge => Ok(None),
+            Scaled::Fraction => Err(true),
+        }
     }
 }
 

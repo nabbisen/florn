@@ -597,39 +597,54 @@ impl Domain for NetworkDomain {
                 }
             }
         }
-        // The layouts the view reads (rule 17), by channel name.
+        // The layouts the view reads (rule 17), by channel name. A name may have more than one
+        // layout (the table of section 7): `route` is the distance-vector one or the BGP one
+        // (RFC 011 rule 8), and a declared layout equal to either is read.
         for ch in &manifest.telemetry {
-            let expected: Option<&[(&str, ParamType)]> = match ch.name.as_str() {
-                "neighbour" => Some(&[
+            let expected: &[&[(&str, ParamType)]] = match ch.name.as_str() {
+                "neighbour" => &[&[
                     ("port", ParamType::U64),
                     ("neighbour", ParamType::U64),
                     ("state", ParamType::Text),
-                ]),
-                "route" => Some(&[
-                    ("prefix", ParamType::Text),
-                    ("next-hop", ParamType::U64),
-                    ("metric", ParamType::U64),
-                    ("action", ParamType::Text),
-                ]),
-                _ => None,
+                ]],
+                "route" => &[
+                    &[
+                        ("prefix", ParamType::Text),
+                        ("next-hop", ParamType::U64),
+                        ("metric", ParamType::U64),
+                        ("action", ParamType::Text),
+                    ],
+                    &[
+                        ("prefix", ParamType::Text),
+                        ("next-hop", ParamType::U64),
+                        ("path-length", ParamType::U64),
+                        ("local-pref", ParamType::U64),
+                        ("med", ParamType::U64),
+                        ("winner", ParamType::Text),
+                    ],
+                ],
+                _ => &[],
             };
-            if let Some(expected) = expected {
-                let same = ch.fields.len() == expected.len()
+            if expected.is_empty() {
+                continue;
+            }
+            let read = expected.iter().any(|layout| {
+                ch.fields.len() == layout.len()
                     && ch
                         .fields
                         .iter()
-                        .zip(expected)
-                        .all(|((n, t), (en, et))| n == en && t == et);
-                if !same {
-                    out.push(warning(
-                        "network.telemetry-layout",
-                        module,
-                        vec![
-                            ("module", Value::Name(module.into())),
-                            ("channel", Value::Name(ch.name.clone())),
-                        ],
-                    ));
-                }
+                        .zip(*layout)
+                        .all(|((n, t), (en, et))| n == en && t == et)
+            });
+            if !read {
+                out.push(warning(
+                    "network.telemetry-layout",
+                    module,
+                    vec![
+                        ("module", Value::Name(module.into())),
+                        ("channel", Value::Name(ch.name.clone())),
+                    ],
+                ));
             }
         }
         out
