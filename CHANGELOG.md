@@ -31,6 +31,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - A whole number of more than 39 digits in a quantity is `quantity.out-of-range` and not `manifest.type`; a duration or a size beyond what 128 bits hold after conversion (`1e30s` at a tick of 1 fs, `1e50B`) is `quantity.out-of-range` and not `quantity.not-whole-ticks` with a smallest tick made up; and a `ticks`, `integer` or `real` parameter in an actor's `config` whose number is beyond the bounds is `quantity.out-of-range` naming the parameter, not `config.type` (PR-33). `Quantity::to_ticks` and `Quantity::to_bytes` return `Ok(None)` for a value too large, as they did for one beyond 64 bits.
 - The network domain warned `network.telemetry-layout` for the BGP guest's `route` channel: RFC 008 section 7 lists two layouts of `route`, the distance-vector one and the BGP one, and the check knew the first only. Both are read; the BGP lab starts with nothing in its log but information (PR-33).
 - `florn resume --to TICK` exited 0 when the run met a run fault on the way to the tick; the exit code follows the end reason whether or not `--to` is given (PR-33).
+- RFC 004 rules 23 and 25 state the 39-digit limit of a number, that zero is whole in every tick, and that a whole value beyond 128 bits is out of range (PR-33).
 
 ## [0.3.0] - 2026-10-31
 
