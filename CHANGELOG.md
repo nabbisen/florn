@@ -26,6 +26,7 @@ All notable changes to florn are recorded here. The format follows [Keep a Chang
 - Five references to the private working folder in the three earlier handoff packages are replaced by what they pointed at.
 - A quantity with an enormous exponent (`end = "1e2000000000s"`, or a `real` parameter, a limit, a duration in a domain's attribute) made the runner ask for a text of the number's size, two gigabytes in that case, and abort (PR-32). A decimal's exponent is now bounded: `Decimal::MAX_EXPONENT`, 1000 in magnitude once normalised, which is past the range of a 64-bit float and gives a text of at most about 1,050 characters. The manifest parser refuses a quantity beyond it, also one whose exponent does not fit an `i32`, with `quantity.out-of-range` naming the field and carrying the value as written, cut to 64 characters; `Decimal::parse` and `Quantity::parse` refuse it (`None`, `Malformed`) wherever else they are used; `Decimal::shortest` writes `<mantissa>e<exponent>` for a value beyond the bound that no parser produces. Nothing accepted before and within the bound reads differently. The manifest fuzz target has a dictionary of quantity shapes (`fuzz/dictionaries/manifest.dict`), which `ci/fuzz.sh` passes to the target of its name.
 - RFC 007 and the external design say a missing translation key is a failing test and not a build error, which is what the label compiler does (found by PR-31).
+- RFC 004 rule 23 and RFC 006 section 7 state the bound on a quantity's exponent (1000, normalised) that PR-32 enforces.
 
 ## [0.3.0] - 2026-10-31
 

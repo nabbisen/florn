@@ -129,7 +129,7 @@ The maxima below bound every allocation that untrusted input could size. They ar
 | Input | Maximum | Where checked |
 |---|---|---|
 | Module file | 32 MiB; 100,000 functions, 10,000 globals, 16 tables with 1,000,000 elements, 10,000 segments with 32 MiB of data, 1,000 imports, 1,000 exports, 64 custom sections | RFC 003 rule 5, before parsing further |
-| Manifest text | 4 MiB; 16 domains, 10,000 modules, 100,000 actors, 4,096 ports per actor, 1,000,000 connections, 4,096 ports per connection, 100,000 scheduled changes, 1,024 limit classes, names of 256 bytes; counts checked before the elements are parsed | RFC 004 rule 39 |
+| Manifest text | 4 MiB; 16 domains, 10,000 modules, 100,000 actors, 4,096 ports per actor, 1,000,000 connections, 4,096 ports per connection, 100,000 scheduled changes, 1,024 limit classes, names of 256 bytes; the exponent of a quantity, once normalised, 1000 in magnitude; counts checked before the elements are parsed | RFC 004 rules 23, 39 |
 | Package | 10,256 entries, 2 GiB in all, a module entry 32 MiB; entries hashed as they are read | RFC 004 §6 |
 | Run record | 1,000,000 entries, an entry 1 GiB, 4 GiB in all; a chunk is parsed only after its declared size is checked | RFC 005 rule 29 |
 | Checkpoint | Memory size at most the actor's memory limit; global and table counts as the layout declares | RFC 003 rule 22 |

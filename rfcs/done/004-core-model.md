@@ -257,7 +257,7 @@ solver = { }                       # the domain's solver profile, if it has one
 
 ## 4. Quantities and units
 
-**Rule 23.** A quantity is one token: a number followed immediately by a unit. No space. A number is a decimal integer or a decimal fraction, with an optional exponent. Examples: `5ms`, `0.5mH`, `1e-3`, `24V`, `0.01USD`.
+**Rule 23.** A quantity is one token: a number followed immediately by a unit. No space. A number is a decimal integer or a decimal fraction, with an optional exponent. The exponent, once the number is normalised, is at most 1000 in magnitude; a larger one is `quantity.out-of-range` naming the field, with the number and the unit cut to 64 characters in the message (added 2026-11-03 by PR-32, SEC-005: nothing is built from a number the input chose). Examples: `5ms`, `0.5mH`, `1e-3`, `24V`, `0.01USD`.
 
 **Rule 24.** Every field the manifest schema declares as a quantity must carry a unit. A bare number in such a field is a validation error with a coded message that names the field and the expected dimension.
 

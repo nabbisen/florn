@@ -14,7 +14,7 @@ Entry point: [`README.md`](./README.md). The checks the architect runs in review
 |---|---|---|
 | B-31 | RFC 000 (the folder is the status); RFC 006 rule 7; RFC 007 rule 17 | A fake `cargo` exiting 77 makes `ci/fuzz.sh` exit non-zero; a missing indexed file and an unindexed file each fail the index check; a status line that disagrees with its folder fails the invariants script; a key missing in one locale fails the key-set test; a page that times out or crashes is retried once and the retry is printed; `git ls-files ci/browser` lists no `.florn-run`; no public file names a private path |
 | B-32 | RFC 004 rules 23 to 25; RFC 006 rule 7 | `end = "1e2000000000s"` is refused with `quantity.out-of-range` under a 1 GB limit; the manifest fuzz target runs 60 seconds clean |
-| B-33 | RFC 008 rule 17; RFC 005 rule 31 | The draft with a built-in reads back to the same scenario hash; the BGP lab's log is empty at the start; a faulted run stopped by `--to` exits 3 |
+| B-33 | RFC 008 rule 17; RFC 005 rule 31; RFC 004 rules 23, 25 | The draft with a built-in reads back to the same scenario hash; the BGP lab's log is empty at the start; a faulted run stopped by `--to` exits 3 |
 | B-34 | The release checklist of the roadmap | Every digest unchanged; the dispatched run green with the fuzz job; the notes of 0.3.1 carry the reason; the security review of the parser change is recorded |
 | B-35 | The Rust rules, Testing Guidelines and module style | The test count equals the count before; `ci/check-test-layout.sh` fails on a planted inline module and passes on the tree; `mod.rs` remains only in the Cargo helper |
 | B-36 | The Rust rules (file splitting) | All digests and tests unchanged; no file of the unit above 1,500 lines; `Controller` keeps its name |
