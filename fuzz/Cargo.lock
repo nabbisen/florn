@@ -153,11 +153,11 @@ checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "florn-abi"
-version = "0.0.0"
+version = "0.3.1"
 
 [[package]]
 name = "florn-admission"
-version = "0.0.0"
+version = "0.3.1"
 dependencies = [
  "florn-abi",
  "florn-model",
@@ -172,14 +172,14 @@ dependencies = [
 
 [[package]]
 name = "florn-control"
-version = "0.0.0"
+version = "0.3.1"
 dependencies = [
  "florn-model",
 ]
 
 [[package]]
 name = "florn-engine"
-version = "0.0.0"
+version = "0.3.1"
 dependencies = [
  "florn-abi",
 ]
@@ -198,7 +198,7 @@ dependencies = [
 
 [[package]]
 name = "florn-host"
-version = "0.0.0"
+version = "0.3.1"
 dependencies = [
  "blake3",
  "florn-abi",
@@ -214,14 +214,14 @@ dependencies = [
 
 [[package]]
 name = "florn-kernel"
-version = "0.0.0"
+version = "0.3.1"
 dependencies = [
  "blake3",
 ]
 
 [[package]]
 name = "florn-model"
-version = "0.0.0"
+version = "0.3.1"
 dependencies = [
  "sha2",
  "toml",
@@ -230,7 +230,7 @@ dependencies = [
 
 [[package]]
 name = "florn-platform"
-version = "0.0.0"
+version = "0.3.1"
 
 [[package]]
 name = "foldhash"

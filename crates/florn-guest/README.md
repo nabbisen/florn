@@ -25,9 +25,9 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-florn-guest = "0.3.0"
+florn-guest = "0.3.1"
 # or, pinned to a tag or taken from a checkout beside your crate:
-# florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.3.0" }
+# florn-guest = { git = "https://github.com/nabbisen/florn", tag = "0.3.1" }
 # florn-guest = { path = "../florn/crates/florn-guest" }
 
 [profile.release]
@@ -82,7 +82,7 @@ florn_guest::actor!(MyGuest);
 ```
 
 Build and admit (the runner comes from `cargo install florn`, or from a checkout of florn with
-`cargo install --path crates/florn`, or `cargo install --git https://github.com/nabbisen/florn --tag 0.3.0 florn`):
+`cargo install --path crates/florn`, or `cargo install --git https://github.com/nabbisen/florn --tag 0.3.1 florn`):
 
 ```sh
 rustup target add wasm32-unknown-unknown

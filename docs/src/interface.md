@@ -12,7 +12,7 @@ cd ci/browser && npm ci && node serve.js
 
 Then open `http://127.0.0.1:8765/`. The server sets the isolation headers and the policy of RFC 005 rule 33; a host that cannot set them still serves the application, which then says in its status line that telemetry uses messages. After one visit the application starts offline and says "Available offline".
 
-Each release ships the built application as `florn-app-<version>.tar.gz`. Serve its contents, with the headers above, at a path that does not change between versions (for example `…/0.3.0/`); the application never updates itself in place, and the person chooses the version they open. The SHA-256 of every file of the bundle is in the release notes.
+Each release ships the built application as `florn-app-<version>.tar.gz`. Serve its contents, with the headers above, at a path that does not change between versions (for example `…/0.3.1/`); the application never updates itself in place, and the person chooses the version they open. The SHA-256 of every file of the bundle is in the release notes.
 
 ## What is on the screen
 
@@ -21,7 +21,7 @@ Each release ships the built application as `florn-app-<version>.tar.gz`. Serve 
 | Header | The scenario's name; Run, Pause, Step with its unit, Speed, Reset, Go to, Actors (all resident, or swapping beyond the capacity); the language; the status line: the run's state, the instant, the interventions, the transport notice, dropped records, the limiting factor (memory and swapping among them), the swapping counts, the measured draw time, the offline state, the version and origin |
 | Learning labs and files | The bundled scenarios, the OSPF lab first, each with a story of what to watch and the interventions to try; open and save a scenario, import a module, export a run record after a preview, replay a run record, load a checkpoint; what you opened, saved or imported, kept in this browser as a cache and listed with its size, each to reopen or export |
 | Actors | Every actor by name, one Tab stop, arrow keys inside, Enter selects: the canvas's twin |
-| Scenario | Authoring: place actors from the palette, connect ports, set attributes and parameters, schedule changes, apply; every problem at its field, the Host's refusals included |
+| Scenario | Authoring: place actors from the palette, connect ports, set attributes and parameters, schedule changes, apply; every problem at its field, the Host's refusals included. A scenario with a built-in actor (the `net-blackhole` example has one) cannot be taken whole into the editor until 0.4.0: the panel names the actors it could not take, and the editor neither applies nor saves such a draft; the scenario that is loaded still runs as it was |
 | Topology | The actors and connections; messages in flight; a link down is dashed and a faulted actor is a cross; drag, wheel and keys pan and zoom; a click selects |
 | Inspector | The selected actor, connection, message or world; an actor's configuration as fields; the latest telemetry decoded by the module's layouts; the link and actor interventions, each saying when it applies; for the world, the kept checkpoints with their instants and memory, "Take a checkpoint now", "Export", "Branch from here", and the parent of a branch |
 | Timeline | The run's record from the trace and the Host's events, filtered by actor and kind; a row with a send opens the message inspector; "Step to here", backward too |

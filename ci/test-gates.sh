@@ -2,8 +2,9 @@
 # A control that has never failed has not been shown to work. This script plants one violation at
 # a time in a scratch copy and checks that the control rejects it, and that the same control
 # passes the copy without the violation. It changes nothing in the repository.
-#   - ci/fuzz.sh: a fuzz run that exits 77, a list that is empty, a list that fails, and
-#     the dictionary that goes to the target of its name
+#   - ci/fuzz.sh: a fuzz run that exits 77, a list that is empty, a list that fails,
+#     the dictionary that goes to the target of its name, the RSS limit of every target, and the
+#     seeds of the manifest target
 #   - ci/check-rfc-index.sh: an indexed file that is missing, a file that is not indexed
 #   - ci/check-rfc-invariants.sh: a status line that disagrees with its folder, no status line,
 #     a broken relative link (and a broken link inside a code fence, which is an example)
@@ -52,7 +53,13 @@ case "$*" in
 esac
 EOF
 chmod +x "$scratch/bin/cargo"
-fuzz() { env "$@" PATH="$scratch/bin:$PATH" ci/fuzz.sh 1; }
+# The script runs in a scratch tree of its own: it copies seeds into a corpus directory, and this
+# script changes nothing in the repository.
+mkdir -p "$scratch/f/ci" "$scratch/f/scenarios" "$scratch/f/fuzz"
+cp ci/fuzz.sh "$scratch/f/ci/"
+cp scenarios/*.toml "$scratch/f/scenarios/"
+cp -r fuzz/dictionaries "$scratch/f/fuzz/dictionaries"
+fuzz() { env "$@" PATH="$scratch/bin:$PATH" "$scratch/f/ci/fuzz.sh" 1; }
 expect pass "fuzz.sh passes when every target runs clean" fuzz FAKE_RC=0
 expect fail "fuzz.sh fails when a target exits 77" fuzz FAKE_RC=77
 expect fail "fuzz.sh fails when the list of targets is empty" fuzz FAKE_TARGETS=
@@ -66,6 +73,23 @@ dict_given() {
     ! grep -- 'fuzz run module' "$scratch/args" | grep -q -- '-dict='
 }
 expect pass "fuzz.sh gives fuzz/dictionaries/manifest.dict to the manifest target only" dict_given
+# Every target runs under an RSS limit below libFuzzer's default of 2048 MB.
+rss_given() {
+  : >"$scratch/args"
+  fuzz FAKE_LOG="$scratch/args" FAKE_TARGETS="manifest module" >/dev/null 2>&1 || return 1
+  [ "$(grep -c -- '-rss_limit_mb=1024' "$scratch/args")" = 2 ]
+}
+expect pass "fuzz.sh runs every target under -rss_limit_mb=1024" rss_given
+# The manifest target starts from the shipped scenarios (not digests.toml), and no other target does.
+seeds_given() {
+  rm -rf "$scratch/f/fuzz/corpus"
+  fuzz FAKE_TARGETS="manifest module" >/dev/null 2>&1 || return 1
+  [ -f "$scratch/f/fuzz/corpus/manifest/echo-pair.toml" ] &&
+    [ ! -e "$scratch/f/fuzz/corpus/manifest/digests.toml" ] &&
+    [ ! -e "$scratch/f/fuzz/corpus/module" ] &&
+    [ "$(ls "$scratch/f/fuzz/corpus/manifest" | wc -l)" = "$(($(ls scenarios/*.toml | wc -l) - 1))" ]
+}
+expect pass "fuzz.sh copies the shipped scenarios into the manifest corpus and nowhere else" seeds_given
 
 # --- ci/check-rfc-index.sh -------------------------------------------------------------------
 fresh
