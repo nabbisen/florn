@@ -90,6 +90,7 @@ florn is planned by milestones, not by dates. A release is made when its exit cr
 | **RFCs** | 009, 010, 011 (accepted 2026-10-29); the 0.3 rules of RFC 001, 003 and 005. |
 | **Handoff package** | `rfcs/handoffs/009-depth/` (2026-10-29): PR-23 to PR-30. |
 | **Released** | 0.3.0 on 2026-10-31: every criterion has its evidence in `docs/src/releases/0.3.0.md` (the kit's checkpoint tests across the two Hosts; journey J5; the cost figures of both versions, the owner's decision of 2026-10-29 on the one engine over the compute-style target; a 0.1.0 and a 0.2.0 record replayed). The usability test of the handoff's checklist runs at the owner's pace; its findings become issues for 0.3.x or Phase 4. **Accepted by the owner on 2026-10-31.** |
+| **Patch release** | 0.3.1 on 2026-11-03 (authorised 2026-10-31): the parser bounded against a hostile number, the hex readers that could panic, the gates that could not fail, the quantity error codes, the editor's refusal of a draft that dropped a built-in; the evidence in `docs/src/releases/0.3.1.md`. The fifteen crates are published at 0.3.1. |
 
 ## Phase 4 — Circuit and control (0.4.0)
 

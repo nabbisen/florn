@@ -70,4 +70,5 @@ PR-31 to PR-33 are independent; PR-34 follows them. PR-35 and PR-36 come before 
 | PR-31 | merged | `ebd2963`, 2026-11-01; CI run 41216605167 green; accepted by the architect 2026-11-03; the scheduled run 41434221090 exercised the new fuzz job (eight targets, corpus saved) | No verifier (none planned) |
 | PR-32 | merged | `535c0f0`, 2026-11-03; CI run 41548230773 green; accepted by the architect 2026-11-03 | No verifier (none planned) |
 | PR-33 | merged | `1d7849e`, `3060d3a`, `699796a`, 2026-11-03; CI run 41593460703 green (`3060d3a` was red from a journey timing in the unit's own step and a cache-step failure; both explained); accepted by the architect 2026-11-03 | No verifier (none planned) |
-| PR-34 to PR-56 (with PR-34a) | PR-34 prepared and held on a finding; not started otherwise | — | — |
+| PR-34 | merged and released | candidate `772c5d4`, notes `50fcba3`, 2026-11-03; CI 41623799423 and 41633055145 green; dispatched run 41628574569 with the fuzz job green; tag `0.3.1` on `50fcba3`, release workflow 41652838428 and tag CI 41652838546 green; accepted by the architect 2026-11-03 | The fifteen crates published at 0.3.1 on 2026-11-04 and verified on the registry |
+| PR-34a to PR-56 | not started | — | — |
