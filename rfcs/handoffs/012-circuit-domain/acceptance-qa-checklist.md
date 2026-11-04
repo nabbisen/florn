@@ -39,7 +39,7 @@ Entry point: [`README.md`](./README.md). The checks the architect runs in review
 
 ## C. The release reviews (RFC 006 rule 5)
 
-For 0.3.1 and for 0.4.0: acceptance and conformance tests under both Hosts; the security review (0.4.0 adds the capabilities of RFC 012 rule 3, the guest-sized list the Host lifts, and the pending-breakpoint and size limits to the threat model); documentation matches the released behaviour; dependency licences and advisories (`cargo deny`); the `CHANGELOG.md` entry; the RFC index; for 0.4.0 the release notes carry the evidence for each exit criterion and the cross-engine table; the owner approves the tag and publishes the crates.
+For 0.4.0 the fuzz targets include seeded `checkpoint` and `module` targets (PR-55), the checkpoint reader now reading the circuit domain's state (RFC 012 rule 29). For 0.3.1 and for 0.4.0: acceptance and conformance tests under both Hosts; the security review (0.4.0 adds the capabilities of RFC 012 rule 3, the guest-sized list the Host lifts, and the pending-breakpoint and size limits to the threat model); documentation matches the released behaviour; dependency licences and advisories (`cargo deny`); the `CHANGELOG.md` entry; the RFC index; for 0.4.0 the release notes carry the evidence for each exit criterion and the cross-engine table; the owner approves the tag and publishes the crates.
 
 ## D. The owner's checks
 

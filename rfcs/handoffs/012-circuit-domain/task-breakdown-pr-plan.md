@@ -56,7 +56,7 @@ Entry point: [`README.md`](./README.md). One unit per change, in this order; a u
 
 | # | Task | Implements | Tests added | Checks | Size |
 |---|---|---|---|---|---|
-| PR-55 | **Documentation and the review.** Controllers for module authors, the lab in both languages, the compatibility columns (the browser support matrix included), a per-RFC table in the kit's readme, the release notes, the security review and the threat-model update (the capabilities of RFC 012 rule 3), the earlier RFCs amended by their units | RFC 006 rule 5 | The documentation build; the forbidden words | C | M |
+| PR-55 | **Documentation and the review.** **Fuzz seeds for the `checkpoint` target, made from the kit's own small guests (checkpoints of a few hundred KB, not the 1.2 to 5 MB of the shipped modules, which grew the cached corpus by 350 MB in two minutes) by a small kit command, with a `-max_len` of 512 KiB, and for the `module` target from `scenarios/modules/*.wasm`; a dispatched run of 180 seconds per target with a measured RSS;** Controllers for module authors, the lab in both languages, the compatibility columns (the browser support matrix included), a per-RFC table in the kit's readme, the release notes, the security review and the threat-model update (the capabilities of RFC 012 rule 3), the earlier RFCs amended by their units | RFC 006 rule 5 | The documentation build; the forbidden words | C | M |
 | PR-56 | **Release 0.4.0.** RFC 012 to 014 to `rfcs/done/` with the release in their status, the tag, the crates; the owner approves and publishes | The release checklist | The checklist | C; the owner accepts Phase 4 against the exit criteria | M |
 
 ## Order and dependencies
@@ -71,4 +71,5 @@ PR-31 to PR-33 are independent; PR-34 follows them. PR-35 and PR-36 come before 
 | PR-32 | merged | `535c0f0`, 2026-11-03; CI run 41548230773 green; accepted by the architect 2026-11-03 | No verifier (none planned) |
 | PR-33 | merged | `1d7849e`, `3060d3a`, `699796a`, 2026-11-03; CI run 41593460703 green (`3060d3a` was red from a journey timing in the unit's own step and a cache-step failure; both explained); accepted by the architect 2026-11-03 | No verifier (none planned) |
 | PR-34 | merged and released | candidate `772c5d4`, notes `50fcba3`, 2026-11-03; CI 41623799423 and 41633055145 green; dispatched run 41628574569 with the fuzz job green; tag `0.3.1` on `50fcba3`, release workflow 41652838428 and tag CI 41652838546 green; accepted by the architect 2026-11-03 | The fifteen crates published at 0.3.1 on 2026-11-04 and verified on the registry |
-| PR-34a to PR-56 | not started | — | — |
+| PR-34a | merged | `628aa19`, 2026-11-04; CI run 41739053034 green; dispatched run 41742962285 green with the fuzz job; accepted by the architect 2026-11-04 (`run_toml` and `record` seeded; `checkpoint` and `module` seeds go to PR-55) | No verifier (none planned) |
+| PR-35 to PR-56 | not started | — | — |
