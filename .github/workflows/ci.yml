@@ -203,7 +203,9 @@ jobs:
         run: ci/check-rfc-invariants.sh
       - name: No public file names a private path
         run: ci/check-private-paths.sh
-      - name: The controls fail when a violation is planted (fuzz, index, invariants, private paths, the opener)
+      - name: Tests live in tests.rs files, not in the implementation files
+        run: ci/check-test-layout.sh
+      - name: The controls fail when a violation is planted (fuzz, index, invariants, private paths, test layout, the opener)
         run: ci/test-gates.sh
       - name: Forbidden words in catalogues (RFC 006 §6)
         run: ci/forbidden-words.sh

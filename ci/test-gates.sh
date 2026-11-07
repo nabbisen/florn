@@ -9,6 +9,9 @@
 #   - ci/check-rfc-invariants.sh: a status line that disagrees with its folder, no status line,
 #     a broken relative link (and a broken link inside a code fence, which is an example)
 #   - ci/check-private-paths.sh: a tracked file that names the private folder
+#   - ci/check-test-layout.sh: an inline test module (also on one line, behind cfg(all(test, ..)),
+#     nested, under fuzz/), a loose #[test], test-only code that is not a module, a test module
+#     under another name than tests; and the layout that is right passes
 #   - the browser kit's page opener: a mutated copy that never retries fails its test
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -179,6 +182,51 @@ expect pass "the private-path check passes a tree that names none" "$scratch/g/c
 printf 'see .git-exclude/reviewed/x\n' >"$scratch/g/NOTES.md"
 (cd "$scratch/g" && git add NOTES.md)
 expect fail "the private-path check fails a tracked file that names the private folder" "$scratch/g/ci/check-private-paths.sh"
+
+# --- ci/check-test-layout.sh, in a scratch tree of crates ------------------------------------------
+# A layout that is right: tests in tests.rs files (one nested module inside one is fine), integration
+# tests below tests/, a comment that names the attribute, code that is only for non-test builds, and
+# a declaration with another attribute between.
+layout() {
+  rm -rf "$scratch/l"
+  mkdir -p "$scratch/l/ci" "$scratch/l/crates/demo/src/parse" "$scratch/l/crates/demo/tests" "$scratch/l/fuzz/fuzz_targets"
+  cp ci/check-test-layout.sh "$scratch/l/ci/"
+  printf '//! demo\n// #[cfg(test)] in a comment\n#[cfg(not(test))]\npub fn only_outside_tests() {}\n\n#[cfg(test)]\nmod tests;\n' >"$scratch/l/crates/demo/src/lib.rs"
+  printf 'use super::*;\n\n#[test]\nfn works() {}\n\n#[cfg(test)]\nmod nested {\n    #[test]\n    fn n() {}\n}\n' >"$scratch/l/crates/demo/src/tests.rs"
+  printf 'pub fn parse() {}\n\n#[cfg(test)]\n#[allow(clippy::module_inception)]\nmod tests;\n' >"$scratch/l/crates/demo/src/parse.rs"
+  printf 'use super::*;\n#[test]\nfn works() {}\n' >"$scratch/l/crates/demo/src/parse/tests.rs"
+  printf 'pub fn inner() {}\n' >"$scratch/l/crates/demo/src/parse/inner.rs"
+  printf '#[test]\nfn integration() {}\n' >"$scratch/l/crates/demo/tests/it.rs"
+  printf 'fn main() {}\n' >"$scratch/l/fuzz/fuzz_targets/t.rs"
+}
+# plant <file> <text>: append text to a file of the scratch tree.
+plant() { printf '%b' "$2" >>"$scratch/l/$1"; }
+layout_check() { "$scratch/l/ci/check-test-layout.sh"; }
+
+expect pass "the test-layout check passes the tree" ci/check-test-layout.sh
+layout
+expect pass "the test-layout check passes tests.rs files, integration tests, comments and cfg(not(test))" layout_check
+layout
+plant crates/demo/src/lib.rs '\n#[cfg(test)]\nmod more {\n    #[test]\n    fn t() {}\n}\n'
+expect fail "the test-layout check fails an inline test module" layout_check
+layout
+plant crates/demo/src/lib.rs '\n#[cfg(test)] mod more { }\n'
+expect fail "the test-layout check fails an inline test module written on one line" layout_check
+layout
+plant crates/demo/src/parse/inner.rs '\n#[cfg(all(test, unix))]\nmod tests {\n}\n'
+expect fail "the test-layout check fails an inline module behind cfg(all(test, ..)) in a nested file" layout_check
+layout
+plant crates/demo/src/lib.rs '\n#[test]\nfn loose() {}\n'
+expect fail "the test-layout check fails a #[test] function outside a tests file" layout_check
+layout
+plant crates/demo/src/lib.rs '\n#[cfg(test)]\nuse std::fmt;\n'
+expect fail "the test-layout check fails test-only code that is not a module (a use)" layout_check
+layout
+plant crates/demo/src/parse.rs '\n#[cfg(test)]\nmod parse_tests;\n'
+expect fail "the test-layout check fails a test module declared under another name than tests" layout_check
+layout
+plant fuzz/fuzz_targets/t.rs '\n#[cfg(test)]\nmod tests {\n}\n'
+expect fail "the test-layout check fails an inline test module under fuzz/" layout_check
 
 # --- the browser kit's page opener ----------------------------------------------------------------
 if command -v node >/dev/null 2>&1; then

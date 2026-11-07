@@ -17,6 +17,7 @@ ci/check-rfc-invariants.sh
 ci/check-private-paths.sh
 ci/forbidden-words.sh
 ci/check-shell-exports.sh
+ci/check-test-layout.sh
 ci/test-gates.sh
 ```
 
@@ -44,6 +45,7 @@ Fuzzing needs the nightly toolchain and `cargo-fuzz`; `ci/fuzz.sh 60` runs every
 
 ## Rules
 
+- Tests are written in files of their own, never inside the file they test: the tests of `src/foo.rs` are `src/foo/tests.rs` (of a crate root, `src/tests.rs`), declared in the source file as `#[cfg(test)] mod tests;`, and a `tests.rs` that grows too large splits into `src/foo/tests/<part>.rs`. Integration tests stay under `tests/` of the crate. `ci/check-test-layout.sh` fails on an inline test module, on test-only code in an implementation file and on a `#[test]` outside a test file.
 - Every dependency is pinned to an exact version in `Cargo.toml` and added by the change that needs it, with its licence on the allow-list of `deny.toml` (RFC 006 rule 6). A version is changed by a pull request that says why.
 - `unsafe` appears only in the adapters, the ABI crate and the guest SDK, with the invariant stated at each use; every other crate forbids it.
 - Every message a person sees is a code with typed parameters from the catalogue of RFC 007; the English table in `florn-cli` is the source text, kept equal to the catalogue by a test.
