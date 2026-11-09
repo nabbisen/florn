@@ -1,5 +1,5 @@
-//! The run loop and the end of a run (RFC 005 rule 15; RFC 001 rule 13), the comparison with a
-//! recorded run and the `run.toml` of a run (RFC 005 rule 29), replay.
+//! The run loop (RFC 001 §2.1; RFC 005 rule 15) and the end of a run, a replay and the comparison with
+//! the record (RFC 001 rules 49 and 50; RFC 005 rule 26), the `run.toml` of a run (RFC 005 rule 29).
 
 use std::collections::BTreeMap;
 

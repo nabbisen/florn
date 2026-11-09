@@ -1,5 +1,6 @@
-//! Export and restore of actor state (RFC 003 §6), checkpoints and the kept ones (RFC 009 rules 1
-//! to 9), going back, the trace window, a branch (rule 12).
+//! Export and restore of an actor's state (RFC 003 rules 21 and 22), checkpoints and the kept ones
+//! (RFC 009 rules 2, 3, 5 and 7), going back and the trace window (RFC 001 rules 51 to 55), a branch
+//! (RFC 001 rule 54; RFC 009 rules 10 to 12).
 
 use std::collections::BTreeMap;
 

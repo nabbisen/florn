@@ -1,5 +1,6 @@
-//! What a boundary does with the events it takes (RFC 001 rule 15): the core's interventions, a
-//! domain's actions and the domain's interventions (RFC 008 rules 4 and 19).
+//! What a boundary does with the events it takes: the core's interventions (RFC 001 rules 33 to 38),
+//! a domain's actions and its interventions (RFC 008 rules 4, 5 and 19), the recorded target of a
+//! domain intervention (RFC 001 rules 35 and 36).
 
 use florn_abi::Val;
 use florn_control::{Ends, Notification, Scope, Severity, Value};
