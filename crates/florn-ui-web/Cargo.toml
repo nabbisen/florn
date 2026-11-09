@@ -43,8 +43,8 @@ shell = [
 ]
 
 # The shell's catalogue (RFC 007 rules 14 to 17): `locales/en.json` and `locales/ja.json`,
-# read by `leptos_i18n::load_locales!` at compile time; a key missing in one language fails
-# the build.
+# read by `leptos_i18n::load_locales!` at compile time; a key missing in one language is a
+# warning there, and the test `tests/locales.rs` fails on it.
 [package.metadata.leptos-i18n]
 default = "en"
 locales = ["en", "ja"]

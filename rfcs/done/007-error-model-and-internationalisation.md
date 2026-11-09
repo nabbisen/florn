@@ -256,7 +256,7 @@ Each `enum(set)` above is a closed set with catalogue texts `enum.<set>.<value>`
 |---|---|
 | English sentences from the Host, translated by the front end | Untranslatable: a sentence has no structure to translate from; CTL-003 forbids it |
 | Numeric codes | A number says nothing in a log or a test; a dotted name does |
-| Run-time fallback to English for a missing translation | Hides a defect from the person who would notice it; a build error is seen by the person who can fix it |
+| Run-time fallback to English for a missing translation | Hides a defect from the person who would notice it; a failing test is seen by the person who can fix it (corrected 2026-11-09: the first text said a build error, rule 15) |
 | A message-format library with its own syntax in every catalogue | Named placeholders and the catalogue tool's plural forms cover the first release; a richer format is a later amendment if a language needs it |
 | Loading catalogues at run time | The browser application is static and offline; compile-time catalogues are checked and cost nothing to load |
 | One family of error with a flag | The three families have different lifetimes and audiences; CTL-004 |
