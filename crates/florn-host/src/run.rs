@@ -36,10 +36,10 @@ use crate::identity::{EndReason, Environment, RunInputs};
 use crate::log::DiagnosticLog;
 use crate::snapshot::{ActorState, Checkpoint};
 
-/// The SHA-256 of module bytes as hexadecimal: the module identity (RFC 004 rule 16).
 /// The cost-model versions this Host publishes (RFC 003 rule 15; RFC 010), for a front end.
 pub use florn_admission::{COST_MODEL_VERSION, COST_MODEL_VERSIONS, cost_table};
 
+/// The SHA-256 of module bytes as hexadecimal: the module identity (RFC 004 rule 16).
 pub fn sha256_hex(bytes: &[u8]) -> String {
     florn_model::canonical::hex(&florn_admission::sha256(bytes))
 }
