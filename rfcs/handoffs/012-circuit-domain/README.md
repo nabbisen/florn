@@ -16,9 +16,10 @@ Milestone M1 is done: PR-31 to PR-34a are merged and release 0.3.1 is published.
 | Unit | Do | Done when |
 |---|---|---|
 | PR-35 Tests out of the implementation files | **Done** (`049475a`, 2026-11-07): tests in `tests.rs` files, `ci/check-test-layout.sh` in the `docs` job; new tests are written in the file form, which the gate enforces | — |
-| PR-36 Split the Host's run file | `crates/florn-host/src/run.rs` (3,068 lines) is the file seven findings of RFC 012 land in. Move the areas they touch (the activation and its outcome, the domain's actions, the end of a run and the comparison, the start) into submodules of `run/`, behaviour preserved. The type `Controller` of the control interface keeps its name (it is not the circuit domain's sampled controller) | No resulting file above 1,500 lines; every digest, every test and every public item unchanged |
+| PR-36 Split the Host's run file | **Done** (`8fb341c`, `a6d3c9b`, 2026-11-09): `run.rs` is 590 lines and `run/` holds `start`, `activation`, `actions`, `end`, `checkpoint`. `panels.rs`, `controller.rs` and `message.rs` are split by the first unit that touches each heavily, in its first commit | — |
+| PR-37 Floats and lists across the ABI | **Done** (`ceb6d49`, 2026-11-10): rows 12 to 16, `Ty::import_signature` and `Ty::export_signature`, the post-return required at admission and called by `florn_engine::call_lifting`; a result that holds a list or a string needs its post-return too | — |
 
-PR-37 (floats and lists across the ABI, with the post-return call) follows; it starts from RFC 002 rule 2, RFC 003's admission table and RFC 012 findings F-1 and F-16.
+**Next: PR-38, the kernel's discard and the call-in handle (V).** Read its row in `task-breakdown-pr-plan.md` and B-38: the handle calls exports through `florn_engine::call_lifting`, so the post-return runs inside the activation and under its budget, and it takes from the domain a bound on a list result's length, checked before the lift (RFC 012 rule 20). It starts from RFC 001 rules 21 to 24, RFC 002 rules 2, 44 and 45, RFC 003 rule 12 and RFC 012 findings F-2, F-3 and F-16. A verifier session checks it after the push.
 
 ## What Phase 4 delivers
 
