@@ -106,6 +106,7 @@ pub unsafe extern "C" fn florn_call(shape: i32, func: u32, args: *const u64, res
     let a = |i: usize| unsafe { *args.add(i) };
     let i32_at = |i: usize| a(i) as i32;
     let i64_at = |i: usize| a(i) as i64;
+    let f64_at = |i: usize| f64::from_bits(a(i));
     macro_rules! call {
         (($($t:ident),*)) => {{
             let f: unsafe extern "C" fn($(call!(@ty $t)),*) = core::mem::transmute(func as usize);
@@ -128,8 +129,10 @@ pub unsafe extern "C" fn florn_call(shape: i32, func: u32, args: *const u64, res
         }};
         (@ty i32) => { i32 };
         (@ty i64) => { i64 };
+        (@ty f64) => { f64 };
         (@at i32, $i:ident) => { i32_at($i) };
         (@at i64, $i:ident) => { i64_at($i) };
+        (@at f64, $i:ident) => { f64_at($i) };
     }
     unsafe {
         match shape {
@@ -144,6 +147,11 @@ pub unsafe extern "C" fn florn_call(shape: i32, func: u32, args: *const u64, res
             9 => call!((i64, i32, i32)),
             10 => call!((i32, i32)),
             11 => call!((i32) -> i32),
+            12 => call!((i64, i64)),
+            13 => call!((i64, f64)),
+            14 => call!(()),
+            15 => call!((i32, i32) -> i32),
+            16 => call!((i32, f64)),
             _ => core::arch::wasm32::unreachable(),
         }
     }
@@ -259,6 +267,7 @@ macro_rules! import_slot {
     };
     (@flat i32, $a:ident) => { Flat::I32($a) };
     (@flat i64, $a:ident) => { Flat::I64($a) };
+    (@flat f64, $a:ident) => { Flat::F64($a) };
 }
 
 macro_rules! import_slots {
@@ -281,6 +290,20 @@ import_slots!(8, [florn_import_s8_0, florn_import_s8_1, florn_import_s8_2, florn
 import_slots!(9, [florn_import_s9_0, florn_import_s9_1, florn_import_s9_2, florn_import_s9_3], (a: i64, b: i32, c: i32));
 import_slots!(10, [florn_import_s10_0, florn_import_s10_1, florn_import_s10_2, florn_import_s10_3], (a: i32, b: i32));
 import_slots!(11, [florn_import_s11_0, florn_import_s11_1, florn_import_s11_2, florn_import_s11_3], (a: i32) -> i32);
+import_slots!(12, [florn_import_s12_0, florn_import_s12_1, florn_import_s12_2, florn_import_s12_3], (a: i64, b: i64));
+import_slots!(13, [florn_import_s13_0, florn_import_s13_1, florn_import_s13_2, florn_import_s13_3], (a: i64, b: f64));
+import_slots!(
+    14,
+    [
+        florn_import_s14_0,
+        florn_import_s14_1,
+        florn_import_s14_2,
+        florn_import_s14_3
+    ],
+    ()
+);
+import_slots!(15, [florn_import_s15_0, florn_import_s15_1, florn_import_s15_2, florn_import_s15_3], (a: i32, b: i32) -> i32);
+import_slots!(16, [florn_import_s16_0, florn_import_s16_1, florn_import_s16_2, florn_import_s16_3], (a: i32, b: f64));
 
 /// A guest's memory as the worker exposes it: one copy per read or write, no object per crossing.
 struct JsMemory {

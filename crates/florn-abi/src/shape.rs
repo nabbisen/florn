@@ -16,7 +16,7 @@ struct Row {
     results: &'static [FlatType],
 }
 
-use FlatType::{I32, I64};
+use FlatType::{F64, I32, I64};
 
 /// The table, in the order the numbers were assigned. Rows are never renumbered; a new signature
 /// is a new row at the end.
@@ -81,6 +81,36 @@ const TABLE: &[Row] = &[
         params: &[I32],
         results: &[I32],
     },
+    // The circuit domain's calls (RFC 012 finding F-1): `on-sample(now, index)`;
+    // `begin-step(start, h)`; `reject-step()`; `evaluate(inputs: list<f64>) -> list<f64>`, which as
+    // an export takes the list's pointer and length and returns the pointer to its return area;
+    // `set-output(port, value)`. A float is a flat type like the others; the table gains no row
+    // for `read-input`, whose `option<f64>` comes back through a return pointer (row 10).
+    Row {
+        number: 12,
+        params: &[I64, I64],
+        results: &[],
+    },
+    Row {
+        number: 13,
+        params: &[I64, F64],
+        results: &[],
+    },
+    Row {
+        number: 14,
+        params: &[],
+        results: &[],
+    },
+    Row {
+        number: 15,
+        params: &[I32, I32],
+        results: &[I32],
+    },
+    Row {
+        number: 16,
+        params: &[I32, F64],
+        results: &[],
+    },
 ];
 
 impl Shape {
@@ -88,6 +118,8 @@ impl Shape {
     pub const MESSAGE: Shape = Shape(2);
     pub const TIMER: Shape = Shape(3);
     pub const REALLOC: Shape = Shape(4);
+    /// `cabi_post_<export>(result pointer)` (RFC 002 rule 2): the same shape as `cancel-timer`.
+    pub const POST_RETURN: Shape = Shape(7);
 
     /// The shape of a flat signature, if the table has it.
     pub fn of(params: &[FlatType], results: &[FlatType]) -> Option<Shape> {

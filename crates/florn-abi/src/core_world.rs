@@ -15,6 +15,14 @@ pub const EXPORT_ON_MESSAGE: &str = "florn:core/actor@0.1.0#on-message";
 pub const EXPORT_ON_TIMER: &str = "florn:core/actor@0.1.0#on-timer";
 pub const EXPORT_MEMORY: &str = "memory";
 pub const EXPORT_REALLOC: &str = "cabi_realloc";
+/// The prefix of the post-return export of an export that returns a list or a string: the
+/// canonical ABI names it `cabi_post_` followed by the export's own name (RFC 002 rule 2).
+pub const POST_RETURN_PREFIX: &str = "cabi_post_";
+
+/// The name of the post-return export of the export `export` (its mangled name, rule 20).
+pub fn post_return_name(export: &str) -> String {
+    format!("{POST_RETURN_PREFIX}{export}")
+}
 
 /// A function's signature in the type subset.
 #[derive(Clone, Debug, PartialEq)]

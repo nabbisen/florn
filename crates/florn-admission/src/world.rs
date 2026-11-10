@@ -11,16 +11,43 @@ pub struct FuncSig {
     pub name: String,
     pub params: Vec<FlatType>,
     pub results: Vec<FlatType>,
+    /// An export whose result is or holds a list or a string: the module must also export
+    /// `cabi_post_<name>` of type `(i32) -> ()` (RFC 002 rule 2; RFC 003 rule 5). False for an
+    /// import.
+    pub post_return: bool,
 }
 
 impl FuncSig {
-    fn of(sig: &core_world::Signature) -> Self {
-        let (params, results) = Ty::flat_signature(&sig.param_types(), sig.result.as_ref());
+    /// A function the guest imports: the return pointer, if any, is its last parameter.
+    pub fn import(name: impl Into<String>, params: &[Ty], result: Option<&Ty>) -> Self {
+        let (params, results) = Ty::import_signature(params, result);
         FuncSig {
-            name: sig.name.to_string(),
+            name: name.into(),
             params,
             results,
+            post_return: false,
         }
+    }
+
+    /// A function the guest exports: a result beyond one flat value is returned as one pointer.
+    pub fn export(name: impl Into<String>, params: &[Ty], result: Option<&Ty>) -> Self {
+        let (params, results) = Ty::export_signature(params, result);
+        FuncSig {
+            name: name.into(),
+            params,
+            results,
+            post_return: result.is_some_and(Ty::needs_post_return),
+        }
+    }
+
+    /// The post-return export this function's module must have, when it needs one.
+    pub fn post_return_sig(&self) -> Option<FuncSig> {
+        self.post_return.then(|| FuncSig {
+            name: core_world::post_return_name(&self.name),
+            params: vec![FlatType::I32],
+            results: Vec::new(),
+            post_return: false,
+        })
     }
 }
 
@@ -82,6 +109,7 @@ pub fn realloc_sig() -> FuncSig {
         name: core_world::EXPORT_REALLOC.to_string(),
         params: vec![FlatType::I32; 4],
         results: vec![FlatType::I32],
+        post_return: false,
     }
 }
 
@@ -98,15 +126,17 @@ impl WorldSpec {
                 module: core_world::HOST_MODULE.to_string(),
                 functions: core_world::host_functions()
                     .iter()
-                    .map(FuncSig::of)
+                    .map(|s| FuncSig::import(s.name, &s.param_types(), s.result.as_ref()))
                     .collect(),
             }],
             exports: core_world::actor_functions()
                 .iter()
                 .map(|s| {
-                    let mut f = FuncSig::of(s);
-                    f.name = format!("{}{}", core_world::ACTOR_EXPORT_PREFIX, s.name);
-                    f
+                    FuncSig::export(
+                        format!("{}{}", core_world::ACTOR_EXPORT_PREFIX, s.name),
+                        &s.param_types(),
+                        s.result.as_ref(),
+                    )
                 })
                 .collect(),
         }

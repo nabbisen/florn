@@ -14,7 +14,7 @@ pub mod shape;
 mod ty;
 mod val;
 
-pub use lift::{lift_flat_params, lift_results, load};
+pub use lift::{lift_flat_params, lift_list, lift_results, load};
 pub use lower::{lower_flat_params, lower_result, store};
 pub use shape::Shape;
 pub use ty::{Flat, FlatType, MAX_FLAT_PARAMS, MAX_FLAT_RESULTS, Ty};

@@ -407,6 +407,10 @@ pub fn validate(
     };
     let mut required: Vec<FuncSig> = world.exports.clone();
     required.push(realloc_sig());
+    // RFC 002 rule 2 and RFC 003 rule 5: an export that returns a list or a string needs its
+    // `cabi_post_<export>`, `(i32) -> ()`; a module without it would leave the result's buffer in
+    // its memory at every call. Missing or of another type, it is `module.export-missing`.
+    required.extend(world.exports.iter().filter_map(FuncSig::post_return_sig));
     for sig in &required {
         let present = exports.iter().any(|(n, k, i)| {
             n == &sig.name

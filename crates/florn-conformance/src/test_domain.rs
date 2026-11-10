@@ -744,7 +744,13 @@ pub fn contract_section() -> Vec<u8> {
 
 /// The prober's bytes with both custom sections (RFC 002 rule 11).
 pub fn guest_bytes() -> Vec<u8> {
-    let mut bytes = wat::parse_str(guest_wat()).expect("the prober parses");
+    guest_bytes_of(&guest_wat())
+}
+
+/// A module written in text, with the prober's custom sections: the prober itself, or a variant of
+/// it that exports or lacks something, for admission's refusals.
+pub fn guest_bytes_of(wat_text: &str) -> Vec<u8> {
+    let mut bytes = wat::parse_str(wat_text).expect("the module parses");
     CustomSection {
         name: "component-type:test-kit-guest".into(),
         data: contract_section().into(),

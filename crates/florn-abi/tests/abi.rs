@@ -344,3 +344,118 @@ fn core_world_signatures_agree_with_the_contract_of_record() {
         assert_eq!(f.result.is_some(), s.result.is_some(), "{}", s.name);
     }
 }
+
+/// A memory that counts the reads it serves, to show that a refused list was never read.
+struct Counting {
+    inner: VecMemory,
+    reads: std::cell::Cell<u32>,
+}
+
+impl Memory for Counting {
+    fn size(&self) -> u32 {
+        self.inner.size()
+    }
+    fn read(&self, addr: u32, len: u32) -> Result<Vec<u8>, AbiError> {
+        self.reads.set(self.reads.get() + 1);
+        self.inner.read(addr, len)
+    }
+    fn write(&mut self, addr: u32, data: &[u8]) -> Result<(), AbiError> {
+        self.inner.write(addr, data)
+    }
+    fn realloc(&mut self, p: u32, o: u32, a: u32, n: u32) -> Result<u32, AbiError> {
+        self.inner.realloc(p, o, a, n)
+    }
+}
+
+#[test]
+fn a_list_is_checked_against_the_memory_before_anything_is_lifted() {
+    // SEC-005: a length the guest claims is checked before any allocation or read it would size.
+    let m = Counting {
+        inner: mem(),
+        reads: 0.into(),
+    };
+    let refused = |elem: &Ty, ptr: u32, len: u32| lift_list(&m, elem, ptr, len).unwrap_err();
+    // The byte length overflows a u32.
+    assert_eq!(
+        refused(&Ty::F64, 0, u32::MAX),
+        AbiError::Length { len: u32::MAX }
+    );
+    // The bytes fit a u32 and not the memory (65,536 bytes hold 8,192 floats).
+    assert!(matches!(
+        refused(&Ty::F64, 0, 8_193),
+        AbiError::OutOfRange {
+            addr: 0,
+            len: 65_544,
+            size: 65_536
+        }
+    ));
+    // The start is inside and the end is not; the start is so high that the end overflows.
+    assert!(matches!(
+        refused(&Ty::F64, 65_536 - 16, 3),
+        AbiError::OutOfRange { .. }
+    ));
+    assert!(matches!(
+        refused(&Ty::F64, u32::MAX - 3, 1),
+        AbiError::OutOfRange { .. }
+    ));
+    // Bytes, which are one copy, are checked before the copy is made.
+    assert!(matches!(
+        refused(&Ty::U8, 0, u32::MAX),
+        AbiError::OutOfRange { .. }
+    ));
+    // Elements without size would loop for the guest's length and hold nothing.
+    assert_eq!(
+        refused(&Ty::Record(vec![]), 0, 1_000_000),
+        AbiError::Length { len: 1_000_000 }
+    );
+    assert_eq!(m.reads.get(), 0, "nothing was read for any of them");
+    // And the same lists, with a length the memory holds, lift.
+    assert_eq!(
+        lift_list(&m, &Ty::F64, 65_536 - 16, 2).unwrap(),
+        Val::List(vec![Val::F64(0.0), Val::F64(0.0)])
+    );
+    assert_eq!(lift_list(&m, &Ty::U8, 0, 0).unwrap(), Val::Bytes(vec![]));
+    assert_eq!(
+        lift_list(&m, &Ty::Record(vec![]), 0, 0).unwrap(),
+        Val::List(vec![])
+    );
+}
+
+#[test]
+fn a_list_of_floats_round_trips_and_its_nans_are_canonical() {
+    let mut m = mem();
+    let ty = Ty::list(Ty::F64);
+    let value = Val::List(vec![
+        Val::F64(-0.0),
+        Val::F64(1e300),
+        Val::F64(f64::INFINITY),
+        Val::F64(f64::from_bits(0x7ff8_dead_0000_0001)),
+    ]);
+    let flats = lower_flat_params(&mut m, std::slice::from_ref(&ty), &[value]).unwrap();
+    // The list is lowered as (pointer, length): two i32.
+    assert!(matches!(flats.as_slice(), [Flat::I32(_), Flat::I32(4)]));
+    let back = lift_flat_params(&m, &[ty], &flats).unwrap();
+    let Val::List(items) = &back[0] else {
+        panic!("a list")
+    };
+    assert!(matches!(items[0], Val::F64(x) if x.to_bits() == (-0.0f64).to_bits()));
+    assert_eq!(items[1], Val::F64(1e300));
+    assert_eq!(items[2], Val::F64(f64::INFINITY));
+    assert!(matches!(items[3], Val::F64(x) if x.to_bits() == 0x7ff8_0000_0000_0000));
+    // A NaN already in the guest's memory is made canonical when it is lifted.
+    let at = m.realloc(0, 0, 8, 8).unwrap();
+    m.write(at, &0xfff8_0000_0000_4242u64.to_le_bytes())
+        .unwrap();
+    assert!(
+        matches!(lift_list(&m, &Ty::F64, at, 1).unwrap(), Val::List(v) if matches!(v[0], Val::F64(x) if x.to_bits() == 0x7ff8_0000_0000_0000))
+    );
+}
+
+#[test]
+fn the_post_return_export_is_named_from_the_export() {
+    // RFC 002 rule 2 and the canonical ABI: `cabi_post_` and the export's own (mangled) name.
+    assert_eq!(
+        core_world::post_return_name("florn:circuit/device@0.1.0#evaluate"),
+        "cabi_post_florn:circuit/device@0.1.0#evaluate"
+    );
+}

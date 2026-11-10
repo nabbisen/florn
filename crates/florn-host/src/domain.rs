@@ -55,15 +55,6 @@ pub struct DomainWorld {
     pub exports: Vec<(String, Vec<Signature>)>,
 }
 
-fn flat_sig(name: String, s: &Signature) -> FuncSig {
-    let (params, results) = Ty::flat_signature(&s.param_types(), s.result.as_ref());
-    FuncSig {
-        name,
-        params,
-        results,
-    }
-}
-
 impl DomainWorld {
     /// The admission specification: the core's imports and exports plus this world's.
     pub fn spec(&self) -> WorldSpec {
@@ -83,13 +74,17 @@ impl DomainWorld {
                 module: module.clone(),
                 functions: functions
                     .iter()
-                    .map(|s| flat_sig(s.name.to_string(), s))
+                    .map(|s| FuncSig::import(s.name, &s.param_types(), s.result.as_ref()))
                     .collect(),
             });
         }
         for (id, functions) in &self.exports {
             for s in functions {
-                spec.exports.push(flat_sig(format!("{id}#{}", s.name), s));
+                spec.exports.push(FuncSig::export(
+                    format!("{id}#{}", s.name),
+                    &s.param_types(),
+                    s.result.as_ref(),
+                ));
             }
         }
         spec
@@ -426,7 +421,7 @@ impl WorldSigs {
     }
 
     fn push_export(&mut self, name: String, s: &Signature) {
-        let (params, results) = Ty::flat_signature(&s.param_types(), s.result.as_ref());
+        let (params, results) = Ty::export_signature(&s.param_types(), s.result.as_ref());
         let shape = florn_abi::Shape::of(&params, &results).expect("admission checked the shape");
         self.exports.push((name, s.param_types(), shape));
     }

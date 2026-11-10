@@ -164,8 +164,9 @@ fn a_world_function_outside_the_shape_table_is_refused_at_admission() {
     let mut world: WorldSpec = TestDomain::new().world().unwrap().spec();
     world.imports[1].functions.push(FuncSig {
         name: "bad".into(),
-        params: vec![FlatType::I64, FlatType::I64],
+        params: vec![FlatType::F64, FlatType::F64],
         results: vec![],
+        post_return: false,
     });
     let mut adm = Admission::default();
     adm.add_world(world);

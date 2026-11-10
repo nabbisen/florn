@@ -223,6 +223,19 @@ for (const name of browsers) {
     check(false, `${name}: transport`, { error: String(err).split("\n")[0] });
   }
 
+  // The adapter cases of floats, lists and the post-return call (PR-37; RFC 002 rule 2; RFC 012
+  // findings F-1 and F-16): the cases the native adapter runs, over the browser's engine.
+  try {
+    const a = await open("bench=abi");
+    const cases = Array.isArray(a.cases) ? a.cases : [];
+    check(cases.length >= 8 && a.failed === 0, `${name}: the adapter cases of floats, lists and the post-return call pass`, { failed: a.failed, count: cases.length });
+    for (const c of cases) {
+      if (c.error !== null) check(false, `${name}: adapter case: ${c.case}`, { error: c.error });
+    }
+  } catch (err) {
+    check(false, `${name}: adapter cases`, { error: String(err).split("\n")[0] });
+  }
+
   // The benchmarks (RFC 005 rule 11; RFC 003 section 7, step 2).
   try {
     const c = await open(`bench=crossing&scale=${quick ? 20 : 1}`);

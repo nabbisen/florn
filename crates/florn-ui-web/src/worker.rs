@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use florn_control::display::{DisplayPath, Transport, encode_all};
 use florn_control::{Answer, Command, Envelope, Message, Query, SeedChoice, Subscription, Unit};
 use florn_domain_network::NetworkDomain;
-use florn_engine::bench;
+use florn_engine::{bench, cases};
 use florn_engine_web::WebEngine;
 use florn_host::Domains;
 use florn_host::{Controller, Options};
@@ -636,6 +636,29 @@ pub unsafe extern "C" fn florn_bench_crossing(ptr: *mut u8, len: u32, scale: u32
             -1
         }
     }
+}
+
+/// The adapter cases of floats, lists and the post-return call (PR-37) over this adapter: the
+/// cases `florn_engine::cases::run` gives, as JSON `[{"case": ..., "error": null | text}]`; the
+/// status is the number that failed.
+#[unsafe(no_mangle)]
+pub extern "C" fn florn_abi_cases() -> i32 {
+    let results = cases::run(&mut WebEngine::new);
+    let items: Vec<String> = results
+        .iter()
+        .map(|c| {
+            format!(
+                "{{\"case\":{},\"error\":{}}}",
+                json_str(c.name),
+                c.outcome
+                    .as_ref()
+                    .err()
+                    .map_or("null".into(), |e| json_str(e))
+            )
+        })
+        .collect();
+    set_out(format!("[{}]", items.join(",")).into_bytes());
+    results.iter().filter(|c| c.outcome.is_err()).count() as i32
 }
 
 thread_local! {

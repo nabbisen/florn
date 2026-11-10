@@ -110,13 +110,16 @@ pub fn lift_string(mem: &dyn Memory, ptr: u32, len: u32) -> Result<Val, AbiError
         .map_err(|_| AbiError::InvalidUtf8 { addr: ptr, len })
 }
 
+/// Lift a list of `len` elements at `ptr`. The length is checked against the memory **before**
+/// anything is allocated or read (SEC-005: every allocation sized by untrusted input is bounded):
+/// a list whose bytes overflow, or do not lie inside the memory, is refused whole, and so is a
+/// list of elements without size (it would loop for the guest's `len` and hold nothing).
 pub fn lift_list(mem: &dyn Memory, elem: &Ty, ptr: u32, len: u32) -> Result<Val, AbiError> {
-    if let Ty::U8 = elem {
-        return Ok(Val::Bytes(mem.read(ptr, len)?));
+    let size = elem.size();
+    if size == 0 && len > 0 {
+        return Err(AbiError::Length { len });
     }
-    let bytes = len
-        .checked_mul(elem.size())
-        .ok_or(AbiError::Length { len })?;
+    let bytes = len.checked_mul(size).ok_or(AbiError::Length { len })?;
     if ptr.checked_add(bytes).is_none_or(|end| end > mem.size()) {
         return Err(AbiError::OutOfRange {
             addr: ptr,
@@ -124,9 +127,12 @@ pub fn lift_list(mem: &dyn Memory, elem: &Ty, ptr: u32, len: u32) -> Result<Val,
             size: mem.size(),
         });
     }
+    if let Ty::U8 = elem {
+        return Ok(Val::Bytes(mem.read(ptr, len)?));
+    }
     let mut items = Vec::with_capacity(len.min(1 << 20) as usize);
     for i in 0..len {
-        items.push(load(mem, elem, ptr + i * elem.size())?);
+        items.push(load(mem, elem, ptr + i * size)?);
     }
     Ok(Val::List(items))
 }
@@ -331,8 +337,10 @@ pub fn lift_flat_params(
 }
 
 /// Lift the results of an export: one flat value directly, or, when the result has more flats
-/// than `MAX_FLAT_RESULTS`, a pointer to a return area in the guest's memory (the caller then calls
-/// `cabi_post_*`, RFC 002 rule 2).
+/// than `MAX_FLAT_RESULTS`, a pointer to a return area in the guest's memory. The lifted value is a
+/// copy: the buffers it came from are still the guest's until the Host calls `cabi_post_<export>`
+/// (RFC 002 rule 2), which is the caller's to do once, when [`Ty::needs_post_return`]
+/// (`florn_engine::call_lifting` does it).
 pub fn lift_results(
     mem: &dyn Memory,
     ty: Option<&Ty>,

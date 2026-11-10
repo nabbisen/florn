@@ -83,6 +83,11 @@ pub const GUEST_WAT: &str = r#"
     (call $set_timer (local.get 1) (i64.const 100))))
 "#;
 
+/// Assemble a guest written in text.
+pub fn assemble(wat_text: &str) -> Vec<u8> {
+    wat::parse_str(wat_text).expect("the guest assembles")
+}
+
 /// The guest as bytes.
 pub fn guest_bytes() -> Vec<u8> {
     wat::parse_str(GUEST_WAT).expect("the conformance guest parses")

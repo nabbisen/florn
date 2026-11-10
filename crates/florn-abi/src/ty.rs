@@ -201,20 +201,60 @@ impl Ty {
         }
     }
 
-    /// The flat signature of a function in the canonical ABI: parameters beyond
-    /// [`MAX_FLAT_PARAMS`] travel through one pointer, a result beyond [`MAX_FLAT_RESULTS`]
-    /// through a return pointer passed as the last parameter.
-    pub fn flat_signature(params: &[Ty], result: Option<&Ty>) -> (Vec<FlatType>, Vec<FlatType>) {
-        let mut p: Vec<FlatType> = params.iter().flat_map(Ty::flat_types).collect();
-        if p.len() > MAX_FLAT_PARAMS {
-            p = vec![FlatType::I32];
-        }
+    /// The flat signature of a function the guest **imports** in the canonical ABI (lowered by the
+    /// guest, lifted by the Host): parameters beyond [`MAX_FLAT_PARAMS`] travel through one
+    /// pointer; a result beyond [`MAX_FLAT_RESULTS`] comes back through a return pointer the
+    /// guest passes as the **last parameter**, and the function returns nothing.
+    pub fn import_signature(params: &[Ty], result: Option<&Ty>) -> (Vec<FlatType>, Vec<FlatType>) {
+        let mut p = Self::flat_params(params);
         let mut r: Vec<FlatType> = result.map_or(Vec::new(), Ty::flat_types);
         if r.len() > MAX_FLAT_RESULTS {
             p.push(FlatType::I32);
             r = Vec::new();
         }
         (p, r)
+    }
+
+    /// The flat signature of a function the guest **exports** in the canonical ABI (lowered by
+    /// the Host, lifted by the Host): parameters beyond [`MAX_FLAT_PARAMS`] travel through one
+    /// pointer; a result beyond [`MAX_FLAT_RESULTS`] is **returned as one pointer** to a return
+    /// area in the guest's memory, and the parameters are unchanged (RFC 002 rule 2; the Host
+    /// then calls `cabi_post_<export>` when [`Self::needs_post_return`]).
+    pub fn export_signature(params: &[Ty], result: Option<&Ty>) -> (Vec<FlatType>, Vec<FlatType>) {
+        let p = Self::flat_params(params);
+        let mut r: Vec<FlatType> = result.map_or(Vec::new(), Ty::flat_types);
+        if r.len() > MAX_FLAT_RESULTS {
+            r = vec![FlatType::I32];
+        }
+        (p, r)
+    }
+
+    fn flat_params(params: &[Ty]) -> Vec<FlatType> {
+        let p: Vec<FlatType> = params.iter().flat_map(Ty::flat_types).collect();
+        if p.len() > MAX_FLAT_PARAMS {
+            vec![FlatType::I32]
+        } else {
+            p
+        }
+    }
+
+    /// Whether a value of this type, returned by an export, leaves a buffer in the guest's memory
+    /// that the guest frees in `cabi_post_<export>`: the type is or holds a list or a string
+    /// (RFC 002 rule 2: "for every export that returns a list or a string").
+    pub fn needs_post_return(&self) -> bool {
+        match self {
+            Ty::String | Ty::List(_) => true,
+            Ty::Record(fields) => fields.iter().any(|(_, t)| t.needs_post_return()),
+            Ty::Option(t) => t.needs_post_return(),
+            Ty::Result(ok, err) => {
+                ok.as_deref().is_some_and(Ty::needs_post_return)
+                    || err.as_deref().is_some_and(Ty::needs_post_return)
+            }
+            Ty::Variant(cases) => cases
+                .iter()
+                .any(|(_, t)| t.as_ref().is_some_and(Ty::needs_post_return)),
+            _ => false,
+        }
     }
 
     /// The flat types this type lowers to.

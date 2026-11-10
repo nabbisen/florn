@@ -15,6 +15,9 @@ wat = { workspace = true, optional = true }
 
 [features]
 # The adapter conformance cases of `conformance`, run by each adapter's tests.
-conformance = ["dep:wat"]
+conformance = ["dep:wat", "cases"]
+# The cases of floats, lists and the post-return call over a prebuilt guest (`cases`), which the
+# browser test page runs too: no assembler is needed to run them.
+cases = []
 # The benchmark drivers of the conformance kit and the browser test page.
 bench = []

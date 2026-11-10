@@ -247,6 +247,9 @@ async function request(worker) {
   if (bench === "handle") {
     return plain({ kind: "handle" }, []);
   }
+  if (bench === "abi") {
+    return plain({ kind: "abi" }, []);
+  }
   return null;
 }
 

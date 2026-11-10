@@ -522,6 +522,11 @@ function runBench(m) {
     const perInstance = (performance.now() - t0) * 1000 / Math.max(1, kept.length);
     return { kind: "probe", instances: kept.length, stopped_by: error, micros_per_instance: perInstance, memory_pages: memoryPages, engine: family() };
   }
+  if (m.kind === "abi") {
+    // The adapter cases of floats, lists and the post-return call (PR-37), over this engine.
+    const failed = host.exports.florn_abi_cases();
+    return { kind: "abi", failed, cases: out(), engine: family() };
+  }
   if (m.kind === "handle") {
     // The transport's form with bytes that are no control message: the coded refusal.
     host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, 0, 0);

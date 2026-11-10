@@ -12,6 +12,35 @@ fn adapter_conformance() {
 }
 
 #[test]
+fn abi_cases_floats_lists_and_the_post_return_call() {
+    let cases = florn_engine::cases::run(&mut || WasmtimeEngine::new(Limits::default()).unwrap());
+    assert!(cases.len() >= 8, "the cases ran");
+    let failed: Vec<_> = cases.iter().filter(|c| c.outcome.is_err()).collect();
+    assert!(failed.is_empty(), "{failed:#?}");
+}
+
+/// The cases' guest is committed as bytes so that the browser test page runs the same ones; this
+/// keeps the bytes the assembled source. `FLORN_WRITE_DEVICE_WASM=1` rewrites the file.
+#[test]
+fn the_cases_guest_is_what_its_source_assembles_to() {
+    use florn_engine::cases::{DEVICE_WASM, DEVICE_WAT};
+    let assembled = florn_engine::conformance::assemble(DEVICE_WAT);
+    if std::env::var_os("FLORN_WRITE_DEVICE_WASM").is_some() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../florn-engine/src/cases/device.wasm"
+        );
+        std::fs::write(path, &assembled).unwrap();
+        return;
+    }
+    assert!(
+        assembled == DEVICE_WASM,
+        "crates/florn-engine/src/cases/device.wasm is not what device.wat assembles to; \
+         run this test with FLORN_WRITE_DEVICE_WASM=1 and commit the file"
+    );
+}
+
+#[test]
 fn the_watchdog_interrupts_a_guest_that_never_returns() {
     let mut e = WasmtimeEngine::new(Limits::default()).unwrap();
     let module = e.compile(&guest_bytes()).unwrap();
