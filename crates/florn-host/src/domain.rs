@@ -26,6 +26,7 @@ use florn_kernel::{Delivery, EventKey, Identity, Instant, Sink, Tick, World};
 use florn_model::manifest::{ActorKind, DomainMap, Port, domain_of};
 use florn_model::{Decimal, Manifest, Param};
 
+use crate::compound::{CallIn, Compound};
 use crate::world::{CLASS_MESSAGE, CLASS_TIMER, CoreWorld};
 
 /// A refusal a domain reports (RFC 004 §7; RFC 008 rule 18): a code of RFC 007 §4 with its
@@ -53,6 +54,9 @@ pub struct DomainWorld {
     /// Exported interfaces: the interface id and its functions; an export's canonical name is
     /// `<id>#<function>`.
     pub exports: Vec<(String, Vec<Signature>)>,
+    /// The sequences of calls that form one activation (RFC 002 rule 44), by canonical export
+    /// names; the circuit device's is `begin-step`, `evaluate`, `accept-step` or `reject-step`.
+    pub compounds: Vec<Compound>,
 }
 
 impl DomainWorld {
@@ -219,6 +223,18 @@ pub trait Domain {
     ) -> Vec<Action>;
     /// An event of its classes: `alive` says whether the target actor can be activated.
     fn event(&mut self, event: &DomainEvent, alive: bool) -> Vec<Action>;
+    /// As [`Self::event`], given the call-in handle (RFC 012 finding F-3): while it handles the
+    /// event the domain may open a compound activation of one of its guests, call it, and close
+    /// it by commit or discard (RFC 002 rule 44). The Host calls this and never `event`
+    /// directly; the default does not use the handle.
+    fn event_calling(
+        &mut self,
+        event: &DomainEvent,
+        alive: bool,
+        _calls: &mut dyn CallIn,
+    ) -> Vec<Action> {
+        self.event(event, alive)
+    }
     /// An event of its classes that carried a message to an actor that faulted meanwhile:
     /// the frame is dropped at delivery (RFC 008 rule 5).
     fn undelivered(&mut self, _event: &DomainEvent) -> Vec<Action> {
@@ -397,6 +413,11 @@ pub struct WorldSigs {
     pub exports: Vec<(String, Vec<Ty>, florn_abi::Shape)>,
     /// Import name, module, parameter types, result type.
     pub imports: Vec<(String, String, Vec<Ty>, Option<Ty>)>,
+    /// The result type of each export, in the order of `exports`: what the Host lifts when it
+    /// calls one that returns a value (RFC 012 finding F-3).
+    pub results: Vec<Option<Ty>>,
+    /// The compound activations the world declares (RFC 002 rule 44).
+    pub compounds: Vec<Compound>,
 }
 
 impl WorldSigs {
@@ -405,6 +426,8 @@ impl WorldSigs {
             name: florn_admission::world::CORE_WORLD.to_string(),
             exports: Vec::new(),
             imports: Vec::new(),
+            results: Vec::new(),
+            compounds: Vec::new(),
         };
         for s in core_world::actor_functions() {
             w.push_export(format!("{}{}", core_world::ACTOR_EXPORT_PREFIX, s.name), &s);
@@ -424,12 +447,14 @@ impl WorldSigs {
         let (params, results) = Ty::export_signature(&s.param_types(), s.result.as_ref());
         let shape = florn_abi::Shape::of(&params, &results).expect("admission checked the shape");
         self.exports.push((name, s.param_types(), shape));
+        self.results.push(s.result.clone());
     }
 
     /// The core's signatures followed by a domain world's.
     pub fn of(world: &DomainWorld) -> Self {
         let mut w = Self::core();
         w.name = world.name.clone();
+        w.compounds = world.compounds.clone();
         for (id, functions) in &world.exports {
             for s in functions {
                 w.push_export(format!("{id}#{}", s.name), s);
@@ -451,6 +476,11 @@ impl WorldSigs {
     pub fn export_index(&self, name: &str) -> Option<usize> {
         self.exports.iter().position(|(n, _, _)| n == name)
     }
+
+    /// The compound activation `export` is a call of, if the world declares one.
+    pub fn compound_of(&self, export: &str) -> Option<&Compound> {
+        self.compounds.iter().find(|c| c.has(export))
+    }
 }
 
 /// The composed world (RFC 008 rule 2): the core's connections and every domain's, dispatched
@@ -464,6 +494,8 @@ pub struct Composite {
     by_kind: BTreeMap<String, usize>,
     by_module: BTreeMap<String, usize>,
     by_builtin: BTreeMap<Identity, (usize, String)>,
+    /// The domains whose world declares a compound activation: only these are lent out.
+    compounding: BTreeSet<usize>,
     class_names: BTreeMap<u8, &'static str>,
     /// Effects committed per domain origin (RFC 001 rule 17): connections and worlds.
     seq: BTreeMap<Identity, u64>,
@@ -539,6 +571,12 @@ impl Composite {
                 by_target.insert(florn_model::manifest::WORLD_IDENTITY_BASE + n as u32, i);
             }
         }
+        let compounding = domains
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| d.world().is_some_and(|w| !w.compounds.is_empty()))
+            .map(|(i, _)| i)
+            .collect();
         for d in &mut domains {
             d.compose(scenario, root_seed);
         }
@@ -562,6 +600,7 @@ impl Composite {
             by_kind,
             by_module,
             by_builtin,
+            compounding,
             class_names,
             seq: BTreeMap::new(),
             dead: BTreeSet::new(),
@@ -599,6 +638,27 @@ impl Composite {
     pub fn of_class(&mut self, class: u8) -> Option<&mut dyn Domain> {
         let i = *self.by_class.get(&class)?;
         Some(self.domains[i].as_mut())
+    }
+    /// Lend out the domain of an event class for the length of a call into a guest (RFC 012
+    /// finding F-3: "the Host lends the domain out for the call"): the call needs the whole run,
+    /// of which this world is a part, so the domain leaves it. A placeholder that answers no
+    /// import, delivers nothing and handles nothing stands in its place; [`Self::take_back`]
+    /// puts the domain back. `None` when no domain owns the class, or its world declares no
+    /// compound activation (then nothing is lent and the event is handled in place).
+    pub fn lend_class(&mut self, class: u8) -> Option<(usize, Box<dyn Domain>)> {
+        let i = *self.by_class.get(&class)?;
+        if !self.compounding.contains(&i) {
+            return None;
+        }
+        let name = self.domains[i].name();
+        Some((
+            i,
+            std::mem::replace(&mut self.domains[i], Box::new(Lent { name })),
+        ))
+    }
+    /// Put a lent domain back.
+    pub fn take_back(&mut self, index: usize, domain: Box<dyn Domain>) {
+        self.domains[index] = domain;
     }
     /// The domain of a change target (a connection or a world of its).
     pub fn of_target(&mut self, target: Identity) -> Option<&mut dyn Domain> {
@@ -687,4 +747,60 @@ impl World for Composite {
         }
         deliveries
     }
+}
+
+/// What stands in a [`Composite`] for a domain that is lent out (see [`Composite::lend_class`]):
+/// it has the lent domain's name and does nothing. A guest that calls an import of its world
+/// meanwhile is refused (`answer` gives `None`), as a guest of a compound activation that asks
+/// for what the domain cannot give.
+struct Lent {
+    name: &'static str,
+}
+
+impl Domain for Lent {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+    fn connection_types(&self) -> Vec<&'static str> {
+        Vec::new()
+    }
+    fn port_types(&self) -> Vec<&'static str> {
+        Vec::new()
+    }
+    fn validate(&self, _: &Manifest) -> Vec<Notification> {
+        Vec::new()
+    }
+    fn compose(&mut self, _: &Manifest, _: u64) {}
+    fn deliver(
+        &mut self,
+        _: Instant,
+        _: Identity,
+        _: u64,
+        _: u32,
+        _: &[u8],
+        _: &BTreeSet<Identity>,
+    ) -> Vec<Delivery> {
+        Vec::new()
+    }
+    fn change(&mut self, _: Instant, _: Identity, _: &DomainMap) -> Vec<Action> {
+        Vec::new()
+    }
+    fn check_intervention(
+        &self,
+        _: Identity,
+        _: &str,
+        _: &DomainMap,
+    ) -> Result<(), Box<Notification>> {
+        Ok(())
+    }
+    fn intervene(&mut self, _: Instant, _: Identity, _: &str, _: &DomainMap) -> Vec<Action> {
+        Vec::new()
+    }
+    fn event(&mut self, _: &DomainEvent, _: bool) -> Vec<Action> {
+        Vec::new()
+    }
+    fn answer(&mut self, _: Identity, _: &str, _: &[Val]) -> Option<Val> {
+        None
+    }
+    fn builtin(&mut self, _: Identity, _: &str, _: &BuiltinEvent<'_>, _: &mut Sink) {}
 }

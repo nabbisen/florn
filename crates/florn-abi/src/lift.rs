@@ -336,6 +336,35 @@ pub fn lift_flat_params(
     Ok(vals)
 }
 
+/// The length a list result names, read from its return area **before** anything of the list is
+/// lifted: four bytes of memory, so that a Host with a bound on the list (RFC 012 rule 20: the
+/// `evaluate` of a device returns `n + n² + 1` values and no more) can refuse a longer one without
+/// reading a byte of it (SEC-005). `None` when the result is not a list.
+pub fn result_list_len(
+    mem: &dyn Memory,
+    ty: Option<&Ty>,
+    flats: &[Flat],
+) -> Result<Option<u32>, AbiError> {
+    if !matches!(ty, Some(Ty::List(_))) {
+        return Ok(None);
+    }
+    let ptr = match flats {
+        [Flat::I32(p)] => *p as u32,
+        _ => {
+            return Err(AbiError::Shape {
+                expected: "one pointer to the return area",
+            });
+        }
+    };
+    let at = ptr.checked_add(4).ok_or(AbiError::OutOfRange {
+        addr: ptr,
+        len: 8,
+        size: mem.size(),
+    })?;
+    let word = mem.read(at, 4)?;
+    Ok(Some(u32::from_le_bytes(word.try_into().unwrap())))
+}
+
 /// Lift the results of an export: one flat value directly, or, when the result has more flats
 /// than `MAX_FLAT_RESULTS`, a pointer to a return area in the guest's memory. The lifted value is a
 /// copy: the buffers it came from are still the guest's until the Host calls `cabi_post_<export>`

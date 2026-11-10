@@ -18,9 +18,21 @@ interface events {
     on-wire: func(now: tick, port: port-id, up: bool);
 }
 
-/// A prober: the core world with the test domain's probe and events.
+/// A compound activation (RFC 002 rule 44): `begin` opens, `evaluate` may be called any number of
+/// times, `accept` commits and `reject` discards. The test domain's stand-in for a device.
+interface steps {
+    use florn:core/types@0.1.0.{tick};
+
+    begin: func(start: tick, h: f64);
+    evaluate: func(trial: list<f64>) -> list<f64>;
+    accept: func(solution: list<f64>);
+    reject: func();
+}
+
+/// A prober: the core world with the test domain's probe, events and steps.
 world guest {
     include florn:core/guest@0.1.0;
     import probe;
     export events;
+    export steps;
 }

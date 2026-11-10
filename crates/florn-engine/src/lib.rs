@@ -16,7 +16,7 @@ pub mod conformance;
 
 use std::fmt;
 
-pub use call::{CallError, call_lifting};
+pub use call::{CallError, Callee, call_lifting};
 pub use florn_abi::{Flat, FlatType, Memory, Shape};
 
 /// Identifies an instance to the import handler.

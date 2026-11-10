@@ -448,6 +448,7 @@ impl Domain for NetworkDomain {
                     result: None,
                 }],
             )],
+            compounds: vec![],
         })
     }
 

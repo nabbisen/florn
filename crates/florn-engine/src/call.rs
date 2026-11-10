@@ -5,7 +5,7 @@
 //! the buffers it allocated for the result; without it each call would leave them in the guest's
 //! memory until the memory limit traps the guest.
 
-use florn_abi::{AbiError, Flat, Ty, Val, lift_results};
+use florn_abi::{AbiError, Flat, Ty, Val, lift_results, result_list_len};
 
 use crate::{Engine, ImportHandler, Trap};
 
@@ -18,6 +18,9 @@ pub enum CallError {
     /// The result could not be lifted: the contract fault of RFC 002 rule 8. The post-return is
     /// not called then: the result is not valid and the guest's buffers stay its own.
     Lift(AbiError),
+    /// A list result names more elements than the caller allowed. Refused before a byte of the
+    /// list is read (RFC 012 rule 20; SEC-005); the post-return is not called.
+    ResultTooLong { len: u32, bound: u32 },
     /// The result needs a post-return and the caller resolved none. Admission refuses a module
     /// without one (`module.export-missing`), so this is a Host defect, not a guest's.
     NoPostReturn,
@@ -25,21 +28,51 @@ pub enum CallError {
     Memory(String),
 }
 
-/// Call `func` with `args` and lift its `result`. When the result needs a post-return
-/// ([`Ty::needs_post_return`]), call `post` once with the result pointer after the lift: inside
-/// the same activation, so the guest's metering still runs, and with the same `handler`.
+/// What the caller knows of the export it calls.
+pub struct Callee<'a, F> {
+    pub func: &'a F,
+    /// The export's post-return, resolved when its result needs one.
+    pub post: Option<&'a F>,
+    /// The result type to lift.
+    pub result: Option<&'a Ty>,
+    /// When the result is a list, the most elements the caller will take: the length the return
+    /// area names is read (four bytes) and compared **before** the lift, so that a list longer
+    /// than the bound is refused without a byte of it being read (RFC 012 rule 20; SEC-005).
+    pub list_bound: Option<u32>,
+}
+
+/// Call `callee.func` with `args` and lift its result. When the result needs a post-return
+/// ([`Ty::needs_post_return`]), call `callee.post` once with the result pointer after the lift:
+/// inside the same activation, so the guest's metering still runs, and with the same `handler`.
 pub fn call_lifting<E: Engine>(
     engine: &mut E,
     inst: &mut E::Instance,
-    func: &E::Func,
-    post: Option<&E::Func>,
+    callee: Callee<'_, E::Func>,
     args: &[Flat],
-    result: Option<&Ty>,
     handler: &mut dyn ImportHandler,
 ) -> Result<Option<Val>, CallError> {
+    let Callee {
+        func,
+        post,
+        result,
+        list_bound,
+    } = callee;
     let flats = engine
         .call(inst, func, args, handler)
         .map_err(CallError::Trap)?;
+    if let Some(bound) = list_bound {
+        let mut named = Ok(None);
+        engine
+            .with_memory(inst, &mut |mem| {
+                named = result_list_len(mem, result, &flats)
+            })
+            .map_err(|e| CallError::Memory(e.to_string()))?;
+        if let Some(len) = named.map_err(CallError::Lift)?
+            && len > bound
+        {
+            return Err(CallError::ResultTooLong { len, bound });
+        }
+    }
     let mut lifted = Ok(None);
     engine
         .with_memory(inst, &mut |mem| lifted = lift_results(mem, result, &flats))

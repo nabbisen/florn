@@ -459,3 +459,31 @@ fn the_post_return_export_is_named_from_the_export() {
         "cabi_post_florn:circuit/device@0.1.0#evaluate"
     );
 }
+
+#[test]
+fn the_length_of_a_list_result_is_read_without_reading_the_list() {
+    // RFC 012 rule 20: the Host checks the length of `evaluate`'s result before it lifts the list.
+    // The return area holds (pointer, length); the length is one four-byte read.
+    let mut m = Counting {
+        inner: mem(),
+        reads: 0.into(),
+    };
+    let area = m.realloc(0, 0, 4, 8).unwrap();
+    m.write(area, &1_000u32.to_le_bytes()).unwrap();
+    m.write(area + 4, &7u32.to_le_bytes()).unwrap();
+    let ty = Ty::list(Ty::F64);
+    let flats = [Flat::I32(area as i32)];
+    assert_eq!(result_list_len(&m, Some(&ty), &flats).unwrap(), Some(7));
+    assert_eq!(m.reads.get(), 1, "one read, of the length word");
+    // A result that is no list has no length to name; a return area outside the memory is refused.
+    assert_eq!(result_list_len(&m, Some(&Ty::U32), &flats).unwrap(), None);
+    assert_eq!(result_list_len(&m, None, &[]).unwrap(), None);
+    assert!(matches!(
+        result_list_len(&m, Some(&ty), &[Flat::I32(-1)]),
+        Err(AbiError::OutOfRange { .. })
+    ));
+    assert!(matches!(
+        result_list_len(&m, Some(&ty), &[]),
+        Err(AbiError::Shape { .. })
+    ));
+}

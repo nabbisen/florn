@@ -11,8 +11,8 @@ use florn_abi::core_world::post_return_name;
 use florn_abi::{Flat, FlatType, Memory, Ty, Val, canonical_f64, lift_list, lower_flat_params};
 
 use crate::{
-    CallError, Engine, GlobalValue, ImportFunction, ImportHandler, ImportSpec, InstanceId, Refusal,
-    Shape, call_lifting,
+    CallError, Callee, Engine, GlobalValue, ImportFunction, ImportHandler, ImportSpec, InstanceId,
+    Refusal, Shape, call_lifting,
 };
 
 /// The guest of the cases, assembled from [`DEVICE_WAT`].
@@ -107,6 +107,10 @@ pub fn run<E: Engine>(make: &mut dyn FnMut() -> E) -> Vec<Case> {
         (
             "a list longer than the memory is refused before it is lifted",
             list_longer_than_memory,
+        ),
+        (
+            "a list result over the caller's bound is refused before it is lifted, and its post-return is not called",
+            list_bound,
         ),
     ];
     cases
@@ -279,10 +283,13 @@ fn evaluate<E: Engine>(
         call_lifting(
             e,
             &mut g.inst,
-            &f,
-            p.as_ref(),
+            Callee {
+                func: &f,
+                post: p.as_ref(),
+                result: Some(&result),
+                list_bound: None,
+            },
             &flats,
-            Some(&result),
             &mut g.handler,
         )
         .map_err(|x| format!("{x:?}"))?
@@ -374,10 +381,13 @@ fn no_post_return_resolved<E: Engine>(e: &mut E) -> Result<(), String> {
     match call_lifting(
         e,
         &mut g.inst,
-        &f,
-        None,
+        Callee {
+            func: &f,
+            post: None,
+            result: Some(&result),
+            list_bound: None,
+        },
         &flats,
-        Some(&result),
         &mut g.handler,
     ) {
         Err(CallError::NoPostReturn) => Ok(()),
@@ -416,4 +426,43 @@ fn list_longer_than_memory<E: Engine>(e: &mut E) -> Result<(), String> {
     })
     .map_err(|x| x.to_string())?;
     outcome
+}
+
+fn list_bound<E: Engine>(e: &mut E) -> Result<(), String> {
+    let mut g = guest(e)?;
+    let params = [Ty::list(Ty::F64)];
+    let result = Ty::list(Ty::F64);
+    let f = func(e, &mut g, EVALUATE, &params, Some(&result))?;
+    let p = post(e, &mut g, EVALUATE)?;
+    let call = |e: &mut E, g: &mut Guest<E>, n: usize, bound: u32| {
+        let flats = lower(e, g, &params, &[Val::List(floats(n))])?;
+        Ok::<_, String>(call_lifting(
+            e,
+            &mut g.inst,
+            Callee {
+                func: &f,
+                post: Some(&p),
+                result: Some(&result),
+                list_bound: Some(bound),
+            },
+            &flats,
+            &mut g.handler,
+        ))
+    };
+    // Within the bound, the list comes back and the post-return runs.
+    match call(e, &mut g, 5, 5)? {
+        Ok(Some(Val::List(v))) if v.len() == 5 => {}
+        other => return Err(format!("at the bound: {other:?}")),
+    }
+    let calls = |e: &mut E, g: &mut Guest<E>| {
+        read(e, g, 44, 4).map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+    };
+    expect("post-return calls at the bound", calls(e, &mut g)?, 1)?;
+    // One beyond it: refused, and the guest's post-return was not called (the result was not
+    // taken). The list was 6 floats that lie inside the memory and would have lifted.
+    match call(e, &mut g, 6, 5)? {
+        Err(CallError::ResultTooLong { len: 6, bound: 5 }) => {}
+        other => return Err(format!("beyond the bound: {other:?}")),
+    }
+    expect("post-return calls beyond the bound", calls(e, &mut g)?, 1)
 }

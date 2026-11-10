@@ -11,6 +11,7 @@ use florn_model::manifest::DomainMap;
 use crate::domain::{Action, BuiltinEvent, DomainEvent};
 use crate::world::Intervention;
 
+use super::compound::Calls;
 use super::{ON_MESSAGE, ON_TIMER, Run, at};
 
 /// The kind and the fields of an intervention's canonical map (RFC 005 rule 26), for the kinds
@@ -160,7 +161,19 @@ impl<E: Engine> Run<E> {
                     return;
                 }
                 let alive = self.alive(ev.target);
-                if let Some(d) = self.world.of_class(ev.key.class) {
+                // A domain whose world declares a compound activation is lent out for the event
+                // and given the call-in handle (RFC 012 finding F-3); any other is handled in
+                // place, as it always was.
+                if let Some((index, mut d)) = self.world.lend_class(ev.key.class) {
+                    let actions = {
+                        let mut calls = Calls::new(self, ev.clone());
+                        let actions = d.event_calling(&event, alive, &mut calls);
+                        calls.finish();
+                        actions
+                    };
+                    self.world.take_back(index, d);
+                    self.apply(instant, &ev, actions);
+                } else if let Some(d) = self.world.of_class(ev.key.class) {
                     let actions = d.event(&event, alive);
                     self.apply(instant, &ev, actions);
                 }

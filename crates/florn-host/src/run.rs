@@ -11,6 +11,7 @@
 mod actions;
 mod activation;
 mod checkpoint;
+mod compound;
 mod end;
 mod start;
 
@@ -324,6 +325,9 @@ struct Slot<E: Engine> {
     last_activated: u64,
     /// One reference per export of the world, in the world's order (RFC 005 rule 7).
     funcs: Vec<E::Func>,
+    /// The post-return export of each export of the world whose result is or holds a list or a
+    /// string, in the same order (RFC 002 rule 2); `None` for an export that needs none.
+    posts: Vec<Option<E::Func>>,
     sink: Sink,
     admitted: Arc<Admitted>,
     module_name: String,

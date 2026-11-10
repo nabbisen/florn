@@ -723,6 +723,19 @@ impl Kernel {
         );
     }
 
+    /// End an activation without a record and without a fault (RFC 012 rule 21, finding F-2): a
+    /// compound activation that the domain discards, such as a rejected solver step. As a fault
+    /// discards (RFC 001 rule 24) the effects are dropped (the caller resets its sink) and the
+    /// actor's random stream is restored to where it stood when the activation began; unlike a
+    /// fault nothing is written to the trace and the actor stays alive. The open activation is
+    /// cleared, so the next one may begin.
+    pub fn discard(&mut self, act: Activation) {
+        if let Some(a) = self.actors.get_mut(&act.actor) {
+            a.stream = act.stream_at_start;
+        }
+        self.in_activation = false;
+    }
+
     fn fail_with<T>(
         &mut self,
         act: Activation,

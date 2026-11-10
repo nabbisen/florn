@@ -611,3 +611,99 @@ fn chacha8_matches_the_reference_implementation() {
         assert_eq!(ours.next_u64(), theirs.next_u64());
     }
 }
+
+// RFC 012 finding F-2 (PR-38): a third outcome beside commit and fault. RFC 001 rule 24 says what
+// a fault discards (the effects, the stream position); RFC 012 rule 21 says a rejected step is
+// "discarded whole: not recorded, the device's random stream restored, exactly as a fault discards
+// but without a fault and with the actor alive".
+
+/// One activation of actor 1 for a timer event, which draws `n` values and then ends as `end`.
+fn activation_ending(k: &mut Kernel, seq: u64, n: u32, end: Option<bool>) -> Vec<u64> {
+    let ev = Event {
+        key: EventKey {
+            tick: 0,
+            microstep: 0,
+            class: 1,
+            tie: 0,
+            origin: 1,
+            seq,
+        },
+        target: 1,
+        kind: EventKind::Timer { timer: 0 },
+    };
+    let act = k.begin(1, ev);
+    let drawn: Vec<u64> = (0..n).map(|_| k.draw(1)).collect();
+    let mut sink = Sink::new(Quotas::default(), vec![0], vec![1]);
+    sink.report(1, vec![7]).unwrap();
+    match end {
+        Some(true) => k.commit(act, &mut sink, 3, &mut NoWorld).unwrap(),
+        Some(false) => k.discard(act),
+        None => k.fault(act, trace::FaultKind::Trap, 0, 3),
+    }
+    drawn
+}
+
+#[test]
+fn a_discarded_activation_leaves_the_trace_of_a_run_without_it() {
+    let chain = |with_discard: bool| {
+        let mut k = Kernel::new(config(9, TiePolicy::ByIdentity));
+        k.add_actor(1);
+        activation_ending(&mut k, 1, 2, Some(true));
+        if with_discard {
+            activation_ending(&mut k, 2, 5, Some(false));
+        }
+        activation_ending(&mut k, 3, 2, Some(true));
+        (k.trace.chain(), k.trace.kept_records().unwrap().len())
+    };
+    let (with, records_with) = chain(true);
+    let (without, records_without) = chain(false);
+    assert_eq!(records_with, records_without, "no record for the discard");
+    assert_eq!(with, without, "the same chain");
+}
+
+#[test]
+fn a_discarded_activation_restores_the_stream_and_keeps_the_actor_alive() {
+    let mut k = Kernel::new(config(9, TiePolicy::ByIdentity));
+    k.add_actor(1);
+    let first = activation_ending(&mut k, 1, 3, Some(false));
+    // The same three values again: the position was restored.
+    let again = activation_ending(&mut k, 2, 3, Some(false));
+    assert_eq!(first, again);
+    assert!(k.actor(1).unwrap().alive, "a discard is not a fault");
+    // And a fault, for contrast, kills the actor and writes its record.
+    let before = k.trace.kept_records().unwrap().len();
+    activation_ending(&mut k, 3, 3, None);
+    assert!(!k.actor(1).unwrap().alive);
+    assert_eq!(k.trace.kept_records().unwrap().len(), before + 1);
+}
+
+#[test]
+fn a_discard_clears_the_open_activation_and_two_open_at_once_still_assert() {
+    let mut k = Kernel::new(config(9, TiePolicy::ByIdentity));
+    k.add_actor(1);
+    activation_ending(&mut k, 1, 1, Some(false));
+    assert!(k.at_boundary(), "nothing is open after a discard");
+    // The next activation begins: the flag was cleared.
+    activation_ending(&mut k, 2, 1, Some(true));
+}
+
+#[test]
+#[should_panic(expected = "an activation is in progress")]
+fn two_activations_open_at_once_assert() {
+    let mut k = Kernel::new(config(9, TiePolicy::ByIdentity));
+    k.add_actor(1);
+    let ev = |seq| Event {
+        key: EventKey {
+            tick: 0,
+            microstep: 0,
+            class: 1,
+            tie: 0,
+            origin: 1,
+            seq,
+        },
+        target: 1,
+        kind: EventKind::Timer { timer: 0 },
+    };
+    let _first = k.begin(1, ev(1));
+    let _second = k.begin(1, ev(2));
+}

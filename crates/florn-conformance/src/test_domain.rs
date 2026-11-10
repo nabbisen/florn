@@ -16,6 +16,7 @@ use florn_abi::core_world::Signature;
 use florn_admission::Admission;
 use florn_control::{Ends, Notification, Scope, Severity, Value};
 use florn_engine_wasmtime::WasmtimeEngine;
+use florn_host::compound::CallIn;
 use florn_host::domain::{Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, refusal};
 use florn_host::{Domains, HostError, Options, Run, Seed};
 use florn_kernel::{Delivery, EventKind, Identity, Instant, Sink, Stream, StreamKey};
@@ -26,6 +27,8 @@ use florn_platform::FixedPlatform;
 use wasm_encoder::{CustomSection, Section};
 
 use crate::host::{self, Host};
+
+pub mod steps;
 
 pub const NAME: &str = "test";
 pub const WIRE: &str = "test/wire";
@@ -217,13 +220,14 @@ impl Domain for TestDomain {
         vec![1]
     }
     fn intervention_kinds(&self) -> Vec<&'static str> {
-        vec![CUT]
+        vec![CUT, steps::STEP]
     }
     fn classes(&self) -> Vec<(u8, &'static str)> {
         vec![
             (CLASS_WIRE_STATE, "wire-state"),
             (CLASS_FRAME, "frame"),
             (CLASS_DROPPED, "wire-dropped"),
+            (steps::CLASS_STEP, "step"),
         ]
     }
     fn units(&self) -> Vec<(&'static str, Decimal)> {
@@ -236,7 +240,7 @@ impl Domain for TestDomain {
         Some(DomainWorld {
             name: WORLD.to_string(),
             imports_ids: vec![PROBE_MODULE.to_string()],
-            exports_ids: vec![EVENTS_ID.to_string()],
+            exports_ids: vec![EVENTS_ID.to_string(), steps::STEPS_ID.to_string()],
             imports: vec![(
                 PROBE_MODULE.to_string(),
                 vec![Signature {
@@ -245,14 +249,18 @@ impl Domain for TestDomain {
                     result: Some(Ty::U32),
                 }],
             )],
-            exports: vec![(
-                EVENTS_ID.to_string(),
-                vec![Signature {
-                    name: "on-wire",
-                    params: vec![("now", Ty::U64), ("port", Ty::U32), ("up", Ty::Bool)],
-                    result: None,
-                }],
-            )],
+            exports: vec![
+                (
+                    EVENTS_ID.to_string(),
+                    vec![Signature {
+                        name: "on-wire",
+                        params: vec![("now", Ty::U64), ("port", Ty::U32), ("up", Ty::Bool)],
+                        result: None,
+                    }],
+                ),
+                (steps::STEPS_ID.to_string(), steps::signatures()),
+            ],
+            compounds: vec![steps::compound()],
         })
     }
 
@@ -459,11 +467,17 @@ impl Domain for TestDomain {
         kind: &str,
         content: &DomainMap,
     ) -> Result<(), Box<Notification>> {
-        if kind != CUT {
+        if kind != CUT && kind != steps::STEP {
             return Err(Box::new(invalid("kind")));
         }
         if !self.wires.contains_key(&target) {
             return Err(Box::new(invalid("target")));
+        }
+        if kind == steps::STEP {
+            return match (content.get("actor"), content.get("script")) {
+                (Some(DomainValue::Integer(a)), Some(DomainValue::Text(_))) if *a >= 0 => Ok(()),
+                _ => Err(Box::new(invalid("content"))),
+            };
         }
         self.check_payload("content", content)
     }
@@ -472,10 +486,39 @@ impl Domain for TestDomain {
         &mut self,
         _now: Instant,
         target: Identity,
-        _kind: &str,
+        kind: &str,
         content: &DomainMap,
     ) -> Vec<Action> {
+        if kind == steps::STEP {
+            let (Some(DomainValue::Integer(actor)), Some(DomainValue::Text(script))) =
+                (content.get("actor"), content.get("script"))
+            else {
+                return Vec::new();
+            };
+            // The script is handled as an event of its own, a microstep on.
+            return vec![Action::Schedule {
+                origin: target,
+                delay: 0,
+                class: steps::CLASS_STEP,
+                target: *actor as Identity,
+                payload: script.as_bytes().to_vec(),
+            }];
+        }
         self.set(target, content)
+    }
+
+    fn event_calling(
+        &mut self,
+        event: &DomainEvent,
+        alive: bool,
+        calls: &mut dyn CallIn,
+    ) -> Vec<Action> {
+        if event.key.class != steps::CLASS_STEP {
+            return self.event(event, alive);
+        }
+        let script = String::from_utf8_lossy(&event.payload).into_owned();
+        let report = steps::play(&script, event.target, event.key.tick, calls);
+        vec![observed("compound", event.target, report)]
     }
 
     fn event(&mut self, event: &DomainEvent, alive: bool) -> Vec<Action> {
@@ -638,7 +681,7 @@ pub fn guest_wat() -> String {
   (global $bump (mut i32) (i32.const 4096))
   (global $period (mut i64) (i64.const 5))
   (global $me (mut i32) (i32.const 0))
-  (func (export "cabi_realloc") (param i32 i32 i32 i32) (result i32)
+  (func $realloc (export "cabi_realloc") (param i32 i32 i32 i32) (result i32)
     (local $p i32)
     (local.set $p (i32.and (i32.add (global.get $bump) (i32.sub (local.get 2) (i32.const 1)))
                            (i32.sub (i32.const 0) (local.get 2))))
@@ -663,9 +706,11 @@ pub fn guest_wat() -> String {
     (i32.store (i32.const 72) (local.get 2))
     (call $report (i32.const 2) (i32.const 72) (i32.const 4))
     (i32.store (i32.const 76) (call $probe (local.get 1)))
-    (call $report (i32.const 3) (i32.const 76) (i32.const 4))))
+    (call $report (i32.const 3) (i32.const 76) (i32.const 4)))
 "#
     .to_string()
+        + steps::GUEST_FUNCTIONS
+        + ")"
 }
 
 pub fn guest_manifest() -> String {

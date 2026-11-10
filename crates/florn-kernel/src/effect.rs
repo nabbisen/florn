@@ -105,6 +105,13 @@ impl Sink {
         Err(r)
     }
 
+    /// Record that the activation violated the contract by a call the sink does not itself judge
+    /// (a domain's rule: a device has no queue presence, RFC 012 rule 19). The next commit of
+    /// this sink is a fault.
+    pub fn violate(&mut self, rule: &'static str, detail: String) {
+        self.refusal = Some(SinkRefusal::Contract { rule, detail });
+    }
+
     /// `send` (RFC 002 rule 23).
     pub fn send(&mut self, port: u32, payload: Vec<u8>) -> Result<(), SinkRefusal> {
         if !self.ports.contains(&port) {

@@ -500,6 +500,7 @@ impl<E: Engine> Run<E> {
                     swapped: None,
                     last_activated: 0,
                     funcs: Vec::new(),
+                    posts: Vec::new(),
                     sink,
                     admitted: a,
                     module_name: name.clone(),
@@ -682,8 +683,29 @@ impl<E: Engine> Run<E> {
                     .ok_or_else(|| EngineError::Export(n.to_string()))?,
             );
         }
+        // The post-return of an export that returns a list or a string (RFC 002 rule 2);
+        // admission required it (RFC 003 rule 5).
+        let mut posts = Vec::with_capacity(funcs.len());
+        for ((n, _, _), result) in slot.world.exports.iter().zip(&slot.world.results) {
+            posts.push(
+                if result
+                    .as_ref()
+                    .is_some_and(florn_abi::Ty::needs_post_return)
+                {
+                    let post = florn_abi::core_world::post_return_name(n);
+                    Some(
+                        self.engine
+                            .func(&mut inst, &post, florn_abi::Shape::POST_RETURN)
+                            .ok_or(EngineError::Export(post))?,
+                    )
+                } else {
+                    None
+                },
+            );
+        }
         slot.instance = Some(inst);
         slot.funcs = funcs;
+        slot.posts = posts;
         Ok(())
     }
 

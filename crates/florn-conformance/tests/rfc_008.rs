@@ -146,7 +146,8 @@ fn classes_are_named_and_ordered() {
             (2, "message"),
             (3, "wire-state"),
             (4, "frame"),
-            (5, "wire-dropped")
+            (5, "wire-dropped"),
+            (6, "step")
         ]
     );
 }
@@ -180,6 +181,7 @@ fn a_world_function_outside_the_shape_table_is_refused_at_admission() {
         exports_ids: vec![],
         imports: vec![],
         exports: vec![],
+        compounds: vec![],
     };
 }
 
