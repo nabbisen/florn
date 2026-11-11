@@ -20,12 +20,14 @@ Milestone M1 is done: PR-31 to PR-34a are merged and release 0.3.1 is published.
 | PR-37 Floats and lists across the ABI | **Done** (`ceb6d49`, 2026-11-10): rows 12 to 16, `Ty::import_signature` and `Ty::export_signature`, the post-return required at admission and called by `florn_engine::call_lifting`; a result that holds a list or a string needs its post-return too | — |
 | PR-38 The kernel's discard and the call-in handle (V) | **In review** (`c45a08c`, 2026-11-11): `Kernel::discard`, `CallIn` with the domain lent out, calls through `call_lifting` with the length bound. A follow-up commit first (below), then its verifier | — |
 
-**Next: the PR-38 follow-up**, one commit on top of `c45a08c`, before the verifier starts:
+**Next: the PR-38 follow-up**, on top of `c45a08c`, before the verifier starts (points 1 to 4 one commit; point 5 its own, with its own review request):
 
 1. **The fault parameter of a domain's rule.** RFC 012 rule 20 (as amended): a rule of RFC 002 keeps its number; a rule of another RFC is the RFC's number times 1,000 plus the rule's. A send, a timer or a cancel in a device is 12019; the diagnostic's `rule` text keeps "RFC 012 rule 19". A test records the Fault record's bytes with 12019.
 2. **The same behaviour in both builds.** An activation the domain leaves open ends the run with `host-fault` in debug and release alike, never a panic in one and a silent discard in the other. The placeholder of a lent domain panics in every method but `name` and `answer`: reaching it is a Host defect, and a later unit (the faulted-actor policy of PR-40) must fail at once rather than read a default.
 3. **`cancel-timer` in a guest without queue presence** gets a test: today removing it from the refused calls passes every test.
 4. **An adapter case of the budget across calls** in `florn_engine::cases`, run by Wasmtime and in the three browsers: the budget set once, three calls (one lowering a list through `cabi_realloc`, one with a post-return), the remaining budget read at the end and equal to a fixed value on every engine.
+
+5. **A digest that differed once in Firefox: explain it.** CI run 42922905216 on `ac26d0b` (a documentation-only commit) reported J1's chain in Firefox as `fe825a15…` instead of the recorded `39036cc5…`; the re-run of the same build matched in all three browsers, as did the runs before and after. A trace that depends on the run is a Tier 1 defect (RFC 001 section 1.1), not a flake, until shown otherwise. Make J1 export the record and print the end reason, record count and stored points whenever the chain differs, so that the next occurrence can be replayed natively to its first differing record; run J1 in Firefox repeatedly (at least 50 runs, and under CPU load) and report the rate. Report what you find before changing Host code: if the cause is in the Host, it is a finding to the architect; if it is in the journey's reading of the state, the fix is in the journey.
 
 Then the owner starts a verifier session with `verifier-brief.md`, naming PR-38. After the verifier and the review, PR-39 (a world across domains) follows.
 
