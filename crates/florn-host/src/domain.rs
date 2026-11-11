@@ -750,11 +750,21 @@ impl World for Composite {
 }
 
 /// What stands in a [`Composite`] for a domain that is lent out (see [`Composite::lend_class`]):
-/// it has the lent domain's name and does nothing. A guest that calls an import of its world
+/// it has the lent domain's name. A guest that calls an import of the lent domain's world
 /// meanwhile is refused (`answer` gives `None`), as a guest of a compound activation that asks
-/// for what the domain cannot give.
+/// for what the domain cannot give. **Every other method panics**: reaching a lent domain is a
+/// defect of the Host, and a later unit that does must fail at once and not read a default.
 struct Lent {
     name: &'static str,
+}
+
+impl Lent {
+    fn reached(&self, what: &str) -> ! {
+        panic!(
+            "the domain `{}` is lent out for a call into a guest and `{what}` was asked of it",
+            self.name
+        )
+    }
 }
 
 impl Domain for Lent {
@@ -762,15 +772,38 @@ impl Domain for Lent {
         self.name
     }
     fn connection_types(&self) -> Vec<&'static str> {
-        Vec::new()
+        self.reached("connection_types")
     }
     fn port_types(&self) -> Vec<&'static str> {
-        Vec::new()
+        self.reached("port_types")
+    }
+    fn builtin_kinds(&self) -> Vec<&'static str> {
+        self.reached("builtin_kinds")
+    }
+    fn builtin_channels(&self, _: &str) -> Vec<u32> {
+        self.reached("builtin_channels")
+    }
+    fn intervention_kinds(&self) -> Vec<&'static str> {
+        self.reached("intervention_kinds")
+    }
+    fn classes(&self) -> Vec<(u8, &'static str)> {
+        self.reached("classes")
+    }
+    fn units(&self) -> Vec<(&'static str, Decimal)> {
+        self.reached("units")
+    }
+    fn world(&self) -> Option<DomainWorld> {
+        self.reached("world")
     }
     fn validate(&self, _: &Manifest) -> Vec<Notification> {
-        Vec::new()
+        self.reached("validate")
     }
-    fn compose(&mut self, _: &Manifest, _: u64) {}
+    fn validate_module(&self, _: &str, _: &ModuleManifest) -> Vec<Notification> {
+        self.reached("validate_module")
+    }
+    fn compose(&mut self, _: &Manifest, _: u64) {
+        self.reached("compose")
+    }
     fn deliver(
         &mut self,
         _: Instant,
@@ -780,10 +813,10 @@ impl Domain for Lent {
         _: &[u8],
         _: &BTreeSet<Identity>,
     ) -> Vec<Delivery> {
-        Vec::new()
+        self.reached("deliver")
     }
     fn change(&mut self, _: Instant, _: Identity, _: &DomainMap) -> Vec<Action> {
-        Vec::new()
+        self.reached("change")
     }
     fn check_intervention(
         &self,
@@ -791,16 +824,39 @@ impl Domain for Lent {
         _: &str,
         _: &DomainMap,
     ) -> Result<(), Box<Notification>> {
-        Ok(())
+        self.reached("check_intervention")
     }
     fn intervene(&mut self, _: Instant, _: Identity, _: &str, _: &DomainMap) -> Vec<Action> {
-        Vec::new()
+        self.reached("intervene")
     }
     fn event(&mut self, _: &DomainEvent, _: bool) -> Vec<Action> {
-        Vec::new()
+        self.reached("event")
+    }
+    fn event_calling(&mut self, _: &DomainEvent, _: bool, _: &mut dyn CallIn) -> Vec<Action> {
+        self.reached("event_calling")
+    }
+    fn undelivered(&mut self, _: &DomainEvent) -> Vec<Action> {
+        self.reached("undelivered")
     }
     fn answer(&mut self, _: Identity, _: &str, _: &[Val]) -> Option<Val> {
         None
     }
-    fn builtin(&mut self, _: Identity, _: &str, _: &BuiltinEvent<'_>, _: &mut Sink) {}
+    fn builtin(&mut self, _: Identity, _: &str, _: &BuiltinEvent<'_>, _: &mut Sink) {
+        self.reached("builtin")
+    }
+    fn decode(&self, _: &str, _: &[u8]) -> Option<Vec<(String, String)>> {
+        self.reached("decode")
+    }
+    fn telemetry(&self) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
+        self.reached("telemetry")
+    }
+    fn export(&self) -> Vec<u8> {
+        self.reached("export")
+    }
+    fn restore(&mut self, _: &[u8]) -> bool {
+        self.reached("restore")
+    }
 }
+
+#[cfg(test)]
+mod tests;

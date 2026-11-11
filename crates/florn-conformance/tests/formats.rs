@@ -53,6 +53,11 @@ fn complete() {
 
 const HANDLED: &str = "01050000000000000001000000020700000000000000010000000300000000000000020000006400000000000000010000000400000001000000000000000000000000030000000101010101010101010101010101010101010101010101010101010101010101020100000000000000000000000a000000000000000302000000000000000100000004030000000000000001000000080000000202020202020202020202020202020202020202020202020202020202020202";
 const FAULT: &str = "020500000000000000010000000207000000000000000100000003000000000000000100000002000000008096980000000000";
+/// RFC 012 rule 20: a Fault of kind `contract` whose parameter is that of a rule of another RFC
+/// than RFC 002, 12019 for RFC 012 rule 19 (a device's send). The encoding is unchanged: the
+/// parameter is the four little-endian bytes `f3 2e 00 00` after the kind (`06`); no shipped
+/// scenario has such a fault, so no recorded digest moves.
+const FAULT_DOMAIN_RULE: &str = "020500000000000000010000000207000000000000000100000003000000000000000100000006f32e0000a00f000000000000";
 const INTERVENTION: &str = "03050000000000000001000000020700000000000000010000000300000000000000090000000303030303030303030303030303030303030303030303030303030303030303";
 
 #[test]
@@ -90,6 +95,13 @@ fn trace_records_encode_as_recorded() {
         parameter: 0,
         metered: 10_000_000,
     };
+    let fault_domain_rule = Record::Fault {
+        key: key(),
+        actor: 1,
+        kind: FaultKind::Contract,
+        parameter: 12019,
+        metered: 4_000,
+    };
     let intervention = Record::Intervention {
         key: key(),
         content_digest: [3u8; 32],
@@ -98,6 +110,11 @@ fn trace_records_encode_as_recorded() {
     for (what, r, recorded) in [
         ("handled", &handled, HANDLED),
         ("fault", &fault, FAULT),
+        (
+            "fault of a domain's rule",
+            &fault_domain_rule,
+            FAULT_DOMAIN_RULE,
+        ),
         ("intervention", &intervention, INTERVENTION),
     ] {
         let bytes = encode(r);

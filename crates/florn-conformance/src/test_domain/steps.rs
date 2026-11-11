@@ -78,7 +78,7 @@ pub fn compound() -> Compound {
 /// `begin` draws a random value, keeps it and the number of loops its post-return will make
 /// (`h * 100`), and reports the draw on channel 3: an effect, to be committed or dropped.
 /// `evaluate` looks at `trial[0] = x`: `x >= 0` returns a list that claims `x` elements and holds
-/// `min(x, 64)`; -1 traps; -2 loops for ever; -3 sends; -4 sets a timer; -5 reports 8 bytes on channel 3. `accept` reports the
+/// `min(x, 64)`; -1 traps; -2 loops for ever; -3 sends; -4 sets a timer; -6 cancels one; -5 reports 8 bytes on channel 3. `accept` reports the
 /// draw on channel 2 and the text "accepted" on channel 0; `reject` reports on channel 2 too. The
 /// post-return of `evaluate` loops `h * 100` times and frees from the argument's buffer on.
 pub const GUEST_FUNCTIONS: &str = r#"
@@ -106,6 +106,8 @@ pub const GUEST_FUNCTIONS: &str = r#"
       (then (call $send (i32.const 0) (i32.const 64) (i32.const 4))))
     (if (f64.eq (local.get $x) (f64.const -4))
       (then (call $set_timer (i32.const 9) (i64.const 5))))
+    (if (f64.eq (local.get $x) (f64.const -6))
+      (then (call $cancel (i32.const 9))))
     (if (f64.eq (local.get $x) (f64.const -5))
       (then (i64.store (i32.const 152) (i64.const 5))
             (call $report (i32.const 3) (i32.const 152) (i32.const 8))))

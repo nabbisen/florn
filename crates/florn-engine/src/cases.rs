@@ -11,8 +11,8 @@ use florn_abi::core_world::post_return_name;
 use florn_abi::{Flat, FlatType, Memory, Ty, Val, canonical_f64, lift_list, lower_flat_params};
 
 use crate::{
-    CallError, Callee, Engine, GlobalValue, ImportFunction, ImportHandler, ImportSpec, InstanceId,
-    Refusal, Shape, call_lifting,
+    CallError, Callee, Engine, GlobalValue, HostGlobal, ImportFunction, ImportHandler, ImportSpec,
+    InstanceId, Refusal, Shape, call_lifting,
 };
 
 /// The guest of the cases, assembled from [`DEVICE_WAT`].
@@ -35,9 +35,17 @@ pub fn import_spec() -> ImportSpec {
             params: vec![FlatType::I32, FlatType::F64],
             results: vec![],
         }],
-        globals: vec![],
+        globals: vec![HostGlobal {
+            module: BUDGET_MODULE.into(),
+            name: BUDGET_NAME.into(),
+            initial: 0,
+        }],
     }
 }
+
+/// The Host-owned budget global as admission names it (RFC 003 rule 8).
+const BUDGET_MODULE: &str = "env";
+const BUDGET_NAME: &str = "gas_counter";
 
 /// One case and its outcome.
 #[derive(Clone, Debug, PartialEq)]
@@ -107,6 +115,10 @@ pub fn run<E: Engine>(make: &mut dyn FnMut() -> E) -> Vec<Case> {
         (
             "a list longer than the memory is refused before it is lifted",
             list_longer_than_memory,
+        ),
+        (
+            "the budget set once is the budget read after three calls: a list lowered, a result freed",
+            budget_across_calls,
         ),
         (
             "a list result over the caller's bound is refused before it is lifted, and its post-return is not called",
@@ -465,4 +477,33 @@ fn list_bound<E: Engine>(e: &mut E) -> Result<(), String> {
         other => return Err(format!("beyond the bound: {other:?}")),
     }
     expect("post-return calls beyond the bound", calls(e, &mut g)?, 1)
+}
+
+/// RFC 003 rule 12: a compound activation has one budget, set at the opening call and read at the
+/// closing. The adapters never touch the counter between calls: three calls (the opening call, and
+/// two of `evaluate`, each lowering a list through `cabi_realloc`, allocating its result in the
+/// guest and freeing it in the post-return) take exactly what the guest charges itself, on every
+/// engine: 10 + 2 x (1 + 100 + 2 + 1000) = 2,216.
+fn budget_across_calls<E: Engine>(e: &mut E) -> Result<(), String> {
+    const START: i64 = 1_000_000;
+    let mut g = guest(e)?;
+    e.global_set(
+        &mut g.inst,
+        Some(BUDGET_MODULE),
+        BUDGET_NAME,
+        GlobalValue::I64(START),
+    )
+    .map_err(|x| x.to_string())?;
+    let begin_tys = [Ty::U64, Ty::F64];
+    let begin = func(e, &mut g, BEGIN_STEP, &begin_tys, None)?;
+    let flats = lower(e, &mut g, &begin_tys, &[Val::U64(0), Val::F64(0.5)])?;
+    e.call(&mut g.inst, &begin, &flats, &mut g.handler)
+        .map_err(|t| t.to_string())?;
+    for _ in 0..2 {
+        evaluate(e, &mut g, floats(4), true)?;
+    }
+    match e.global_get(&mut g.inst, Some(BUDGET_MODULE), BUDGET_NAME) {
+        Some(GlobalValue::I64(left)) => expect("budget left", left, START - 2_216),
+        other => Err(format!("budget global: {other:?}")),
+    }
 }

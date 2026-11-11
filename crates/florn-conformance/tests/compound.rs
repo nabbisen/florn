@@ -250,15 +250,17 @@ fn a_budget_exhausted_in_a_later_call_is_a_budget_fault_of_the_whole() {
 }
 
 #[test]
-fn a_send_or_a_timer_in_a_compound_activation_is_a_contract_violation() {
+fn a_send_a_timer_or_a_cancel_in_a_compound_activation_is_a_contract_violation() {
     // RFC 012 rule 19: a device has no queue presence; the handle commits with a world that
-    // delivers nothing, so neither is ever recorded.
-    for (x, what) in [(-3, "send"), (-4, "set-timer")] {
+    // delivers nothing, so none of the three is ever recorded. The parameter of the Fault is
+    // 12019: a rule of another RFC than RFC 002 is that RFC's number times 1,000 plus the rule's
+    // (RFC 012 rule 20).
+    for (x, what) in [(-3, "send"), (-4, "set-timer"), (-6, "cancel-timer")] {
         let run = play(&[(50, 1, &format!("open:0 eval:{x} commit"))]);
         let f = faults(&run);
         assert_eq!(f.len(), 1, "{what}");
         assert_eq!(f[0].1, FaultKind::Contract, "{what}");
-        assert_eq!(f[0].2, 19, "the parameter names RFC 012 rule 19");
+        assert_eq!(f[0].2, 12019, "{what}: RFC 012 rule 19");
         // Nothing of the activation was recorded, a send included: its only record is the Fault.
         let records = step_records(&run, 1);
         assert!(
@@ -401,19 +403,21 @@ fn an_actor_swapped_out_is_brought_in_for_its_compound_activation() {
 }
 
 #[test]
-#[cfg(debug_assertions)]
-#[should_panic(expected = "left open")]
-fn a_domain_that_leaves_an_activation_open_is_a_defect_that_a_debug_build_stops_on() {
-    let _ = play(&[(50, 1, "open:0 eval:3")]);
-}
-
-#[test]
-#[cfg(not(debug_assertions))]
-fn a_domain_that_leaves_an_activation_open_has_it_discarded() {
-    // The handle never outlives the call: the activation is discarded and the next one starts.
-    let run = play(&[(50, 1, "open:0 eval:3"), (100, 1, "open:0 commit")]);
-    assert!(faults(&run).is_empty());
-    assert_eq!(step_records(&run, 1).len(), 1);
+fn a_domain_that_leaves_an_activation_open_ends_the_run_with_host_fault() {
+    // The handle never outlives the call it was given. A domain that returns with an activation
+    // open has a defect, which ends the run the same way in a debug and a release build: a Host
+    // fault, not reproducible, nothing committed, no Fault record of the guest's.
+    let run = play(&[(50, 1, "open:0 eval:3")]);
+    assert_eq!(host::ended(&run), florn_host::EndReason::HostFault);
+    assert!(!run.reproducible());
+    assert!(faults(&run).is_empty(), "the guest did nothing wrong");
+    assert!(step_records(&run, 1).is_empty(), "nothing was committed");
+    let said = run
+        .log()
+        .entries()
+        .iter()
+        .any(|e| e.notification.code == "host.not-reproducible");
+    assert!(said, "the log says why the run is not reproducible");
 }
 
 #[test]

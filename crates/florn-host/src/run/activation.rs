@@ -131,8 +131,10 @@ impl ImportHandler for Handler<'_> {
 }
 
 /// The parameter of a fault record (RFC 005 rule 20): for `quota`, the quota's index in RFC 003
-/// rule 16's table; for `contract`, the number of the RFC 002 rule violated; otherwise zero.
-fn fault_parameter(r: &SinkRefusal) -> u32 {
+/// rule 16's table; for `contract`, the number of the rule violated: a rule of RFC 002 keeps its
+/// number, a rule of another RFC is that RFC's number times 1,000 plus the rule's (RFC 012 rule
+/// 20: a device's send is 12019); otherwise zero.
+pub(super) fn fault_parameter(r: &SinkRefusal) -> u32 {
     match r {
         SinkRefusal::Quota { quota, .. } => match *quota {
             "effects-per-activation" => 4,
@@ -141,12 +143,20 @@ fn fault_parameter(r: &SinkRefusal) -> u32 {
             "telemetry-per-activation" => 7,
             _ => 0,
         },
-        SinkRefusal::Contract { rule, .. } => rule
-            .rsplit(' ')
-            .next()
-            .and_then(|n| n.parse().ok())
-            .unwrap_or(0),
+        SinkRefusal::Contract { rule, .. } => contract_parameter(rule),
     }
+}
+
+/// `RFC <n> rule <m>` as the fault parameter: `m` for RFC 2, `n * 1000 + m` for any other. Text
+/// of another form gives its last word as a number, or zero (as it always did).
+pub(super) fn contract_parameter(rule: &str) -> u32 {
+    let words: Vec<&str> = rule.split(' ').collect();
+    if let ["RFC", n, "rule", m] = words.as_slice()
+        && let (Ok(n), Ok(m)) = (n.parse::<u32>(), m.parse::<u32>())
+    {
+        return if n == 2 { m } else { n * 1000 + m };
+    }
+    words.last().and_then(|w| w.parse().ok()).unwrap_or(0)
 }
 
 pub(crate) fn fault_code(kind: FaultKind) -> &'static str {
@@ -725,3 +735,6 @@ impl<E: Engine> Run<E> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

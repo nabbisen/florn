@@ -58,15 +58,28 @@ impl<'a, E: Engine> Calls<'a, E> {
         }
     }
 
-    /// The domain has returned: an activation it left open is discarded, never carried over (the
-    /// handle does not outlive the call it was given). A domain that does so has a defect.
+    /// The domain has returned. The handle does not outlive the call it was given: an activation
+    /// the domain left open is a defect of the domain, a Host defect for the run, and ends the
+    /// run with `host-fault` in every build (never a panic in one and a silent discard in the
+    /// other). The kernel's activation is discarded first, so that nothing stays open.
     pub(super) fn finish(mut self) {
         if let Some(open) = self.open.take() {
-            debug_assert!(false, "a compound activation was left open by the domain");
             self.run.kernel.discard(open.act);
             if let Some(slot) = self.run.actors.get_mut(&open.actor) {
                 slot.sink.reset();
             }
+            let text = format!(
+                "a domain left a compound activation of actor {} open",
+                open.actor
+            );
+            self.run.settle(
+                open.actor,
+                Outcome::HostFault {
+                    reason: "engine-stack",
+                    text,
+                },
+                open.instant,
+            );
         }
     }
 
