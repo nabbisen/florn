@@ -9,3 +9,4 @@
 /crates/florn-ui-web/www/florn_shell_bg.wasm
 /crates/florn-ui-web/www/checkpoints
 /ci/browser/*.florn-run
+/ci/browser/j1-records

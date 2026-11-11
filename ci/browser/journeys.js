@@ -20,10 +20,14 @@
 // controls by keyboard with a bound on the presses between landmarks; start offline; and the
 // measured frame budget (rule 40) and the network log of one origin (rule 34).
 //
-// Usage: node journeys.js --browsers chromium,firefox[,webkit] [--port N]
+// Usage: node journeys.js --browsers chromium,firefox[,webkit] [--port N] [--only J1 [--repeat N]]
+//
+// `--only J1 --repeat N` runs the first journey N times and nothing else, to measure what it does
+// under load; a run whose digest was read stale, or differs, leaves its record in
+// `j1-records/` (a CI artifact when the job fails) to be replayed natively.
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFile, mkdtemp, writeFile } from "node:fs/promises";
+import { readFile, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
@@ -36,6 +40,8 @@ const arg = (k, d) => {
   return i >= 0 ? process.argv[i + 1] : d;
 };
 const browsers = arg("--browsers", "chromium").split(",");
+const only = arg("--only", null);
+const repeats = parseInt(arg("--repeat", "1"), 10);
 const engines = { chromium, firefox, webkit };
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -76,6 +82,47 @@ async function until(page, pred, timeout = 60000, what = "condition") {
     }
     await sleep(100);
   }
+}
+// The model sets the run to `ended` as soon as the end is announced (a progress message or the
+// `run.ended` notification) and asks for the run state, whose answer carries the digest; until that
+// answer comes, `chain` is the one of the last answer. So `ended` can be seen with the digest of an
+// earlier point of the same, correct run. A journey that compares the digest waits for the answer:
+// it polls until `chain` is the expected one, up to `timeout`, and says whether its first look was
+// stale. A digest that never becomes the expected one is a failure, with the evidence kept.
+async function endedWithChain(page, expected, timeout = 15000) {
+  const t0 = Date.now();
+  const first = await state(page);
+  let s = first;
+  while (s.chain !== expected && Date.now() - t0 < timeout) {
+    await sleep(50);
+    s = await state(page);
+  }
+  return { s, first, waited_ms: Date.now() - t0, stale: first.chain !== s.chain };
+}
+// Keep what a run that ended with another digest than the recorded one leaves: its state, and its
+// record exported as a person would, in `j1-records/` for a native replay to its first differing
+// record (`florn replay <record> scenarios/ospf-lab.toml --modules scenarios/modules`).
+async function keepEvidence(page, name, rep, what) {
+  const dirOut = join(dirname(fileURLToPath(import.meta.url)), "j1-records");
+  await mkdir(dirOut, { recursive: true });
+  const s = await state(page);
+  const brief = { what, ended: s.ended, state: s.state, records: s.records, handled: s.handled, chain: s.chain, replay: s.replay, codes: (s.codes || []).slice(-8) };
+  let recordFile = null;
+  try {
+    const [download] = await Promise.all([
+      page.waitForEvent("download", { timeout: 20000 }),
+      (async () => {
+        await page.click("#export-record");
+        await page.waitForSelector("#export-preview", { timeout: 10000 });
+        await page.click("#export-confirm");
+      })(),
+    ]);
+    recordFile = join(dirOut, `${name}-${rep}-${what}.florn-run`);
+    await download.saveAs(recordFile);
+  } catch (err) {
+    brief.export_error = String(err).split("\n")[0];
+  }
+  console.log(JSON.stringify({ j1_evidence: brief, record: recordFile }));
 }
 // WebKit tabs through form fields only unless the person presses Option with Tab (the
 // browser's own convention); the journeys press what a person would.
@@ -163,6 +210,8 @@ for (const name of browsers) {
   let recordPath = null;
   let scenarioPath = null;
   let j1chain = null;
+  let staleReads = 0;
+  for (let rep = 0; rep < (only === "J1" ? repeats : 1); rep++) {
   try {
     const { page, errors } = await openApp(context);
     await openLab(page, LAB);
@@ -188,14 +237,28 @@ for (const name of browsers) {
     check(reports.includes("route") && reports.includes("prefix="), `${name}: J1 the inspector shows the router's routes`, { reports: reports.slice(0, 120) });
     const label = await page.getAttribute("#topology", "aria-label");
     check(label.includes("4") && label.includes("5") && (await page.textContent("#topology-description")).length > 20, `${name}: J1 the canvas has its description and the actors list is its twin`, { label });
-    s = await until(page, (x) => x.state === "ended", 180000, "ended");
+    await until(page, (x) => x.state === "ended", 180000, "ended");
+    const settled = await endedWithChain(page, lab.chain);
+    s = settled.s;
     j1chain = s.chain;
-    check(s.chain === lab.chain, `${name}: J1 the lab's run has the recorded digest`, { chain: s.chain, expected: lab.chain });
+    if (settled.stale) {
+      staleReads += 1;
+      console.log(JSON.stringify({ j1_stale_read: { chain_at_first_look: settled.first.chain, records: settled.first.records, handled: settled.first.handled, ended: settled.first.ended, waited_ms: settled.waited_ms } }));
+      await keepEvidence(page, name, rep, "stale");
+    }
+    check(s.chain === lab.chain, `${name}: J1 the lab's run has the recorded digest`, { chain: s.chain, expected: lab.chain, records: s.records, ended: s.ended, stale_first_look: settled.stale, waited_ms: settled.waited_ms });
+    if (s.chain !== lab.chain) await keepEvidence(page, name, rep, "differs");
     check(addressClean(page.url()), `${name}: J1 the address holds nothing but the origin and the path (RFC 009 rule 22)`, { url: page.url() });
     await consoleCheck(page, errors, `${name}: J1 no error of the application in the console`);
     await page.close();
   } catch (err) {
     check(false, `${name}: J1`, { error: String(err).split("\n")[0] });
+  }
+  }
+  if (only === "J1") {
+    console.log(JSON.stringify({ j1_runs: repeats, stale_first_looks: staleReads }));
+    await browser.close();
+    continue;
   }
 
   // J3 (AC-009): a link taken down during the run; stepping; a frame inspected; export; replay.
