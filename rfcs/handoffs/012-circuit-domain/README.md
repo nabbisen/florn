@@ -18,8 +18,16 @@ Milestone M1 is done: PR-31 to PR-34a are merged and release 0.3.1 is published.
 | PR-35 Tests out of the implementation files | **Done** (`049475a`, 2026-11-07): tests in `tests.rs` files, `ci/check-test-layout.sh` in the `docs` job; new tests are written in the file form, which the gate enforces | — |
 | PR-36 Split the Host's run file | **Done** (`8fb341c`, `a6d3c9b`, 2026-11-09): `run.rs` is 590 lines and `run/` holds `start`, `activation`, `actions`, `end`, `checkpoint`. `panels.rs`, `controller.rs` and `message.rs` are split by the first unit that touches each heavily, in its first commit | — |
 | PR-37 Floats and lists across the ABI | **Done** (`ceb6d49`, 2026-11-10): rows 12 to 16, `Ty::import_signature` and `Ty::export_signature`, the post-return required at admission and called by `florn_engine::call_lifting`; a result that holds a list or a string needs its post-return too | — |
+| PR-38 The kernel's discard and the call-in handle (V) | **In review** (`c45a08c`, 2026-11-11): `Kernel::discard`, `CallIn` with the domain lent out, calls through `call_lifting` with the length bound. A follow-up commit first (below), then its verifier | — |
 
-**Next: PR-38, the kernel's discard and the call-in handle (V).** Read its row in `task-breakdown-pr-plan.md` and B-38: the handle calls exports through `florn_engine::call_lifting`, so the post-return runs inside the activation and under its budget, and it takes from the domain a bound on a list result's length, checked before the lift (RFC 012 rule 20). It starts from RFC 001 rules 21 to 24, RFC 002 rules 2, 44 and 45, RFC 003 rule 12 and RFC 012 findings F-2, F-3 and F-16. A verifier session checks it after the push.
+**Next: the PR-38 follow-up**, one commit on top of `c45a08c`, before the verifier starts:
+
+1. **The fault parameter of a domain's rule.** RFC 012 rule 20 (as amended): a rule of RFC 002 keeps its number; a rule of another RFC is the RFC's number times 1,000 plus the rule's. A send, a timer or a cancel in a device is 12019; the diagnostic's `rule` text keeps "RFC 012 rule 19". A test records the Fault record's bytes with 12019.
+2. **The same behaviour in both builds.** An activation the domain leaves open ends the run with `host-fault` in debug and release alike, never a panic in one and a silent discard in the other. The placeholder of a lent domain panics in every method but `name` and `answer`: reaching it is a Host defect, and a later unit (the faulted-actor policy of PR-40) must fail at once rather than read a default.
+3. **`cancel-timer` in a guest without queue presence** gets a test: today removing it from the refused calls passes every test.
+4. **An adapter case of the budget across calls** in `florn_engine::cases`, run by Wasmtime and in the three browsers: the budget set once, three calls (one lowering a list through `cabi_realloc`, one with a post-return), the remaining budget read at the end and equal to a fixed value on every engine.
+
+Then the owner starts a verifier session with `verifier-brief.md`, naming PR-38. After the verifier and the review, PR-39 (a world across domains) follows.
 
 ## What Phase 4 delivers
 
@@ -35,7 +43,7 @@ Planned by evidence, not by date. Each ends with a report from the architect to 
 |---|---|---|---|
 | M0 | The package | (the architect's) | This package, the amended RFCs, external design revision 3 |
 | M1 | Hardening, release 0.3.1 | PR-31 to PR-34 | A dispatched CI run green with a fuzz job that can fail; every recorded digest unchanged; 0.3.1 tagged by the owner's approval and published by the owner |
-| M2 | The core prepared | PR-35 to PR-43 | The kit's test domain exercises every new mechanism natively and in three browsers; all 27 shipped scenarios keep their digests; a dispatched run green. No circuit code yet |
+| M2 | The core prepared | PR-35 to PR-43 | The kit's test domain exercises every new mechanism natively, and what the engines do differently (floats, lists, the post-return, the budget across the calls of one activation) has an adapter case run in three browsers; the handle itself reaches the browsers with the circuit domain (PR-47, PR-49); all 27 shipped scenarios keep their digests; a dispatched run green. No circuit code yet |
 | M3 | The closed loop, headless | PR-44 to PR-48 | `motor-loop` runs natively and, through the kit, in three browsers; the comparison is `matched` or `within-tolerance` on all five engines; `rc-step` is within its analytic bound; the cross-engine table is printed. **This is the roadmap's exit criterion** |
 | M4 | The second kind of actor | PR-49 to PR-51 | `guest-diode` agrees with the built-in diode; `cps-loop` works; `comparator-latch` passes; the hostile scenarios fault the same way on every engine |
 | M5 | The application | PR-52 to PR-54 | J7 and `motor-lab` pass in Chromium, Firefox and WebKit; the owner's hands-on pass at their own pace |

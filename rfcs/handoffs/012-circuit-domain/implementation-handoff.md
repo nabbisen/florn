@@ -34,7 +34,7 @@ Done when: the conformance case with floats and lists passes on Wasmtime and in 
 
 F-2, F-3, F-9, F-7, F-11, F-14, F-15, F-13. The kernel's one-open-activation assertion **stays** (F-8 is deferred); the new outcome `discard` records nothing, restores the stream and leaves the actor alive. The call-in handle is the one new way for a domain to run a guest: it is given while the domain handles an event or the start, it commits with a world that refuses sends (a device sends nothing), and it never outlives the call. The domain's request to end a run reaches the Host as an `Action` for what the domain handles and as a flag read after every commit for what `deliver` finds, because a delivery returns no action. Units are registered with their dimension and converted once. The kit's test domain, not a circuit, proves each of these.
 
-Done when: every new mechanism has a test in the kit's test domain natively and in three browsers; all 27 shipped scenarios keep their recorded digests; PR-38 passes its verifier.
+Done when: every new mechanism has a test in the kit's test domain natively, and what the engines do differently (the budget across the calls of one activation, the post-return, floats and lists) has an adapter case in `florn_engine::cases` run in three browsers (the Host code around it is the same compiled code in both Hosts, and the handle reaches the browsers with the circuit domain, PR-47 and PR-49); all 27 shipped scenarios keep their recorded digests; PR-38 passes its verifier.
 
 ### 3.5 `florn-host`, `florn-control`, the runner: the comparison and what the application reads (PR-42, PR-43)
 
