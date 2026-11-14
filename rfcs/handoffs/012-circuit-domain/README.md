@@ -22,7 +22,7 @@ Milestone M1 is done: PR-31 to PR-34a are merged and release 0.3.1 is published.
 
 **The follow-ups are reviewed** (`887c1fd`, `25cea3b`, `f8c59ef`): the fault parameter of a domain's rule, one behaviour for an open activation in every build, the budget across calls in three browsers, the Host fault's reason from RFC 007's set, and a run view that shows the digest as pending until the run-state answer comes. The one Firefox difference was a correct run's chain read early; Tier 1 holds.
 
-**Next: the verifier of PR-38.** The owner starts a verifier session with `verifier-brief.md`, naming PR-38; it verifies `c45a08c` with its three follow-ups. The team waits for the review of that report.
+**Next: the verifier of PR-38.** The owner starts a verifier session with `verifier-brief.md`, naming PR-38; it verifies `c45a08c` with its three follow-ups. The team waits for the review of that report: the sessions share one working copy, so nothing else runs while the verifier works.
 
 **Then, before PR-39:** the macOS Rust job failed once on a documentation-only commit (CI run 43340105090): `guest_sdk::a_run_fault_met_on_the_way_to_the_tick_of_resume_exits_with_3` could not read `bench_protocol.wasm` under `target/guests`. Every test of `crates/florn/tests/guest_sdk.rs` runs its own `cargo build` of the examples into that one directory. Find the cause before changing the test (two builds at once, the CI cache restoring a build that cargo thinks fresh without its copied outputs, or another), fix it so that the guests are built once per test binary, and show the fix by a test that fails without it. Then PR-39 (a world across domains).
 

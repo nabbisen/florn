@@ -1,6 +1,6 @@
 # Brief for a verifier session — Phase 4
 
-Entry point: [`README.md`](./README.md). The owner pastes this text as the first message of a verifier session. A verifier is a development-team (mid-capability) session in a different role from the one that implemented the unit. Independence is a property of what the session has read, not of what kind of session it is.
+Entry point: [`README.md`](./README.md). The owner pastes this text as the first message of a **new** verifier session, never into the development team's session: a session that has read the implementation cannot write the checks first. The owner names the unit in the same message. A verifier is a development-team (mid-capability) session in a different role from the one that implemented the unit. Independence is a property of what the session has read, not of what kind of session it is.
 
 ---
 
