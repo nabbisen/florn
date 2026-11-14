@@ -412,12 +412,29 @@ fn a_domain_that_leaves_an_activation_open_ends_the_run_with_host_fault() {
     assert!(!run.reproducible());
     assert!(faults(&run).is_empty(), "the guest did nothing wrong");
     assert!(step_records(&run, 1).is_empty(), "nothing was committed");
-    let said = run
+    let said: Vec<_> = run
         .log()
         .entries()
         .iter()
-        .any(|e| e.notification.code == "host.not-reproducible");
-    assert!(said, "the log says why the run is not reproducible");
+        .filter(|e| e.notification.code == "host.not-reproducible")
+        .collect();
+    assert_eq!(
+        said.len(),
+        1,
+        "the log says why the run is not reproducible"
+    );
+    // RFC 007 section 4.5: the reason is a value of the closed set `machine-condition`, and the
+    // one for a defect of a domain is `host-defect`; the notification passes the catalogue's check.
+    let n = &said[0].notification;
+    assert!(
+        n.params
+            .iter()
+            .any(|(name, v)| name == "reason"
+                && *v == florn_control::Value::Enum("host-defect".into())),
+        "{:?}",
+        n.params
+    );
+    assert!(n.check().is_ok());
 }
 
 #[test]

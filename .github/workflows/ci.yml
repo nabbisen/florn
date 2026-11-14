@@ -130,7 +130,7 @@ jobs:
         run: node journeys.js --browsers ${{ matrix.browsers }}
       # A journey whose digest was read before the run-state answer came, or that differs from the
       # recorded one, leaves its run record here, to be replayed natively (`florn replay`).
-      - name: Records of a journey whose digest was read stale or differs, if any
+      - name: Records of a journey whose digest differs, if any
         if: always()
         uses: actions/upload-artifact@v4
         with:

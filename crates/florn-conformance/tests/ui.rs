@@ -9,7 +9,11 @@
 use florn_admission::Admission;
 use florn_conformance::{host, shipped};
 use florn_control::display::Record;
-use florn_control::{Envelope, ExportKind, Message, Pacing, RunState, Unit};
+use florn_control::message::RunStateInfo;
+use florn_control::{
+    Answer, At, Code, Envelope, ExportKind, Message, Pacing, Progress, Query, RunState, Scope,
+    Unit, Value,
+};
 use florn_host::Controller;
 use florn_platform::FixedPlatform;
 use florn_ui_model::timeline::Kind;
@@ -478,6 +482,111 @@ fn a_paced_run_s_digest_is_fetched_when_it_ends() {
     assert_ne!(vm.run.chain, stale);
     assert_eq!(vm.run.chain.as_deref(), Some(runner.chain_hex().as_str()));
     assert_eq!(vm.run.ended.as_deref(), Some("end-reached"));
+}
+
+fn state_answer(state: RunState, records: u64, chain: &str) -> Message {
+    Message::Answer(Answer::RunState(RunStateInfo {
+        state,
+        now: Some(At {
+            tick: records,
+            microstep: 0,
+        }),
+        handled: records,
+        records,
+        chain: Some(chain.into()),
+        seed: Some(1),
+        pacing: Pacing::Fastest,
+        ended: (state == RunState::Ended).then(|| "end-reached".to_string()),
+        reproducible: true,
+        run_id: Some("run".into()),
+    }))
+}
+
+fn ended_progress(records: u64) -> Message {
+    Message::Progress(Progress {
+        state: RunState::Ended,
+        now: At {
+            tick: records,
+            microstep: 0,
+        },
+        handled: records,
+        records,
+    })
+}
+
+/// The run view never shows `ended` next to the digest of an earlier answer (RFC 005 rule 37;
+/// the PR-38 follow-up): when a progress message or the `run.ended` notification announces the
+/// end before the state answer, what only the answer carries is pending, an answer asked for
+/// earlier is the view of its own point (never the end's), and the awaited answer fills it.
+#[test]
+fn an_ended_run_shows_no_digest_from_an_earlier_answer() {
+    let mut vm = ViewModel::new();
+    vm.apply(&state_answer(RunState::Running, 188, "stale"));
+    assert_eq!(vm.run.chain.as_deref(), Some("stale"));
+    assert!(!vm.run.answer_pending);
+
+    // The end is announced by a progress message; the answer has not come.
+    vm.apply(&ended_progress(1_438));
+    assert_eq!(vm.run.state, RunState::Ended);
+    assert_eq!(vm.run.chain, None, "pending, not the previous answer's");
+    assert_eq!(vm.run.ended, None);
+    assert!(vm.run.answer_pending);
+    assert_eq!(vm.run.records, 1_438);
+    // The model asked for the state, once.
+    let asked = vm.take_outbox();
+    assert_eq!(
+        asked
+            .iter()
+            .filter(|m| matches!(m, Message::Query(Query::RunState)))
+            .count(),
+        1
+    );
+
+    // An answer asked for before the end was known arrives first. It describes an earlier point
+    // and says so (state and counts together): the view is that point's, with that point's digest,
+    // never `ended` next to it.
+    vm.apply(&state_answer(RunState::Running, 188, "stale"));
+    assert_ne!(
+        (vm.run.state, vm.run.chain.as_deref()),
+        (RunState::Ended, Some("stale"))
+    );
+    assert!(!vm.run.answer_pending);
+
+    // The awaited answer fills what was pending.
+    vm.apply(&ended_progress(1_438));
+    vm.apply(&state_answer(RunState::Ended, 1_438, "final"));
+    assert_eq!(vm.run.chain.as_deref(), Some("final"));
+    assert_eq!(vm.run.ended.as_deref(), Some("end-reached"));
+    assert!(!vm.run.answer_pending);
+
+    // The same through the notification of the end (its reason is known, the digest is not).
+    let mut vm = ViewModel::new();
+    vm.apply(&state_answer(RunState::Running, 188, "stale"));
+    let ended = Code::RunEnded.notification(Scope::run(), vec![Value::Enum("end-reached".into())]);
+    vm.apply(&Message::Notification(ended));
+    assert_eq!(vm.run.state, RunState::Ended);
+    assert_eq!(vm.run.ended.as_deref(), Some("end-reached"));
+    assert_eq!(vm.run.chain, None);
+    assert!(vm.run.answer_pending);
+    vm.apply(&state_answer(RunState::Ended, 1_438, "final"));
+    assert_eq!(vm.run.chain.as_deref(), Some("final"));
+    assert!(!vm.run.answer_pending);
+
+    // A run that goes on after all (a progress message that is not the end) is not left pending.
+    let mut vm = ViewModel::new();
+    vm.apply(&state_answer(RunState::Running, 188, "stale"));
+    vm.apply(&ended_progress(1_438));
+    assert!(vm.run.answer_pending);
+    vm.apply(&Message::Progress(Progress {
+        state: RunState::Running,
+        now: At {
+            tick: 1_439,
+            microstep: 0,
+        },
+        handled: 1_439,
+        records: 1_439,
+    }));
+    assert!(!vm.run.answer_pending);
 }
 
 /// J4's first half: the scenario saved from the draft is the same scenario (the hash the

@@ -22,6 +22,7 @@ use super::activation::{
     Handler, Outcome, Records, committed_outcome, contract_outcome, engine_failed,
     lowering_outcome, metered_of, read_globals, set_budget, trap_outcome,
 };
+use super::condition::MachineCondition;
 
 /// The world a compound activation commits with: nothing is delivered. Its sends are refused
 /// before they are recorded (the handler is queueless), so this is never asked.
@@ -75,7 +76,7 @@ impl<'a, E: Engine> Calls<'a, E> {
             self.run.settle(
                 open.actor,
                 Outcome::HostFault {
-                    reason: "engine-stack",
+                    reason: MachineCondition::HostDefect,
                     text,
                 },
                 open.instant,

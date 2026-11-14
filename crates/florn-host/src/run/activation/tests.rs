@@ -36,3 +36,23 @@ fn the_fault_parameter_of_a_refusal_follows_the_rule_it_names() {
     assert_eq!(fault_parameter(&quota("effects-per-activation")), 4);
     assert_eq!(fault_parameter(&quota("pending-timers")), 6);
 }
+
+#[test]
+fn an_engine_that_cannot_do_what_it_is_asked_is_an_engine_failure_of_the_host() {
+    // RFC 007 section 4.5: `engine-failure`, not the stack's value, is the reason when the engine
+    // would not set the budget or give the memory. The Fault record is written, the outcome is a
+    // Host fault, and the activation is closed.
+    let mut kernel = Kernel::new(florn_kernel::Config::default());
+    kernel.add_actor(1);
+    kernel.schedule_change(0, 1, vec![1]);
+    let event = kernel.next_event().expect("the change is due");
+    let act = kernel.begin(1, event);
+    let failure = florn_engine::EngineError::Resource("no memory".into());
+    match engine_failed(&mut kernel, act, &failure) {
+        Outcome::HostFault { reason, text } => {
+            assert_eq!(reason, MachineCondition::EngineFailure);
+            assert!(text.contains("no memory"), "{text}");
+        }
+        other => panic!("{other:?}"),
+    }
+}

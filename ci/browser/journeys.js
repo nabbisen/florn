@@ -23,7 +23,7 @@
 // Usage: node journeys.js --browsers chromium,firefox[,webkit] [--port N] [--only J1 [--repeat N]]
 //
 // `--only J1 --repeat N` runs the first journey N times and nothing else, to measure what it does
-// under load; a run whose digest was read stale, or differs, leaves its record in
+// under load; a run whose digest differs from the recorded one leaves its record in
 // `j1-records/` (a CI artifact when the job fails) to be replayed natively.
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -84,20 +84,19 @@ async function until(page, pred, timeout = 60000, what = "condition") {
   }
 }
 // The model sets the run to `ended` as soon as the end is announced (a progress message or the
-// `run.ended` notification) and asks for the run state, whose answer carries the digest; until that
-// answer comes, `chain` is the one of the last answer. So `ended` can be seen with the digest of an
-// earlier point of the same, correct run. A journey that compares the digest waits for the answer:
-// it polls until `chain` is the expected one, up to `timeout`, and says whether its first look was
-// stale. A digest that never becomes the expected one is a failure, with the evidence kept.
+// `run.ended` notification) and asks for the run state, whose answer carries the digest. Until that
+// answer comes the digest is pending: `chain` is null, never the one of an earlier answer. A journey
+// that compares the digest waits only while it is pending (up to `timeout`); a digest that is
+// present and differs fails at once, with the evidence kept.
 async function endedWithChain(page, expected, timeout = 15000) {
   const t0 = Date.now();
   const first = await state(page);
   let s = first;
-  while (s.chain !== expected && Date.now() - t0 < timeout) {
+  while (s.chain === null && Date.now() - t0 < timeout) {
     await sleep(50);
     s = await state(page);
   }
-  return { s, first, waited_ms: Date.now() - t0, stale: first.chain !== s.chain };
+  return { s, first, waited_ms: Date.now() - t0, pending: first.chain === null };
 }
 // Keep what a run that ended with another digest than the recorded one leaves: its state, and its
 // record exported as a person would, in `j1-records/` for a native replay to its first differing
@@ -210,7 +209,7 @@ for (const name of browsers) {
   let recordPath = null;
   let scenarioPath = null;
   let j1chain = null;
-  let staleReads = 0;
+  let pendingLooks = 0;
   for (let rep = 0; rep < (only === "J1" ? repeats : 1); rep++) {
   try {
     const { page, errors } = await openApp(context);
@@ -241,12 +240,8 @@ for (const name of browsers) {
     const settled = await endedWithChain(page, lab.chain);
     s = settled.s;
     j1chain = s.chain;
-    if (settled.stale) {
-      staleReads += 1;
-      console.log(JSON.stringify({ j1_stale_read: { chain_at_first_look: settled.first.chain, records: settled.first.records, handled: settled.first.handled, ended: settled.first.ended, waited_ms: settled.waited_ms } }));
-      await keepEvidence(page, name, rep, "stale");
-    }
-    check(s.chain === lab.chain, `${name}: J1 the lab's run has the recorded digest`, { chain: s.chain, expected: lab.chain, records: s.records, ended: s.ended, stale_first_look: settled.stale, waited_ms: settled.waited_ms });
+    if (settled.pending) pendingLooks += 1;
+    check(s.chain === lab.chain, `${name}: J1 the lab's run has the recorded digest`, { chain: s.chain, expected: lab.chain, records: s.records, ended: s.ended, pending_first_look: settled.pending, waited_ms: settled.waited_ms });
     if (s.chain !== lab.chain) await keepEvidence(page, name, rep, "differs");
     check(addressClean(page.url()), `${name}: J1 the address holds nothing but the origin and the path (RFC 009 rule 22)`, { url: page.url() });
     await consoleCheck(page, errors, `${name}: J1 no error of the application in the console`);
@@ -256,7 +251,7 @@ for (const name of browsers) {
   }
   }
   if (only === "J1") {
-    console.log(JSON.stringify({ j1_runs: repeats, stale_first_looks: staleReads }));
+    console.log(JSON.stringify({ j1_runs: repeats, pending_first_looks: pendingLooks }));
     await browser.close();
     continue;
   }

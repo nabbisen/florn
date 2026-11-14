@@ -12,6 +12,7 @@ mod actions;
 mod activation;
 mod checkpoint;
 mod compound;
+mod condition;
 mod end;
 mod start;
 

@@ -1064,7 +1064,16 @@ pub const ENUMERATIONS: &[(&str, &[&str])] = &[
     ("manifest-section", &["contract-identity", "florn-manifest"]),
     ("trust-state", &["validated", "rejected"]),
     ("capacity-kind", &["instances", "memory"]),
-    ("machine-condition", &["memory-refused", "engine-stack"]),
+    (
+        "machine-condition",
+        &[
+            "memory-refused",
+            "engine-stack",
+            "watchdog",
+            "engine-failure",
+            "host-defect",
+        ],
+    ),
     (
         "limiting-factor",
         &[

@@ -19,6 +19,7 @@ use florn_kernel::{
 use crate::domain::{BuiltinEvent, Composite, WorldSigs};
 use crate::identity::EndReason;
 
+use super::condition::MachineCondition;
 use super::{FaultPolicy, Run, Slot, Telemetry, at};
 
 /// What an activation ended with.
@@ -32,7 +33,10 @@ pub(super) enum Outcome {
         metered: u64,
     },
     /// A Host fault (RFC 001 rule 65): the run ends, not reproducible.
-    HostFault { reason: &'static str, text: String },
+    HostFault {
+        reason: MachineCondition,
+        text: String,
+    },
 }
 
 /// The Host's side of the imports for one activation (RFC 003 rule 17; RFC 002 §5): the core's
@@ -216,7 +220,7 @@ pub(super) fn engine_failed(
 ) -> Outcome {
     kernel.fault(act, FaultKind::Trap, 0, 0);
     Outcome::HostFault {
-        reason: "engine-stack",
+        reason: MachineCondition::EngineFailure,
         text: e.to_string(),
     }
 }
@@ -298,10 +302,8 @@ pub(super) fn trap_outcome(
         TrapKind::EngineStack | TrapKind::Watchdog | TrapKind::Other => {
             kernel.fault(act, FaultKind::Trap, 0, metered);
             Outcome::HostFault {
-                reason: match trap.kind {
-                    TrapKind::EngineStack => "engine-stack",
-                    _ => "watchdog",
-                },
+                reason: MachineCondition::of_trap(trap.kind)
+                    .expect("these three kinds are the Host's faults"),
                 text: trap.message,
             }
         }
@@ -682,7 +684,7 @@ impl<E: Engine> Run<E> {
                     Scope::actor(id),
                     Ends::Run,
                 )
-                .with("reason", Value::Enum(reason.into()))
+                .with("reason", Value::Enum(reason.as_str().into()))
                 .with("text", Value::Text(text))
                 .at(at(instant));
                 self.notify(n);

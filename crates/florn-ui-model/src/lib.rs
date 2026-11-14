@@ -65,6 +65,11 @@ pub struct RunView {
     pub ended: Option<String>,
     pub reproducible: bool,
     pub run_id: Option<String>,
+    /// The run was found ended by a progress message or the `run.ended` notification and the
+    /// state answer that carries its digest, its end and its reproducibility has not come: until
+    /// it does, `chain` and (after a progress message) `ended` are `None` and `reproducible` is
+    /// not known, never the values of an earlier answer.
+    pub answer_pending: bool,
     /// A branch's parent (RFC 009 rule 12): the instant branched at and the parent's run id.
     pub parent: Option<(u64, String)>,
 }
@@ -82,6 +87,7 @@ impl Default for RunView {
             ended: None,
             reproducible: true,
             run_id: None,
+            answer_pending: false,
             parent: None,
         }
     }
@@ -835,6 +841,7 @@ impl ViewModel {
             ended: r.ended.clone(),
             reproducible: r.reproducible,
             run_id: r.run_id.clone(),
+            answer_pending: false,
             parent: if self.run.run_id.is_none() || r.run_id == self.run.run_id {
                 parent
             } else {
@@ -922,9 +929,14 @@ impl ViewModel {
                 self.forget_run();
             }
         }
-        // The run ended under pacing: its digest and end are in the state answer.
+        // The run ended under pacing: its digest and end are in the state answer, and until it
+        // comes they are not known (never the previous answer's).
         if p.state == RunState::Ended && self.run.state != RunState::Ended {
             self.query(Query::RunState);
+            self.run.ended = None;
+            self.await_run_state();
+        } else if p.state != RunState::Ended {
+            self.run.answer_pending = false;
         }
         self.run.state = p.state;
         self.run.now = Some(p.now);
@@ -932,6 +944,13 @@ impl ViewModel {
         self.run.records = p.records;
         self.records_available = p.records;
         self.fetch_trace();
+    }
+
+    /// The run is known to have ended and its state answer is on the way: what only the answer
+    /// carries is pending.
+    fn await_run_state(&mut self) {
+        self.run.chain = None;
+        self.run.answer_pending = true;
     }
 
     fn telemetry(&mut self, t: &TelemetryRecord) {
@@ -1076,6 +1095,7 @@ impl ViewModel {
                 }
                 if self.run.state != RunState::Ended {
                     self.query(Query::RunState);
+                    self.await_run_state();
                 }
                 self.run.state = RunState::Ended;
             }
