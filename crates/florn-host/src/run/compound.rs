@@ -41,6 +41,10 @@ struct Open {
     sigs: std::sync::Arc<WorldSigs>,
     compound: Compound,
     instant: Instant,
+    /// A list result was refused as over the domain's bound (RFC 012 rule 20): it was not lifted
+    /// and its post-return was not called, so its buffer is still the guest's. Only a fault ends
+    /// the activation now; a close that went on would leave the buffer in the instance.
+    refused_result: bool,
 }
 
 /// The call-in handle for the event `event`, which the domain is handling.
@@ -200,6 +204,9 @@ impl<'a, E: Engine> Calls<'a, E> {
                             // Nothing was read; the activation stays open for the domain to
                             // fault or discard.
                             (Err(EngineCall::ResultTooLong { len, bound }), None) => {
+                                if let Some(open) = self.open.as_mut() {
+                                    open.refused_result = true;
+                                }
                                 return Err(CallError::ResultTooLong { len, bound });
                             }
                         }
@@ -219,6 +226,12 @@ impl<'a, E: Engine> Calls<'a, E> {
         let Some(open) = self.open.as_ref() else {
             return Err(CallError::Refused("no compound activation is open"));
         };
+        // RFC 012 rule 20: after a refused result only the fault closes the activation.
+        if open.refused_result {
+            return Err(CallError::Refused(
+                "a result was refused: only a fault closes the activation",
+            ));
+        }
         if allowed(&open.compound).contains(&export) {
             return Ok(());
         }
@@ -268,6 +281,7 @@ impl<E: Engine> CallIn for Calls<'_, E> {
             sigs,
             compound,
             instant,
+            refused_result: false,
         });
         // RFC 003 rule 12: the budget is set once, at the opening call.
         let set = {

@@ -62,8 +62,11 @@ pub enum CallError {
     /// [`CallIn::fault`].
     Faulted { kind: FaultKind, parameter: u32 },
     /// A list result named more elements than the bound the domain gave. Nothing of the list was
-    /// read and its post-return was not called; the activation is **still open**. The domain
-    /// decides: [`CallIn::fault`], or [`CallIn::discard`].
+    /// read and its post-return was not called, so its buffer is still the guest's: the activation
+    /// is **still open**, and **only [`CallIn::fault`] closes it** (RFC 012 rule 20: the contract
+    /// violation of the domain's rule). `call`, `commit` and `discard` are refused with nothing
+    /// changed, because a close that went on would leave the buffer in the instance for good. A
+    /// domain that returns without the fault meets the end of a run with `host-defect`.
     ResultTooLong { len: u32, bound: u32 },
     /// The call was not made and nothing changed: there is nothing open, or something already is,
     /// the actor is not alive or has no compound activation, or the export is not one the

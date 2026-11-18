@@ -310,21 +310,68 @@ fn the_domain_may_fault_the_activation_it_judges_broken() {
 
 #[test]
 fn a_list_longer_than_the_bound_is_refused_before_it_is_lifted() {
-    // RFC 012 rule 20. The bound is 8. A list of 9 that the guest holds is refused as too long;
-    // one of a billion elements that it does not hold is refused the same way, not as a failure
-    // to lift it: the length is read first. The activation stays open, and the domain closes it.
+    // RFC 012 rule 20. The bound is 8 and is inclusive. A list of 9 that the guest holds is
+    // refused as too long; one of a billion elements that it does not hold is refused the same
+    // way, not as a failure to lift it: the length is read first. The activation stays open and
+    // the domain faults it (the only close that is left, see the next test).
     let run = play(&[
-        (50, 1, "open:0 eval:8 eval:9 discard"),
-        (100, 1, "open:0 eval:1000000000 discard"),
+        (50, 1, "open:0 eval:8 eval:9 fault"),
+        (100, 2, "open:0 eval:1000000000 fault"),
     ]);
     assert_eq!(
         reported(&run),
         vec![
-            "open=opened eval=evaluated:8 eval=too-long:9>8 discard=discarded",
-            "open=opened eval=too-long:1000000000>8 discard=discarded"
+            "open=opened eval=evaluated:8 eval=too-long:9>8 fault=faulted:contract:77",
+            "open=opened eval=too-long:1000000000>8 fault=faulted:contract:77"
         ]
     );
-    assert!(faults(&run).is_empty(), "no contract fault from a lift");
+    // Two Faults, both the domain's (77), and no contract fault of a lift (RFC 002 rule 8).
+    let f = faults(&run);
+    assert_eq!(f.len(), 2, "{f:?}");
+    assert!(f.iter().all(|x| (x.1, x.2) == (FaultKind::Contract, 77)));
+}
+
+#[test]
+fn after_a_refused_result_only_a_fault_closes_the_activation() {
+    // RFC 012 rule 20: a result over the bound is neither lifted nor given its post-return, so
+    // its buffer is still the guest's. A commit or a discard would leave it there for good; the
+    // handle refuses them, and a further call, and changes nothing. The fault closes it: one
+    // Fault record, the actor dead.
+    let run = play(&[
+        (50, 1, "open:0 eval:9 discard commit eval:3 open:0 fault"),
+        (100, 1, "open:0"),
+    ]);
+    let said = reported(&run);
+    assert_eq!(said.len(), 2, "{said:?}");
+    assert!(
+        said[0].starts_with("open=opened eval=too-long:9>8 discard=refused:"),
+        "{}",
+        said[0]
+    );
+    assert!(said[0].contains(" commit=refused:"), "{}", said[0]);
+    assert!(said[0].contains(" eval=refused:"), "{}", said[0]);
+    assert!(said[0].contains(" open=refused:"), "{}", said[0]);
+    assert!(
+        said[0].ends_with("fault=faulted:contract:77"),
+        "{}",
+        said[0]
+    );
+    // Nothing was committed or discarded on the way: the one record is the Fault.
+    let records = step_records(&run, 1);
+    assert_eq!(records.len(), 1, "{records:?}");
+    assert!(matches!(records[0], Record::Fault { .. }));
+    // The actor is dead: a later opening is refused as the actor's death.
+    assert!(said[1].contains("open=refused:"), "{}", said[1]);
+}
+
+#[test]
+fn a_domain_that_leaves_a_refused_result_open_ends_the_run_with_host_fault() {
+    // The refusal does not close anything: a domain that returns without the fault has the same
+    // defect as one that never closed (the Host fault `host-defect`), and nothing was committed.
+    let run = play(&[(50, 1, "open:0 eval:9")]);
+    assert_eq!(host::ended(&run), florn_host::EndReason::HostFault);
+    assert!(faults(&run).is_empty());
+    assert!(step_records(&run, 1).is_empty());
 }
 
 #[test]
@@ -343,11 +390,8 @@ fn the_post_return_runs_inside_the_activation_and_its_work_is_charged_to_it() {
     assert_eq!(w20 - w10, w10 - w0, "work in proportion to the loops");
     // A call whose result is not taken (refused as too long) does not run the post-return.
     let refused = |h: u32| {
-        let run = play(&[(50, 1, &format!("open:{h} eval:9 commit"))]);
-        match &step_records(&run, 1)[0] {
-            Record::Handled { metered, .. } => *metered,
-            other => panic!("{other:?}"),
-        }
+        let run = play(&[(50, 1, &format!("open:{h} eval:9 fault"))]);
+        faults(&run)[0].3
     };
     assert_eq!(refused(0), refused(20), "no post-return, no loops");
 }
