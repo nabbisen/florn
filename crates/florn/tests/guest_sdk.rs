@@ -4,6 +4,8 @@
 //! kind while the neighbour continues; the WASI importer is refused at admission.
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -12,8 +14,21 @@ fn workspace() -> PathBuf {
         .unwrap()
 }
 
-/// Build the SDK's examples once, into a target directory of their own, and return it.
+/// How many times this test binary has run the build of the examples.
+static BUILDS: AtomicUsize = AtomicUsize::new(0);
+
+/// Build the SDK's examples once per test binary, into a target directory of their own, and
+/// return it. The tests of a binary run on threads of one process, and two `cargo build`s into one
+/// target directory at once read each other's half-written outputs (a library "compiled by an
+/// incompatible version of rustc", a missing example): the first caller builds, the others wait
+/// for it and take the same directory.
 fn guests() -> PathBuf {
+    static GUESTS: OnceLock<PathBuf> = OnceLock::new();
+    GUESTS.get_or_init(build_guests).clone()
+}
+
+fn build_guests() -> PathBuf {
+    BUILDS.fetch_add(1, Ordering::SeqCst);
     let ws = workspace();
     let target = ws.join("target").join("guests");
     let status = Command::new(env!("CARGO"))
@@ -361,4 +376,31 @@ fn a_run_fault_met_on_the_way_to_the_tick_of_resume_exits_with_3() {
     let (code, stdout, stderr) = resume(None, "whole-resume.florn-run");
     assert_eq!(value(&stdout, "ended"), Some("host-fault"), "{stdout}");
     assert_eq!(code, Some(3), "{stderr}");
+}
+
+/// The tests of this binary share one build of the examples. Several threads asking for the
+/// guests at once cause one build, and every one of them gets a directory that holds the modules
+/// (a build per call, as before, made two cargos write one directory at once, and on a cold or
+/// partly restored cache one read the other's half-written outputs).
+#[test]
+fn the_guests_are_built_once_per_test_binary() {
+    let handles: Vec<_> = (0..4).map(|_| std::thread::spawn(guests)).collect();
+    let dirs: Vec<PathBuf> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+    assert!(
+        dirs.windows(2).all(|w| w[0] == w[1]),
+        "one directory: {dirs:?}"
+    );
+    for module in ["echo", "pinger", "bench_protocol", "hostile_wasi"] {
+        assert!(
+            dirs[0].join(format!("{module}.wasm")).is_file(),
+            "{module}.wasm is in {:?}",
+            dirs[0]
+        );
+    }
+    // Whatever else the binary's tests asked for, the examples were built at most once.
+    assert_eq!(
+        BUILDS.load(Ordering::SeqCst),
+        1,
+        "one build in this process"
+    );
 }
