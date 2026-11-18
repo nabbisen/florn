@@ -79,6 +79,10 @@ pub const TABLE: &[(&str, &str)] = &[
         "The field {field} is {value}, which is out of range.",
     ),
     (
+        "quantity.dimension",
+        "The field {field} is {value}, which is not a quantity of {expected}.",
+    ),
+    (
         "limit.above-maximum",
         "The limit {limit} is {value}; this Host allows at most {maximum}.",
     ),

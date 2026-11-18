@@ -6,24 +6,64 @@ use florn_model::{Decimal, DomainMap, DomainValue, Quantity, QuantityRefusal, Ti
 use crate::error::{Error, Errors, Kind};
 use crate::manifest::{ModuleManifest, Param, ParamType, value_fits};
 
-/// The units a domain registers (RFC 004 rule 27): for a `real` parameter, the factor from the
-/// written unit to the SI unit of its dimension. The core world registers none.
+/// A unit a domain registers (RFC 004 rule 27; RFC 012 rule 5 and finding F-13): its symbol, the
+/// factor from it to the SI unit of its dimension, and the dimension's name (a value of the
+/// enumeration `dimension`, RFC 007 section 4.5). A prefixed symbol (`kohm`) is a unit of its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnitDef {
+    pub symbol: &'static str,
+    pub factor: Decimal,
+    pub dimension: &'static str,
+}
+
+/// The units the domains register. The core world registers none.
 pub trait Units {
-    /// `kohm` → `1000`; `ohm` → `1`; an unknown unit → `None`.
-    fn to_si(&self, unit: &str) -> Option<Decimal>;
+    /// `kohm` → `1000` of `resistance`; an unknown unit → `None`.
+    fn unit(&self, symbol: &str) -> Option<UnitDef>;
 }
 
 /// No units: every `real` parameter with a unit is `quantity.unknown-unit`.
 pub struct NoUnits;
 
 impl Units for NoUnits {
-    fn to_si(&self, _: &str) -> Option<Decimal> {
+    fn unit(&self, _: &str) -> Option<UnitDef> {
         None
     }
 }
 
-fn decimal_to_f64(d: &Decimal) -> f64 {
-    d.shortest().parse::<f64>().unwrap_or(f64::NAN)
+/// A number as written, cut to what a message may carry (RFC 004 rule 23: nothing is built from a
+/// number the input chose).
+fn shown(text: &str) -> String {
+    match text.char_indices().nth(64) {
+        Some((i, _)) => format!("{}…", &text[..i]),
+        None => text.to_string(),
+    }
+}
+
+fn model_error(path: &str, kind: florn_model::Kind) -> Error {
+    Error::at(Kind::Model(Box::new(kind)), path)
+}
+
+/// An `f64` parameter written as a number: a value that is not finite, or that is not zero and
+/// becomes zero, is `quantity.out-of-range` and never a parameter (finding F-13); the text is
+/// read as one decimal number and rounded once.
+fn f64_of_number(text: &str, path: &str) -> Result<f64, Error> {
+    let out_of_range = || {
+        model_error(
+            path,
+            florn_model::Kind::QuantityOutOfRange {
+                field: path.to_string(),
+                value: (shown(text), String::new()),
+            },
+        )
+    };
+    let f: f64 = text.parse().map_err(|_| out_of_range())?;
+    let mantissa = text.split(['e', 'E']).next().unwrap_or(text);
+    let written_zero = !mantissa.bytes().any(|b| matches!(b, b'1'..=b'9'));
+    if !f.is_finite() || (f == 0.0 && !written_zero) {
+        return Err(out_of_range());
+    }
+    Ok(f)
 }
 
 /// `value / unit` as a whole number, or `None` if it is not whole or does not fit.
@@ -87,7 +127,7 @@ fn encode_one(
             out.extend_from_slice(&florn_abi::canonical_f64(*i as f64).to_le_bytes())
         }
         (ParamType::F64, DomainValue::Decimal(s)) => {
-            let f = s.parse::<f64>().map_err(|_| wrong())?;
+            let f = f64_of_number(s, path)?;
             out.extend_from_slice(&florn_abi::canonical_f64(f).to_le_bytes());
         }
         (ParamType::Text, DomainValue::Text(s)) => {
@@ -123,14 +163,21 @@ fn encode_one(
                         path,
                     ));
                 }
+                // Not a time unit: a unit a domain registers is of another dimension; any
+                // other is unknown.
                 Err(None) => {
-                    return Err(Error::at(
-                        Kind::Model(Box::new(florn_model::Kind::QuantityUnknownUnit {
+                    let kind = match units.unit(&q.unit) {
+                        Some(_) => florn_model::Kind::QuantityDimension {
+                            field: path.to_string(),
+                            value: q.as_pair(),
+                            expected: "time",
+                        },
+                        None => florn_model::Kind::QuantityUnknownUnit {
                             field: path.to_string(),
                             unit: q.unit.clone(),
-                        })),
-                        path,
-                    ));
+                        },
+                    };
+                    return Err(model_error(path, kind));
                 }
                 Err(Some(smallest)) => {
                     return Err(Error::at(
@@ -176,21 +223,42 @@ fn encode_one(
         }
         (ParamType::Real, DomainValue::Text(s)) => {
             let q = Quantity::parse(s).map_err(|_| wrong())?;
-            let expected = param.unit.as_deref().unwrap_or("");
-            let (Some(written), Some(declared)) = (units.to_si(&q.unit), units.to_si(expected))
-            else {
-                return Err(Error::at(
-                    Kind::Model(Box::new(florn_model::Kind::QuantityUnknownUnit {
-                        field: path.to_string(),
-                        unit: q.unit.clone(),
-                    })),
+            let unknown = |unit: &str| {
+                model_error(
                     path,
-                ));
+                    florn_model::Kind::QuantityUnknownUnit {
+                        field: path.to_string(),
+                        unit: unit.to_string(),
+                    },
+                )
             };
-            // Both units must be of the declared unit's dimension; the registry answers only for
-            // units it knows, and a domain registers one dimension per unit symbol.
-            let _ = declared;
-            let f = decimal_to_f64(&q.number) * decimal_to_f64(&written);
+            let declared_symbol = param.unit.as_deref().unwrap_or("");
+            let written = units.unit(&q.unit).ok_or_else(|| unknown(&q.unit))?;
+            // The declared unit is the module's: one the registry does not know is named as such.
+            let declared = units
+                .unit(declared_symbol)
+                .ok_or_else(|| unknown(declared_symbol))?;
+            if written.dimension != declared.dimension {
+                return Err(model_error(
+                    path,
+                    florn_model::Kind::QuantityDimension {
+                        field: path.to_string(),
+                        value: q.as_pair(),
+                        expected: declared.dimension,
+                    },
+                ));
+            }
+            // The SI value: the number and the unit's factor, exactly, rounded once. A value that
+            // would be infinity, or that is not zero and would be zero, is out of range.
+            let f = q.number.times_as_f64(written.factor).map_err(|_| {
+                model_error(
+                    path,
+                    florn_model::Kind::QuantityOutOfRange {
+                        field: path.to_string(),
+                        value: (shown(&q.number.shortest()), shown(&q.unit)),
+                    },
+                )
+            })?;
             out.extend_from_slice(&florn_abi::canonical_f64(f).to_le_bytes());
         }
         _ => return Err(wrong()),

@@ -20,7 +20,7 @@ use florn_host::compound::CallIn;
 use florn_host::domain::{
     Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, EndRequest, refusal,
 };
-use florn_host::{Domains, FaultPolicy, HostError, Options, Run, Seed};
+use florn_host::{Domains, FaultPolicy, HostError, Options, Run, Seed, UnitDef};
 use florn_kernel::{Delivery, EventKind, Identity, Instant, Sink, Stream, StreamKey};
 use florn_model::canonical::{Decoder, Encoder};
 use florn_model::manifest::{ActorKind, DomainMap, DomainValue};
@@ -254,10 +254,22 @@ impl Domain for TestDomain {
             (steps::CLASS_STEP, "step"),
         ]
     }
-    fn units(&self) -> Vec<(&'static str, Decimal)> {
+    fn units(&self) -> Vec<UnitDef> {
+        // The test domain borrows two dimensions of RFC 007's set for its own units, so that the
+        // dimension a refusal names is one the catalogue has a text for: `hop` and its prefixes
+        // are of `resistance`, `pps` is of `frequency`.
+        let unit = |symbol, factor: &str, dimension| UnitDef {
+            symbol,
+            factor: Decimal::parse(factor).expect("a decimal"),
+            dimension,
+        };
         vec![
-            ("hop", Decimal::parse("1").expect("a decimal")),
-            ("khop", Decimal::parse("1000").expect("a decimal")),
+            unit("hop", "1", "resistance"),
+            unit("khop", "1000", "resistance"),
+            unit("mhop", "0.001", "resistance"),
+            unit("uhop", "0.000001", "resistance"),
+            unit("nhop", "0.000000001", "resistance"),
+            unit("pps", "1", "frequency"),
         ]
     }
     fn worlds(&self) -> Vec<DomainWorld> {

@@ -19,6 +19,7 @@ pub mod world;
 pub use compound::{CallError, CallIn, Compound};
 pub use controller::Controller;
 pub use domain::{Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, Domains};
+pub use florn_admission::config::UnitDef;
 pub use florn_kernel::Advance;
 pub use identity::{EndReason, Environment, ModuleInput, Parent, RunInputs, RunToml};
 pub use log::DiagnosticLog;

@@ -188,6 +188,30 @@ impl Decimal {
         }
         Scaled::Whole(v)
     }
+    /// `self × factor` by exact decimal arithmetic, rounded **once** to the nearest `f64`
+    /// (RFC 001 rule 63; RFC 012 rule 5, finding F-13): the two mantissas are multiplied as
+    /// digits, never as floats, and the result is read as one decimal number. A product that is
+    /// not zero but rounds to zero, or that is beyond the largest `f64`, is a refusal; a
+    /// subnormal result is a result.
+    pub fn times_as_f64(self, factor: Decimal) -> Result<f64, FloatRefusal> {
+        let (a, b) = (self.normalised(), factor.normalised());
+        if a.mantissa == 0 || b.mantissa == 0 {
+            return Ok(0.0);
+        }
+        let digits = multiply_digits(&a.mantissa.to_string(), &b.mantissa.to_string());
+        let exponent = i64::from(a.exponent) + i64::from(b.exponent);
+        let f: f64 = format!("{digits}e{exponent}")
+            .parse()
+            .map_err(|_| FloatRefusal::Overflow)?;
+        if f.is_infinite() {
+            Err(FloatRefusal::Overflow)
+        } else if f == 0.0 {
+            Err(FloatRefusal::Underflow)
+        } else {
+            Ok(f)
+        }
+    }
+
     /// Shortest decimal text that reads back as the same value: plain digits with a point where
     /// needed, never an exponent, no trailing zeros, no leading zeros but one before a point.
     /// The one exception is a value no parser produces, whose exponent is beyond
@@ -220,6 +244,41 @@ impl fmt::Display for Decimal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.shortest())
     }
+}
+
+/// Why a decimal cannot become a finite, nonzero `f64` (see [`Decimal::times_as_f64`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FloatRefusal {
+    /// Beyond the largest `f64`: it would be infinity.
+    Overflow,
+    /// Not zero, but nearer to zero than to the smallest `f64`: it would be zero.
+    Underflow,
+}
+
+/// The product of two decimal digit strings (no sign, no leading zero), as digits.
+fn multiply_digits(a: &str, b: &str) -> String {
+    let (a, b): (Vec<u32>, Vec<u32>) = (
+        a.bytes().rev().map(|d| u32::from(d - b'0')).collect(),
+        b.bytes().rev().map(|d| u32::from(d - b'0')).collect(),
+    );
+    let mut cells = vec![0u32; a.len() + b.len()];
+    for (i, x) in a.iter().enumerate() {
+        let mut carry = 0;
+        for (j, y) in b.iter().enumerate() {
+            let t = cells[i + j] + x * y + carry;
+            cells[i + j] = t % 10;
+            carry = t / 10;
+        }
+        cells[i + b.len()] += carry;
+    }
+    while cells.len() > 1 && cells.last() == Some(&0) {
+        cells.pop();
+    }
+    cells
+        .iter()
+        .rev()
+        .map(|d| char::from(b'0' + *d as u8))
+        .collect()
 }
 
 /// A quantity as parsed: the number and the unit text.

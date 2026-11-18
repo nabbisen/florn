@@ -118,20 +118,59 @@ fn name_types_and_validation_in_one_pass() {
     );
 }
 
+/// A prober whose `weight` is `value`, started under the kit's test domain: the codes of the
+/// refusals, and the refusals themselves for their parameters.
+fn weight(value: &str) -> Result<host::Host, HostError> {
+    let body = format!(
+        "{}[actors.config]\nweight = \"{value}\"\n{}{}",
+        td::prober(1, 1),
+        td::prober(2, 1),
+        td::wire(100, &[(1, 0), (2, 0)], "")
+    );
+    td::try_start(&td::text("units", 50, 1, &body), host::options())
+}
+
 #[test]
 fn units_registered_by_the_domain_reach_the_config() {
-    let with = |value: &str| {
-        let body = format!(
-            "{}[actors.config]\nweight = \"{value}\"\n{}{}",
-            td::prober(1, 1),
-            td::prober(2, 1),
-            td::wire(100, &[(1, 0), (2, 0)], "")
-        );
-        td::try_start(&td::text("units", 50, 1, &body), host::options())
-    };
-    assert!(with("2khop").is_ok(), "a registered unit");
-    let e = with("2ohm").err().expect("an unknown unit is refused");
+    assert!(weight("2khop").is_ok(), "a registered unit");
+    assert!(weight("0.1nhop").is_ok(), "a registered prefix");
+    let e = weight("2ohm").err().expect("an unknown unit is refused");
     assert_eq!(domain_codes(e), vec!["quantity.unknown-unit"]);
+}
+
+/// RFC 012 rule 5 and finding F-13: a unit has a dimension, the parameter declares one, and a
+/// quantity of another is `quantity.dimension` naming the field, the value and the dimension
+/// expected, a notification the catalogue accepts. A value that would be infinity or zero is out of
+/// range.
+#[test]
+fn a_unit_of_another_dimension_is_refused_naming_the_field() {
+    let Err(HostError::Refused(errors)) = weight("2pps") else {
+        panic!("2pps is a frequency in a field of resistance");
+    };
+    assert_eq!(errors.codes(), ["quantity.dimension"]);
+    let error = &errors.0[0];
+    assert_eq!(error.field.as_deref(), Some("config.weight"));
+    let params = error.params();
+    assert_eq!(params[0].0, "field");
+    assert_eq!(params[1].0, "value");
+    assert_eq!(params[2].0, "expected");
+    // The notification the front end shows passes the catalogue's check: the enumeration value is
+    // one of the set and the parameters are the declared ones.
+    let n = florn_control::Notification::from_error(
+        error.code(),
+        params,
+        error.field.clone(),
+        None,
+        florn_control::Ends::Command,
+    );
+    n.check().expect("quantity.dimension is in the catalogue");
+    // A value that is not a number the f64 holds.
+    for value in ["1e400khop", "1e-400hop"] {
+        let Err(e) = weight(value) else {
+            panic!("{value} was accepted");
+        };
+        assert_eq!(domain_codes(e), vec!["quantity.out-of-range"], "{value}");
+    }
 }
 
 #[test]

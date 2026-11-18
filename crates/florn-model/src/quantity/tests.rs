@@ -85,3 +85,71 @@ fn quantities_and_ticks() {
         ("0.01".to_string(), "USD".to_string())
     );
 }
+
+fn dec(text: &str) -> Decimal {
+    Decimal::parse(text).expect("a decimal")
+}
+
+#[test]
+fn a_number_and_a_factor_are_rounded_once_not_three_times() {
+    // RFC 012 finding F-13: the number and the factor were each rounded to an f64, and then their
+    // product. `0.1 × 1e-9` came out as 1.0000000000000002e-10 and `0.3 × 1e-11` as
+    // 2.9999999999999997e-12; the exact product rounded once is the f64 nearest to it, which is the
+    // one the plain text of the result reads as.
+    for (number, factor, expected) in [
+        ("0.1", "1e-9", 1e-10f64),
+        ("0.3", "1e-11", 3e-12),
+        ("3.3", "1e-6", 3.3e-6),
+        ("0.47", "1e-6", 4.7e-7),
+        ("4.7", "1000", 4700.0),
+        ("1.5", "1", 1.5),
+    ] {
+        let once = dec(number).times_as_f64(dec(factor)).unwrap();
+        assert_eq!(once.to_bits(), expected.to_bits(), "{number} × {factor}");
+    }
+    // The old way differs on these, which is why the test is worth its place.
+    let old = 0.1f64 * 1e-9f64;
+    assert_ne!(old.to_bits(), 1e-10f64.to_bits());
+}
+
+#[test]
+fn a_product_wider_than_a_mantissa_is_exact() {
+    // Two 39-digit mantissas multiply to 78 digits; no step is a float.
+    let a = dec("123456789012345678901234567890123456789");
+    let b = dec("0.187654321098765432109876543210987654321");
+    // The product, worked out apart (Python's `decimal` at 200 digits, then `float`).
+    let got = a.times_as_f64(b).unwrap();
+    assert_eq!(got.to_bits(), 2.3167199927145253e37f64.to_bits());
+    assert_eq!(
+        dec("1").times_as_f64(dec("0")).unwrap().to_bits(),
+        0.0f64.to_bits(),
+        "zero is zero"
+    );
+}
+
+#[test]
+fn infinity_and_a_nonzero_value_that_becomes_zero_are_refused() {
+    // Today `1e400ohm` encodes infinity and `1e-400ohm` encodes 0 (finding F-13).
+    assert_eq!(
+        dec("1e400").times_as_f64(dec("1")),
+        Err(FloatRefusal::Overflow)
+    );
+    assert_eq!(
+        dec("1e200").times_as_f64(dec("1e200")),
+        Err(FloatRefusal::Overflow)
+    );
+    assert_eq!(
+        dec("1e-400").times_as_f64(dec("1")),
+        Err(FloatRefusal::Underflow)
+    );
+    assert_eq!(
+        dec("1e-200").times_as_f64(dec("1e-200")),
+        Err(FloatRefusal::Underflow)
+    );
+    // The edges of the range are values: the largest f64 and a subnormal.
+    assert_eq!(
+        dec("1.7976931348623157e308").times_as_f64(dec("1")),
+        Ok(f64::MAX)
+    );
+    assert!(dec("1e-310").times_as_f64(dec("1")).unwrap() > 0.0);
+}

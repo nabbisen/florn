@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use florn_admission::config::{NoUnits, Units, encode_config};
+use florn_admission::config::{NoUnits, UnitDef, Units, encode_config};
 use florn_admission::estimate::{Capacity, ClassLimits, ModuleFacts, estimate};
 use florn_admission::manifest::parse_manifest;
 use florn_admission::validate::ModuleMaxima;
@@ -733,12 +733,17 @@ fn the_estimate_checks_needs_ports_and_capacity_before_anything_exists() {
 
 struct Ohms;
 impl Units for Ohms {
-    fn to_si(&self, unit: &str) -> Option<Decimal> {
-        match unit {
-            "ohm" => Decimal::parse("1"),
-            "kohm" => Decimal::parse("1000"),
-            _ => None,
-        }
+    fn unit(&self, symbol: &str) -> Option<UnitDef> {
+        let (symbol, factor) = match symbol {
+            "ohm" => ("ohm", "1"),
+            "kohm" => ("kohm", "1000"),
+            _ => return None,
+        };
+        Some(UnitDef {
+            symbol,
+            factor: Decimal::parse(factor)?,
+            dimension: "resistance",
+        })
     }
 }
 

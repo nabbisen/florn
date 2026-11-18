@@ -17,6 +17,7 @@ use florn_abi::Ty;
 use florn_abi::core_world::Signature;
 use florn_admission::manifest::{ModuleManifest, ParamType};
 use florn_control::{Ends, Notification, Scope, Severity, Value};
+use florn_host::UnitDef;
 use florn_host::domain::{Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, refusal};
 use florn_kernel::{Delivery, EventKind, Identity, Instant, Sink, Stream, StreamKey};
 use florn_model::canonical::{Decoder, Encoder};
@@ -134,14 +135,22 @@ fn loss_of(v: &DomainValue) -> Option<Decimal> {
     }
 }
 
-/// The units the domain registers (rules 1 and 9): bits per second and its decimal multiples.
-pub fn bandwidth_units() -> Vec<(&'static str, Decimal)> {
-    vec![
-        ("bit/s", Decimal::parse("1").expect("a decimal")),
-        ("kbit/s", Decimal::parse("1000").expect("a decimal")),
-        ("Mbit/s", Decimal::parse("1000000").expect("a decimal")),
-        ("Gbit/s", Decimal::parse("1000000000").expect("a decimal")),
+/// The units the domain registers (rules 1 and 9): bits per second and its decimal multiples, of
+/// the dimension `bandwidth` (RFC 007 section 4.5).
+pub fn bandwidth_units() -> Vec<UnitDef> {
+    [
+        ("bit/s", "1"),
+        ("kbit/s", "1000"),
+        ("Mbit/s", "1000000"),
+        ("Gbit/s", "1000000000"),
     ]
+    .into_iter()
+    .map(|(symbol, factor)| UnitDef {
+        symbol,
+        factor: Decimal::parse(factor).expect("a decimal"),
+        dimension: "bandwidth",
+    })
+    .collect()
 }
 
 /// A bandwidth as whole bits per second.
@@ -150,7 +159,10 @@ fn bandwidth_of(v: &DomainValue) -> Option<u64> {
         return None;
     };
     let q = Quantity::parse(s).ok()?;
-    let factor = bandwidth_units().into_iter().find(|(u, _)| *u == q.unit)?.1;
+    let factor = bandwidth_units()
+        .into_iter()
+        .find(|u| u.symbol == q.unit)?
+        .factor;
     let bits = Decimal {
         mantissa: q.number.mantissa,
         exponent: q.number.exponent + factor.normalised().exponent,
@@ -419,7 +431,7 @@ impl Domain for NetworkDomain {
             (CLASS_FRAME_DROPPED, "frame-dropped"),
         ]
     }
-    fn units(&self) -> Vec<(&'static str, Decimal)> {
+    fn units(&self) -> Vec<UnitDef> {
         bandwidth_units()
     }
     fn worlds(&self) -> Vec<DomainWorld> {

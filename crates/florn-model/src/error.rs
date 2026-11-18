@@ -119,6 +119,13 @@ pub enum Kind {
         field: String,
         unit: String,
     },
+    /// `quantity.dimension`: a unit a domain registers, of another dimension than the field's
+    /// (RFC 012 finding F-13; RFC 004 rule 27).
+    QuantityDimension {
+        field: String,
+        value: (String, String),
+        expected: &'static str,
+    },
     /// `quantity.out-of-range`: the value does not fit the field's range (for example an `end` beyond the largest tick).
     QuantityOutOfRange {
         field: String,
@@ -189,6 +196,7 @@ impl Error {
             QuantityNotWholeTicks { .. } => "quantity.not-whole-ticks",
             QuantityNotWholeUnit { .. } => "quantity.not-whole-unit",
             QuantityUnknownUnit { .. } => "quantity.unknown-unit",
+            QuantityDimension { .. } => "quantity.dimension",
             QuantityOutOfRange { .. } => "quantity.out-of-range",
             LimitAboveMaximum { .. } => "limit.above-maximum",
             TimeEndBeforeChange { .. } => "time.end-before-change",
@@ -281,6 +289,15 @@ impl Error {
             QuantityUnknownUnit { field, unit } => {
                 vec![("field", Text(field.clone())), ("unit", Text(unit.clone()))]
             }
+            QuantityDimension {
+                field,
+                value,
+                expected,
+            } => vec![
+                ("field", Text(field.clone())),
+                ("value", q(value)),
+                ("expected", Enum(expected)),
+            ],
             QuantityOutOfRange { field, value } => {
                 vec![("field", Text(field.clone())), ("value", q(value))]
             }

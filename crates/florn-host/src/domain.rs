@@ -17,14 +17,14 @@ use std::sync::Arc;
 
 use florn_abi::core_world::{self, Signature};
 use florn_abi::{Ty, Val};
-use florn_admission::config::Units;
+use florn_admission::config::{UnitDef, Units};
 use florn_admission::manifest::ModuleManifest;
 use florn_admission::world::{FuncSig, ImportInterface, WorldInterfaces, WorldSpec};
 use florn_control::display::Record as DisplayRecord;
 use florn_control::{Ends, Notification};
 use florn_kernel::{Delivery, EventKey, Identity, Instant, Sink, Tick, World};
 use florn_model::manifest::{ActorKind, DomainMap, Port, domain_of};
-use florn_model::{Decimal, Manifest, Param};
+use florn_model::{Manifest, Param};
 
 use crate::compound::{CallIn, Compound};
 use crate::run::FaultPolicy;
@@ -282,9 +282,10 @@ pub trait Domain {
     fn classes(&self) -> Vec<(u8, &'static str)> {
         Vec::new()
     }
-    /// The units it registers, each with its factor to the SI unit of its dimension (RFC 004
-    /// rules 23 to 27).
-    fn units(&self) -> Vec<(&'static str, Decimal)> {
+    /// The units it registers, each with its factor to the SI unit of its dimension and the
+    /// dimension's name (RFC 004 rule 27; RFC 012 rule 5, finding F-13). The config encoder checks
+    /// a quantity against the dimension its parameter declares, and converts it once.
+    fn units(&self) -> Vec<UnitDef> {
         Vec::new()
     }
     /// The worlds it adds (RFC 008 rule 6; RFC 012 finding F-9), as many as its guests are of
@@ -589,12 +590,11 @@ impl Domains {
 pub struct DomainUnits<'a>(pub &'a [Box<dyn Domain>]);
 
 impl Units for DomainUnits<'_> {
-    fn to_si(&self, unit: &str) -> Option<Decimal> {
+    fn unit(&self, symbol: &str) -> Option<UnitDef> {
         self.0
             .iter()
             .flat_map(|d| d.units())
-            .find(|(u, _)| *u == unit)
-            .map(|(_, f)| f)
+            .find(|u| u.symbol == symbol)
     }
 }
 
@@ -1062,7 +1062,7 @@ impl Domain for Lent {
     fn classes(&self) -> Vec<(u8, &'static str)> {
         self.reached("classes")
     }
-    fn units(&self) -> Vec<(&'static str, Decimal)> {
+    fn units(&self) -> Vec<UnitDef> {
         self.reached("units")
     }
     fn worlds(&self) -> Vec<DomainWorld> {

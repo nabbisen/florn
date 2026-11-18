@@ -1,14 +1,18 @@
 //! A quantity in a module's `config` is bounded as one in the scenario is (SEC-005; RFC 004 rule
 //! 23): a number beyond what a quantity holds is `quantity.out-of-range`, naming the parameter,
 //! and not `config.type`, which says the text is no quantity at all.
-use florn_admission::config::{NoUnits, Units, encode_config};
+use florn_admission::config::{NoUnits, UnitDef, Units, encode_config};
 use florn_admission::manifest::parse_manifest;
 use florn_model::{Decimal, DomainMap, DomainValue, TickLength};
 
 struct Ohms;
 impl Units for Ohms {
-    fn to_si(&self, unit: &str) -> Option<Decimal> {
-        (unit == "ohm").then(|| Decimal::parse("1").unwrap())
+    fn unit(&self, symbol: &str) -> Option<UnitDef> {
+        (symbol == "ohm").then(|| UnitDef {
+            symbol: "ohm",
+            factor: Decimal::parse("1").unwrap(),
+            dimension: "resistance",
+        })
     }
 }
 
