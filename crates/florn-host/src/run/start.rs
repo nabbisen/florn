@@ -126,9 +126,12 @@ impl<E: Engine> Run<E> {
             return Err(Box::new((HostError::Domain(refusals), engine, admission)));
         }
         for d in &domain_values {
-            if let Some(w) = d.world() {
+            for w in d.worlds() {
                 admission.add_world(w.spec());
             }
+        }
+        for (w, _) in domains.composed_worlds() {
+            admission.add_world(w.spec());
         }
         // Stages 1, 2, 4 per module and class; every refusal reported together.
         let mut errors = Errors::default();
@@ -163,6 +166,30 @@ impl<E: Engine> Run<E> {
             };
             match admission.admit_under(name, bytes, &limits, options.cost_model) {
                 Ok(a) => {
+                    // RFC 002 rule 48: the scenario must declare every domain the module's world
+                    // uses (RFC 004 rule 5), one for a domain's world, several for a composed one.
+                    for domain in domains.domains_of_world(&a.world.name) {
+                        if scenario.domains.iter().any(|d| d == domain) {
+                            continue;
+                        }
+                        let err = florn_admission::Error::at(
+                            florn_admission::Kind::Model(Box::new(
+                                florn_model::Kind::DomainUndeclared {
+                                    domain: domain.to_string(),
+                                    where_: format!("the world {} of module {name}", a.world.name),
+                                },
+                            )),
+                            format!("modules.{name}"),
+                        );
+                        push(Notification::from_error(
+                            err.code(),
+                            err.params(),
+                            err.field.clone(),
+                            Some(name),
+                            Ends::Command,
+                        ));
+                        errors.push(err);
+                    }
                     if !facts.contains_key(name) {
                         facts.insert(
                             name.clone(),
@@ -355,10 +382,14 @@ impl<E: Engine> Run<E> {
         let core_sigs = WorldSigs::core();
         worlds.insert(core_sigs.name.clone(), Arc::new(core_sigs));
         for d in world.domains() {
-            if let Some(w) = d.world() {
+            for w in d.worlds() {
                 let sigs = WorldSigs::of(&w);
                 worlds.insert(sigs.name.clone(), Arc::new(sigs));
             }
+        }
+        for (w, _) in domains.composed_worlds() {
+            let sigs = WorldSigs::of(&w);
+            worlds.insert(sigs.name.clone(), Arc::new(sigs));
         }
         let info = engine.info();
         let environment = Environment {

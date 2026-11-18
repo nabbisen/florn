@@ -60,6 +60,61 @@ pub struct DomainWorld {
 }
 
 impl DomainWorld {
+    /// The world of a module that is of several domains at once (RFC 002 rule 48; RFC 012 rule
+    /// 22): everything the `parts` import and export, each interface once. An interface that
+    /// two parts declare must be the same in both, or the composition is refused.
+    pub fn compose(name: &str, parts: &[&DomainWorld]) -> Result<Self, String> {
+        fn add<T: PartialEq + Clone>(
+            into: &mut Vec<(String, T)>,
+            id: &str,
+            what: &T,
+        ) -> Result<(), String> {
+            match into.iter().find(|(i, _)| i == id) {
+                Some((_, there)) if there != what => {
+                    Err(format!("`{id}` differs between the worlds composed"))
+                }
+                Some(_) => Ok(()),
+                None => {
+                    into.push((id.to_string(), what.clone()));
+                    Ok(())
+                }
+            }
+        }
+        fn push_id(ids: &mut Vec<String>, id: &str) {
+            if !ids.iter().any(|i| i == id) {
+                ids.push(id.to_string());
+            }
+        }
+        let mut world = Self {
+            name: name.to_string(),
+            imports_ids: Vec::new(),
+            exports_ids: Vec::new(),
+            imports: Vec::new(),
+            exports: Vec::new(),
+            compounds: Vec::new(),
+        };
+        for part in parts {
+            for id in &part.imports_ids {
+                push_id(&mut world.imports_ids, id);
+            }
+            for id in &part.exports_ids {
+                push_id(&mut world.exports_ids, id);
+            }
+            for (id, functions) in &part.imports {
+                add(&mut world.imports, id, functions)?;
+            }
+            for (id, functions) in &part.exports {
+                add(&mut world.exports, id, functions)?;
+            }
+            for c in &part.compounds {
+                if !world.compounds.contains(c) {
+                    world.compounds.push(c.clone());
+                }
+            }
+        }
+        Ok(world)
+    }
+
     /// The admission specification: the core's imports and exports plus this world's.
     pub fn spec(&self) -> WorldSpec {
         let core = WorldSpec::core();
@@ -173,9 +228,11 @@ pub trait Domain {
     fn units(&self) -> Vec<(&'static str, Decimal)> {
         Vec::new()
     }
-    /// The world it adds (RFC 008 rule 6), if its guests need more than the core.
-    fn world(&self) -> Option<DomainWorld> {
-        None
+    /// The worlds it adds (RFC 008 rule 6; RFC 012 finding F-9), as many as its guests are of
+    /// kinds: the circuit has a controller's and a device's. Empty when its guests need no more
+    /// than the core.
+    fn worlds(&self) -> Vec<DomainWorld> {
+        Vec::new()
     }
     /// Check every connection of its types, every actor of its port types, its top-level
     /// table and every built-in's ports and config; report every error in one pass.
@@ -270,6 +327,16 @@ type Factory = Arc<dyn Fn() -> Box<dyn Domain>>;
 #[derive(Clone, Default)]
 pub struct Domains {
     factories: Vec<(&'static str, Factory)>,
+    /// The worlds that span several domains (RFC 002 rule 48), by name, each with the
+    /// (domain, world) pairs it is made of.
+    composed: Vec<Composed>,
+}
+
+/// A world of several domains: a name and the worlds of the domains it is made of.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Composed {
+    name: String,
+    spans: Vec<(&'static str, String)>,
 }
 
 impl fmt::Debug for Domains {
@@ -295,16 +362,82 @@ impl Domains {
         self
     }
 
+    /// With a world that spans several domains (RFC 002 rule 48; RFC 012 finding F-9): `name`,
+    /// made of the named worlds of the named domains, `(domain, world)` each. Neither domain
+    /// owns it: the Host registers it **when it holds every domain it spans**, and not
+    /// otherwise, so that a module of it is `module.contract-unsupported` on a Host that lacks
+    /// one. A second registration under the same name replaces the first.
+    pub fn with_composed(mut self, name: &str, spans: &[(&'static str, &str)]) -> Self {
+        self.composed.retain(|c| c.name != name);
+        self.composed.push(Composed {
+            name: name.to_string(),
+            spans: spans.iter().map(|(d, w)| (*d, w.to_string())).collect(),
+        });
+        self
+    }
+
     pub fn names(&self) -> Vec<&'static str> {
         self.factories.iter().map(|(n, _)| *n).collect()
     }
 
-    /// The worlds every domain adds, for admission (RFC 008 rule 6).
-    pub fn worlds(&self) -> Vec<WorldSpec> {
+    /// The worlds of every domain this Host holds, each with the name of its domain.
+    fn domain_worlds(&self) -> Vec<(&'static str, DomainWorld)> {
         self.factories
             .iter()
-            .filter_map(|(_, make)| make().world().map(|w| w.spec()))
+            .flat_map(|(name, make)| make().worlds().into_iter().map(move |w| (*name, w)))
             .collect()
+    }
+
+    /// The composed worlds this Host can offer, each with the domains it spans: those whose
+    /// every domain is held and has the named world, and whose parts agree (a composition that
+    /// does not is left out, so a module of it is refused as an unsupported world).
+    pub fn composed_worlds(&self) -> Vec<(DomainWorld, Vec<&'static str>)> {
+        let held = self.domain_worlds();
+        self.composed
+            .iter()
+            .filter_map(|c| {
+                let parts: Option<Vec<&DomainWorld>> = c
+                    .spans
+                    .iter()
+                    .map(|(d, w)| {
+                        held.iter()
+                            .find(|(hd, hw)| hd == d && hw.name == *w)
+                            .map(|(_, hw)| hw)
+                    })
+                    .collect();
+                let world = DomainWorld::compose(&c.name, &parts?).ok()?;
+                let mut domains: Vec<&'static str> = Vec::new();
+                for (d, _) in &c.spans {
+                    if !domains.contains(d) {
+                        domains.push(d);
+                    }
+                }
+                Some((world, domains))
+            })
+            .collect()
+    }
+
+    /// The worlds every domain adds, and the composed ones the Host can offer, for admission
+    /// (RFC 008 rule 6; RFC 002 rule 48).
+    pub fn worlds(&self) -> Vec<WorldSpec> {
+        self.domain_worlds()
+            .iter()
+            .map(|(_, w)| w.spec())
+            .chain(self.composed_worlds().iter().map(|(w, _)| w.spec()))
+            .collect()
+    }
+
+    /// The domains a world is of: the one that owns it, or those a composed world spans. Empty
+    /// for the core's world and for a name no domain of this Host offers.
+    pub fn domains_of_world(&self, world: &str) -> Vec<&'static str> {
+        if let Some((domain, _)) = self.domain_worlds().iter().find(|(_, w)| w.name == world) {
+            return vec![*domain];
+        }
+        self.composed_worlds()
+            .into_iter()
+            .find(|(w, _)| w.name == world)
+            .map(|(_, domains)| domains)
+            .unwrap_or_default()
     }
 
     /// Fresh domain values for a scenario, in the scenario's declaration order. A declared
@@ -526,9 +659,13 @@ impl Composite {
         let mut by_kind = BTreeMap::new();
         let mut by_module = BTreeMap::new();
         for (i, d) in domains.iter().enumerate() {
-            if let Some(w) = d.world() {
+            for w in d.worlds() {
                 for (module, _) in &w.imports {
-                    if by_module.insert(module.clone(), i).is_some() {
+                    // Several worlds of one domain may import one interface; two domains may not.
+                    if by_module
+                        .insert(module.clone(), i)
+                        .is_some_and(|other| other != i)
+                    {
                         return Err("import interface assigned twice");
                     }
                 }
@@ -574,7 +711,7 @@ impl Composite {
         let compounding = domains
             .iter()
             .enumerate()
-            .filter(|(_, d)| d.world().is_some_and(|w| !w.compounds.is_empty()))
+            .filter(|(_, d)| d.worlds().iter().any(|w| !w.compounds.is_empty()))
             .map(|(i, _)| i)
             .collect();
         for d in &mut domains {
@@ -792,8 +929,8 @@ impl Domain for Lent {
     fn units(&self) -> Vec<(&'static str, Decimal)> {
         self.reached("units")
     }
-    fn world(&self) -> Option<DomainWorld> {
-        self.reached("world")
+    fn worlds(&self) -> Vec<DomainWorld> {
+        self.reached("worlds")
     }
     fn validate(&self, _: &Manifest) -> Vec<Notification> {
         self.reached("validate")

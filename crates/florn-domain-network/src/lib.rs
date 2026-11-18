@@ -422,8 +422,8 @@ impl Domain for NetworkDomain {
     fn units(&self) -> Vec<(&'static str, Decimal)> {
         bandwidth_units()
     }
-    fn world(&self) -> Option<DomainWorld> {
-        Some(DomainWorld {
+    fn worlds(&self) -> Vec<DomainWorld> {
+        vec![DomainWorld {
             name: WORLD.to_string(),
             imports_ids: vec![LINK_MODULE.to_string()],
             exports_ids: vec![EVENTS_ID.to_string()],
@@ -449,7 +449,7 @@ impl Domain for NetworkDomain {
                 }],
             )],
             compounds: vec![],
-        })
+        }]
     }
 
     fn validate(&self, scenario: &Manifest) -> Vec<Notification> {

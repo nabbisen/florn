@@ -28,6 +28,7 @@ use wasm_encoder::{CustomSection, Section};
 
 use crate::host::{self, Host};
 
+pub mod second;
 pub mod steps;
 
 pub const NAME: &str = "test";
@@ -236,8 +237,8 @@ impl Domain for TestDomain {
             ("khop", Decimal::parse("1000").expect("a decimal")),
         ]
     }
-    fn world(&self) -> Option<DomainWorld> {
-        Some(DomainWorld {
+    fn worlds(&self) -> Vec<DomainWorld> {
+        vec![DomainWorld {
             name: WORLD.to_string(),
             imports_ids: vec![PROBE_MODULE.to_string()],
             exports_ids: vec![EVENTS_ID.to_string(), steps::STEPS_ID.to_string()],
@@ -261,7 +262,7 @@ impl Domain for TestDomain {
                 (steps::STEPS_ID.to_string(), steps::signatures()),
             ],
             compounds: vec![steps::compound()],
-        })
+        }]
     }
 
     fn validate(&self, scenario: &Manifest) -> Vec<Notification> {
@@ -714,10 +715,15 @@ pub fn guest_wat() -> String {
 }
 
 pub fn guest_manifest() -> String {
+    guest_manifest_of(WORLD)
+}
+
+/// The prober's module manifest naming `world`.
+pub fn guest_manifest_of(world: &str) -> String {
     format!(
         r#"
 florn-module = 1
-world = "{WORLD}"
+world = "{world}"
 kind = "prober"
 
 [[ports]]
@@ -760,6 +766,12 @@ memory = "128KiB"
 
 /// The contract-identity section of the test world, from both contracts of record.
 pub fn contract_section() -> Vec<u8> {
+    contract_section_of("guest")
+}
+
+/// The contract-identity section of a world of `wit/test-world.wit` (`guest`, `pinger` or
+/// `both`), over the core contract of record.
+pub fn contract_section_of(world_name: &str) -> Vec<u8> {
     let core = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../contracts/florn-core/wit/core.wit"
@@ -775,8 +787,8 @@ pub fn contract_section() -> Vec<u8> {
         .push_str("test-world.wit", &test)
         .expect("the test world parses");
     let world = resolve
-        .select_world(&[pkg], Some("guest"))
-        .expect("world guest");
+        .select_world(&[pkg], Some(world_name))
+        .unwrap_or_else(|e| panic!("world {world_name}: {e}"));
     wit_component::metadata::encode(
         &resolve,
         world,
@@ -795,15 +807,21 @@ pub fn guest_bytes() -> Vec<u8> {
 /// A module written in text, with the prober's custom sections: the prober itself, or a variant of
 /// it that exports or lacks something, for admission's refusals.
 pub fn guest_bytes_of(wat_text: &str) -> Vec<u8> {
+    guest_bytes_in(wat_text, "guest", WORLD)
+}
+
+/// A module written in text, of the world `world_name` of `wit/test-world.wit`, named
+/// `world_id` in its manifest (`second::COMPOSED` for `both`).
+pub fn guest_bytes_in(wat_text: &str, world_name: &str, world_id: &str) -> Vec<u8> {
     let mut bytes = wat::parse_str(wat_text).expect("the module parses");
     CustomSection {
-        name: "component-type:test-kit-guest".into(),
-        data: contract_section().into(),
+        name: format!("component-type:test-kit-{world_name}").into(),
+        data: contract_section_of(world_name).into(),
     }
     .append_to(&mut bytes);
     CustomSection {
         name: "florn.manifest".into(),
-        data: guest_manifest().into_bytes().into(),
+        data: guest_manifest_of(world_id).into_bytes().into(),
     }
     .append_to(&mut bytes);
     bytes

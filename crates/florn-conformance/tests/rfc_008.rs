@@ -156,13 +156,13 @@ fn classes_are_named_and_ordered() {
 fn a_world_function_outside_the_shape_table_is_refused_at_admission() {
     // The test world as the domain declares it is admitted.
     let mut adm = Admission::default();
-    adm.add_world(TestDomain::new().world().unwrap().spec());
+    adm.add_world(TestDomain::new().worlds().remove(0).spec());
     assert!(
         adm.admit("prober", &td::guest_bytes(), &host::kit_limits())
             .is_ok()
     );
     // The same world with one more import, of a shape no Host calls: refused (RFC 008 rule 6).
-    let mut world: WorldSpec = TestDomain::new().world().unwrap().spec();
+    let mut world: WorldSpec = TestDomain::new().worlds().remove(0).spec();
     world.imports[1].functions.push(FuncSig {
         name: "bad".into(),
         params: vec![FlatType::F64, FlatType::F64],

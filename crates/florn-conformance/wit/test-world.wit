@@ -36,3 +36,22 @@ world guest {
     export events;
     export steps;
 }
+
+/// A second domain's events: one function nothing calls, so that a module can be of two domains.
+interface pings {
+    use florn:core/types@0.1.0.{tick, port-id};
+
+    on-ping: func(now: tick, port: port-id, up: bool);
+}
+
+/// The second domain's own world: the core and `pings`.
+world pinger {
+    include florn:core/guest@0.1.0;
+    export pings;
+}
+
+/// A module of both domains (RFC 002 rule 48): the prober's world and `pings`.
+world both {
+    include guest;
+    export pings;
+}

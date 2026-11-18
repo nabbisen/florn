@@ -15,7 +15,7 @@ const EVENTS: &str = "test:kit/events@0.1.0";
 
 /// The test domain's world with more exports, which the module must then have.
 fn world(extra: Vec<FuncSig>) -> WorldSpec {
-    let mut world: WorldSpec = TestDomain::new().world().unwrap().spec();
+    let mut world: WorldSpec = TestDomain::new().worlds().remove(0).spec();
     world.exports.extend(extra);
     world
 }
