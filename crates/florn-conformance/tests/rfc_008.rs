@@ -182,6 +182,7 @@ fn a_world_function_outside_the_shape_table_is_refused_at_admission() {
         imports: vec![],
         exports: vec![],
         compounds: vec![],
+        records: vec![],
     };
 }
 

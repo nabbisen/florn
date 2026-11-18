@@ -57,6 +57,27 @@ pub struct DomainWorld {
     /// The sequences of calls that form one activation (RFC 002 rule 44), by canonical export
     /// names; the circuit device's is `begin-step`, `evaluate`, `accept-step` or `reject-step`.
     pub compounds: Vec<Compound>,
+    /// The imports that record an effect and answer nothing (RFC 002 rule 47; RFC 012 finding
+    /// F-11).
+    pub records: Vec<RecordedImport>,
+}
+
+/// An import of a domain's world that **records** a `send` and does not ask the domain: the
+/// guest names a port and a value, the Host records the value's canonical bytes (the eight
+/// bytes of a little-endian `f64`) as a `send` effect on that port, in the activation's sink, to
+/// be committed or discarded with it. RFC 012 rule 11's `set-output` is the first: no new kind
+/// of effect and no change to the trace's encoding.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordedImport {
+    /// The function's name in the world's import interface.
+    pub function: &'static str,
+    /// The index, among its arguments, of the `u32` that names the port.
+    pub port: usize,
+    /// The index of the `f64` whose eight bytes are the payload.
+    pub value: usize,
+    /// The rule a non-finite value violates (`RFC 012 rule 18` for `set-output`), as the text the
+    /// Fault's parameter is read from; `None` records it as it is.
+    pub non_finite: Option<&'static str>,
 }
 
 impl DomainWorld {
@@ -92,6 +113,7 @@ impl DomainWorld {
             imports: Vec::new(),
             exports: Vec::new(),
             compounds: Vec::new(),
+            records: Vec::new(),
         };
         for part in parts {
             for id in &part.imports_ids {
@@ -109,6 +131,18 @@ impl DomainWorld {
             for c in &part.compounds {
                 if !world.compounds.contains(c) {
                     world.compounds.push(c.clone());
+                }
+            }
+            for r in &part.records {
+                match world.records.iter().find(|x| x.function == r.function) {
+                    Some(x) if x != r => {
+                        return Err(format!(
+                            "the recording import `{}` differs between the worlds composed",
+                            r.function
+                        ));
+                    }
+                    Some(_) => {}
+                    None => world.records.push(r.clone()),
                 }
             }
         }
@@ -589,6 +623,8 @@ pub struct WorldSigs {
     pub results: Vec<Option<Ty>>,
     /// The compound activations the world declares (RFC 002 rule 44).
     pub compounds: Vec<Compound>,
+    /// The imports that record a `send` (RFC 012 finding F-11).
+    pub records: Vec<RecordedImport>,
 }
 
 impl WorldSigs {
@@ -599,6 +635,7 @@ impl WorldSigs {
             imports: Vec::new(),
             results: Vec::new(),
             compounds: Vec::new(),
+            records: Vec::new(),
         };
         for s in core_world::actor_functions() {
             w.push_export(format!("{}{}", core_world::ACTOR_EXPORT_PREFIX, s.name), &s);
@@ -626,6 +663,7 @@ impl WorldSigs {
         let mut w = Self::core();
         w.name = world.name.clone();
         w.compounds = world.compounds.clone();
+        w.records = world.records.clone();
         for (id, functions) in &world.exports {
             for s in functions {
                 w.push_export(format!("{id}#{}", s.name), s);

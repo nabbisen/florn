@@ -262,6 +262,7 @@ impl Domain for TestDomain {
                 (steps::STEPS_ID.to_string(), steps::signatures()),
             ],
             compounds: vec![steps::compound()],
+            records: vec![],
         }]
     }
 

@@ -84,6 +84,36 @@ impl ImportHandler for Handler<'_> {
             }
         };
         if module != core_world::HOST_MODULE {
+            // An import that records (RFC 002 rule 47; RFC 012 finding F-11): the domain is not
+            // asked. A guest of a world with no queue presence has nothing to send.
+            if let Some(rec) = self.sigs.records.iter().find(|r| r.function == function) {
+                if self.queueless {
+                    self.sink.violate(
+                        "RFC 012 rule 19",
+                        format!("a guest of this world has no queue presence: {function}"),
+                    );
+                    return Err(Refusal);
+                }
+                let (Some(Val::U32(port)), Some(Val::F64(value))) =
+                    (vals.get(rec.port), vals.get(rec.value))
+                else {
+                    return Err(Refusal);
+                };
+                if !value.is_finite()
+                    && let Some(rule) = rec.non_finite
+                {
+                    self.sink.violate(
+                        rule,
+                        format!("{function} was given a value that is not finite"),
+                    );
+                    return Err(Refusal);
+                }
+                return self
+                    .sink
+                    .send(*port, value.to_le_bytes().to_vec())
+                    .map(|()| Vec::new())
+                    .map_err(|_| Refusal);
+            }
             let Some(d) = self.world.of_module(module) else {
                 return Err(Refusal);
             };

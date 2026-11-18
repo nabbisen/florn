@@ -44,14 +44,25 @@ interface pings {
     on-ping: func(now: tick, port: port-id, up: bool);
 }
 
-/// The second domain's own world: the core and `pings`.
+/// An import that records an effect (RFC 002 rule 47): the Host records a `send` of the value's
+/// eight bytes on the port and asks no one.
+interface lines {
+    use florn:core/types@0.1.0.{port-id};
+
+    /// Set the level on `port`; recorded as a send of the value, applied at commit.
+    set-level: func(port: port-id, value: f64);
+}
+
+/// The second domain's own world: the core, `lines` and `pings`.
 world pinger {
     include florn:core/guest@0.1.0;
+    import lines;
     export pings;
 }
 
 /// A module of both domains (RFC 002 rule 48): the prober's world and `pings`.
 world both {
     include guest;
+    import lines;
     export pings;
 }

@@ -77,6 +77,7 @@ fn world(name: &str, import: Option<&str>, export: &str) -> DomainWorld {
             .collect(),
         exports: vec![(export.to_string(), vec![function("on-event")])],
         compounds: vec![],
+        records: vec![],
     }
 }
 
