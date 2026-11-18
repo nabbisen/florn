@@ -20,9 +20,11 @@ Milestone M1 is done: PR-31 to PR-34a are merged and release 0.3.1 is published.
 | PR-37 Floats and lists across the ABI | **Done** (`ceb6d49`, 2026-11-10): rows 12 to 16, `Ty::import_signature` and `Ty::export_signature`, the post-return required at admission and called by `florn_engine::call_lifting`; a result that holds a list or a string needs its post-return too | — |
 | PR-38 The kernel's discard and the call-in handle (V) | **Done** (`c45a08c` with `887c1fd`, `25cea3b`, `f8c59ef`; verified 2026-11-18, accepted 2026-11-18): `Kernel::discard`, `CallIn` with the domain lent out, calls through `call_lifting` with the length bound, fault parameter 12019, the Host fault's reason from RFC 007's set | — |
 
-The job after PR-38 is done (`3ed5c80`, `cacb4e9`, `aff50a2`, `bc2fe2b`, 2026-11-18): after a refused list result only a fault closes the activation; the verifier's checks are in the tests; the example guests are built once per test binary; `zip` is 9.0.5.
+PR-39 is done (`bdebadb`, 2026-11-18): a domain has several worlds, a composed world is offered when the Host holds every domain it spans, a scenario declares every domain a module's world uses, and a contract of record may be several WIT blocks.
 
-**Next: PR-39, several and composed worlds.** Read its row in `task-breakdown-pr-plan.md`, section 3.4 of `implementation-handoff.md` and B-39 first. It starts from RFC 002 rule 48, RFC 008 rule 6 and RFC 012 finding F-9: `Domain::worlds() -> Vec<DomainWorld>`; a composed world registered in `Controller::new` only when the Host holds every domain it spans; a contract of record with several WIT blocks, and its equality test. Done when a module of a composed world is admitted with both domains present and refused with one, and the equality test over a two-block file fails when a block is edited.
+**Next: PR-40, imports that record effects, the start hook, refusal and the end of a run.** Read its row in `task-breakdown-pr-plan.md`, section 3.4 of `implementation-handoff.md` and B-40 first; it starts from RFC 012 findings F-7, F-11, F-14 and F-15 and RFC 001 rule 26. Use `start_calling` for the start hook as `event_calling` was used (the PR-38 ruling).
+
+**Its first commit, from the review of PR-39:** a composition registered with `Domains::with_composed` whose every domain the Host holds, but which cannot be built (a named world missing from its domain, or two parts that differ on one interface), is a Host defect. `Controller::new` stops with a panic naming the composition and the reason, the same in every build, instead of leaving it out silently; a composition with a domain the Host does not hold is still left out (a module of it is `module.contract-unsupported`). A test of each case.
 
 ## What Phase 4 delivers
 
