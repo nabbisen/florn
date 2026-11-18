@@ -17,8 +17,10 @@ use florn_admission::Admission;
 use florn_control::{Ends, Notification, Scope, Severity, Value};
 use florn_engine_wasmtime::WasmtimeEngine;
 use florn_host::compound::CallIn;
-use florn_host::domain::{Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, refusal};
-use florn_host::{Domains, HostError, Options, Run, Seed};
+use florn_host::domain::{
+    Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, EndRequest, refusal,
+};
+use florn_host::{Domains, FaultPolicy, HostError, Options, Run, Seed};
 use florn_kernel::{Delivery, EventKind, Identity, Instant, Sink, Stream, StreamKey};
 use florn_model::canonical::{Decoder, Encoder};
 use florn_model::manifest::{ActorKind, DomainMap, DomainValue};
@@ -36,6 +38,9 @@ pub const WIRE: &str = "test/wire";
 pub const PIN: &str = "test/pin";
 pub const SINK: &str = "test/sink";
 pub const CUT: &str = "cut";
+/// The intervention that asks the domain to end the run (RFC 012 finding F-7): `reason` names
+/// why, `non-convergence` or `actor-fault`.
+pub const END: &str = "end";
 pub const WORLD: &str = "test:kit/guest@0.1.0";
 pub const PROBE_MODULE: &str = "test:kit/probe@0.1.0";
 pub const EVENTS_ID: &str = "test:kit/events@0.1.0";
@@ -67,6 +72,21 @@ pub struct TestDomain {
     /// The `[test]` table: what the domain does at the start of a run (RFC 012 finding F-15).
     refuse_start: bool,
     start: Option<(Identity, String)>,
+    /// What happens to the events of a guest that faulted (RFC 012 finding F-14).
+    policy: Option<FaultPolicy>,
+    /// An end request at the start (an action), and from the first delivery at or after a tick (a
+    /// flag read after the commit), RFC 012 finding F-7.
+    end_at_start: Option<EndRequest>,
+    end_from: Option<(u64, EndRequest)>,
+    pending_end: Option<EndRequest>,
+}
+
+fn end_reason(v: &DomainValue) -> Option<EndRequest> {
+    match v {
+        DomainValue::Text(t) if t == "non-convergence" => Some(EndRequest::NonConvergence),
+        DomainValue::Text(t) if t == "actor-fault" => Some(EndRequest::ActorFault),
+        _ => None,
+    }
 }
 
 impl TestDomain {
@@ -224,7 +244,7 @@ impl Domain for TestDomain {
         vec![1]
     }
     fn intervention_kinds(&self) -> Vec<&'static str> {
-        vec![CUT, steps::STEP]
+        vec![CUT, steps::STEP, END]
     }
     fn classes(&self) -> Vec<(u8, &'static str)> {
         vec![
@@ -360,6 +380,12 @@ impl Domain for TestDomain {
                     ("start-script", _) => out.push(wrong(field, "text")),
                     ("start-actor", DomainValue::Integer(n)) if *n >= 0 => {}
                     ("start-actor", _) => out.push(wrong(field, "unsigned-integer")),
+                    ("faulted-policy", DomainValue::Text(t)) if t == "drop" || t == "stop-run" => {}
+                    ("faulted-policy", _) => out.push(wrong(field, "text")),
+                    ("end-at-start" | "end-reason", v) if end_reason(v).is_some() => {}
+                    ("end-at-start" | "end-reason", _) => out.push(wrong(field, "text")),
+                    ("end-from-tick", DomainValue::Integer(n)) if *n >= 0 => {}
+                    ("end-from-tick", _) => out.push(wrong(field, "unsigned-integer")),
                     _ => out.push(refusal(
                         "manifest.unknown-key",
                         field,
@@ -380,6 +406,18 @@ impl Domain for TestDomain {
                 (table.get("start-actor"), table.get("start-script"))
             {
                 self.start = Some((*a as Identity, s.clone()));
+            }
+            self.policy = match table.get("faulted-policy") {
+                Some(DomainValue::Text(t)) if t == "stop-run" => Some(FaultPolicy::StopRun),
+                Some(DomainValue::Text(_)) => Some(FaultPolicy::Drop),
+                _ => None,
+            };
+            self.end_at_start = table.get("end-at-start").and_then(end_reason);
+            if let (Some(DomainValue::Integer(from)), Some(r)) = (
+                table.get("end-from-tick"),
+                table.get("end-reason").and_then(end_reason),
+            ) {
+                self.end_from = Some((*from as u64, r));
             }
         }
         for c in &scenario.connections {
@@ -426,13 +464,19 @@ impl Domain for TestDomain {
 
     fn deliver(
         &mut self,
-        _now: Instant,
+        now: Instant,
         origin: Identity,
         _seq: u64,
         port: u32,
         payload: &[u8],
         dead: &BTreeSet<Identity>,
     ) -> Vec<Delivery> {
+        // What a delivery finds, it cannot return as an action: the flag is read after the commit.
+        if let Some((from, request)) = self.end_from
+            && now.tick >= from
+        {
+            self.pending_end.get_or_insert(request);
+        }
         let Some(id) = self.by_pin.get(&(origin, port)).copied() else {
             return Vec::new();
         };
@@ -489,11 +533,17 @@ impl Domain for TestDomain {
         kind: &str,
         content: &DomainMap,
     ) -> Result<(), Box<Notification>> {
-        if kind != CUT && kind != steps::STEP {
+        if kind != CUT && kind != steps::STEP && kind != END {
             return Err(Box::new(invalid("kind")));
         }
         if !self.wires.contains_key(&target) {
             return Err(Box::new(invalid("target")));
+        }
+        if kind == END {
+            return match content.get("reason").and_then(end_reason) {
+                Some(_) => Ok(()),
+                None => Err(Box::new(invalid("content"))),
+            };
         }
         if kind == steps::STEP {
             return match (content.get("actor"), content.get("script")) {
@@ -511,6 +561,13 @@ impl Domain for TestDomain {
         kind: &str,
         content: &DomainMap,
     ) -> Vec<Action> {
+        if kind == END {
+            return content
+                .get("reason")
+                .and_then(end_reason)
+                .map(|r| vec![Action::EndRun(r)])
+                .unwrap_or_default();
+        }
         if kind == steps::STEP {
             let (Some(DomainValue::Integer(actor)), Some(DomainValue::Text(script))) =
                 (content.get("actor"), content.get("script"))
@@ -556,11 +613,23 @@ impl Domain for TestDomain {
                 )],
             )));
         }
-        let Some((actor, script)) = self.start.clone() else {
-            return Ok(Vec::new());
-        };
-        let report = steps::play(&script, actor, 0, calls);
-        Ok(vec![observed("start", actor, report)])
+        let mut actions = Vec::new();
+        if let Some((actor, script)) = self.start.clone() {
+            let report = steps::play(&script, actor, 0, calls);
+            actions.push(observed("start", actor, report));
+        }
+        if let Some(request) = self.end_at_start {
+            actions.push(Action::EndRun(request));
+        }
+        Ok(actions)
+    }
+
+    fn faulted_policy(&self) -> FaultPolicy {
+        self.policy.unwrap_or(FaultPolicy::Drop)
+    }
+
+    fn end_requested(&mut self) -> Option<EndRequest> {
+        self.pending_end.take()
     }
 
     fn event(&mut self, event: &DomainEvent, alive: bool) -> Vec<Action> {

@@ -85,6 +85,7 @@ impl<E: Engine> Run<E> {
         }
         run.keep_start();
         run.init_all();
+        run.poll_end_requests();
         // The start hook (RFC 012 finding F-15): after every guest's `init`, before any event.
         if let Err(refusal) = run.start_domains() {
             run.notify((*refusal).clone());
@@ -405,6 +406,21 @@ impl<E: Engine> Run<E> {
             let sigs = WorldSigs::of(&w);
             worlds.insert(sigs.name.clone(), Arc::new(sigs));
         }
+        // The faulted-actor policy each domain declares in the scenario, by world (RFC 012
+        // finding F-14): the more severe of the domains' for a world of several.
+        let world_policy: BTreeMap<String, super::FaultPolicy> = worlds
+            .keys()
+            .map(|name| {
+                let policy = domains
+                    .domains_of_world(name)
+                    .iter()
+                    .filter_map(|n| world.domains().iter().find(|d| d.name() == *n))
+                    .map(|d| d.faulted_policy())
+                    .max()
+                    .unwrap_or(super::FaultPolicy::Drop);
+                (name.clone(), policy)
+            })
+            .collect();
         let info = engine.info();
         let environment = Environment {
             florn_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -450,6 +466,7 @@ impl<E: Engine> Run<E> {
             reproducible: true,
             replay_against: None,
             worlds,
+            world_policy,
             capacity,
             kept: Vec::new(),
             last_checkpoint_handled: 0,
@@ -789,6 +806,7 @@ impl<E: Engine> Run<E> {
                 self.apply(instant, &ev, vec![action]);
             }
         }
+        self.poll_end_requests();
         Ok(())
     }
 

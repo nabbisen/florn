@@ -129,6 +129,8 @@
  "enum.end-reason.end-reached": "the end was reached",
  "enum.end-reason.user": "ended by the user",
  "enum.end-reason.host-fault": "a Host fault",
+ "enum.end-reason.non-convergence": "a solver gave up",
+ "enum.end-reason.actor-fault": "an actor faulted and the policy stops the run",
  "enum.run-limit.microsteps-per-tick": "the microsteps per tick",
  "enum.run-limit.events-per-instant": "the events per instant",
  "enum.display-path.ring": "ring",

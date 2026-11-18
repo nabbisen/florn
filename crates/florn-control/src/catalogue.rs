@@ -1086,7 +1086,16 @@ pub const ENUMERATIONS: &[(&str, &[&str])] = &[
         ],
     ),
     ("faulted-policy", &["drop", "stop-run"]),
-    ("end-reason", &["end-reached", "user", "host-fault"]),
+    (
+        "end-reason",
+        &[
+            "end-reached",
+            "user",
+            "host-fault",
+            "non-convergence",
+            "actor-fault",
+        ],
+    ),
     ("run-limit", &["microsteps-per-tick", "events-per-instant"]),
     ("display-path", &["ring", "messages"]),
     ("transport", &["shared", "messages"]),

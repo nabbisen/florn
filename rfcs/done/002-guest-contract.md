@@ -340,7 +340,7 @@ world router {
 }
 ```
 
-**Rule 47.** A domain contract may not redefine, shadow, or bypass a core function, add a source of time or randomness, or give a guest a reference into Host memory. It may define messages (layouts for `send` and `on-message` payloads), additional exports (further kinds of event), additional imports that record effects or answer from the activation's starting state, compound activations, and `result`-returning functions for conditions of its model.
+**Rule 47.** A domain contract may not redefine, shadow, or bypass a core function, add a source of time or randomness, or give a guest a reference into Host memory. It may define messages (layouts for `send` and `on-message` payloads), additional exports (further kinds of event), additional imports that record effects or answer from the activation's starting state (an import a domain's world declares as recording is recorded by the Host as a `send` of the value's eight canonical bytes on the port the guest names, and the domain is not asked: RFC 012 rule 11), compound activations, and `result`-returning functions for conditions of its model.
 
 **Rule 48.** A module's world may include the interfaces of more than one domain package. The module manifest names the world; the scenario must declare every domain the world uses (RFC 004 rule 5). A controller with an Ethernet port and a signal input is one actor with one world that includes `florn:network` and `florn:circuit` interfaces. The core prevents nothing here (ARCH-010); each domain validates the ports of its own types.
 

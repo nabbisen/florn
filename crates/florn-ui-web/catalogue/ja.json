@@ -129,6 +129,8 @@
  "enum.end-reason.end-reached": "終了時刻に達した",
  "enum.end-reason.user": "利用者が終了した",
  "enum.end-reason.host-fault": "ホストのフォールト",
+ "enum.end-reason.non-convergence": "ソルバが収束しなかった",
+ "enum.end-reason.actor-fault": "アクターがフォールトし、ポリシーにより実行を止めた",
  "enum.run-limit.microsteps-per-tick": "ティックあたりのマイクロステップ数",
  "enum.run-limit.events-per-instant": "時点あたりのイベント数",
  "enum.display-path.ring": "リング",

@@ -72,10 +72,11 @@ pub enum Seed {
 }
 
 /// What happens to the events of a faulted actor (RFC 001 rule 26; `enum(faulted-policy)`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FaultPolicy {
     /// The actor's later events are dropped; the run continues.
     Drop,
+    /// The run ends with `actor-fault` (the more severe of two policies is the greater).
     StopRun,
 }
 
@@ -384,6 +385,10 @@ pub struct Run<E: Engine> {
     replay_against: Option<Vec<(u64, Digest)>>,
     /// The signatures of every world a module of the run uses, by world name.
     worlds: BTreeMap<String, Arc<WorldSigs>>,
+    /// The policy the scenario declares for a fault of a guest of each world (RFC 001 rule 26;
+    /// RFC 012 finding F-14): the most severe of the policies of the domains the world is of,
+    /// read once after the domains were composed, so that it is known while a domain is lent out.
+    world_policy: BTreeMap<String, FaultPolicy>,
     capacity: Capacity,
     /// The kept checkpoints, oldest first (RFC 009 rule 3).
     kept: Vec<Kept>,

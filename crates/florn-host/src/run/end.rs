@@ -80,6 +80,7 @@ impl<E: Engine> Run<E> {
             };
             handled += 1;
             self.handle(ev);
+            self.poll_end_requests();
         }
         let now = self.kernel.now().tick;
         let end = self.scenario.time.end;
@@ -100,6 +101,20 @@ impl<E: Engine> Run<E> {
             self.advance(Advance::ToTick(u64::MAX));
         }
         self.ended.expect("ended")
+    }
+
+    /// Read the domains' end requests, in the scenario's order (RFC 012 finding F-7): what a
+    /// `deliver` found while a commit was made, which no action carried. The first ends the run.
+    pub(super) fn poll_end_requests(&mut self) {
+        let mut asked = None;
+        for d in self.world.domains_mut() {
+            if let Some(r) = d.end_requested() {
+                asked.get_or_insert(r);
+            }
+        }
+        if let Some(r) = asked {
+            self.end(r.reason());
+        }
     }
 
     pub(super) fn end(&mut self, reason: EndReason) {

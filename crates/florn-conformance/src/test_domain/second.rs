@@ -13,11 +13,11 @@ use florn_abi::Ty;
 use florn_abi::Val;
 use florn_abi::core_world::Signature;
 use florn_control::Notification;
-use florn_host::Domains;
 use florn_host::domain::{Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, RecordedImport};
+use florn_host::{Domains, FaultPolicy};
 use florn_kernel::{Delivery, Identity, Instant, Sink};
 use florn_model::Manifest;
-use florn_model::manifest::DomainMap;
+use florn_model::manifest::{DomainMap, DomainValue};
 
 use super::{WORLD as TEST_WORLD, domains as test_domains};
 
@@ -34,11 +34,14 @@ pub const COMPOSED: &str = "test:kit/both@0.1.0";
 pub static ASKED: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Default)]
-pub struct SecondDomain;
+pub struct SecondDomain {
+    /// `[second] faulted-policy`: what happens to a guest of one of its worlds that faulted.
+    policy: Option<FaultPolicy>,
+}
 
 impl SecondDomain {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 }
 
@@ -87,7 +90,20 @@ impl Domain for SecondDomain {
     fn validate(&self, _: &Manifest) -> Vec<Notification> {
         Vec::new()
     }
-    fn compose(&mut self, _: &Manifest, _: u64) {}
+    fn compose(&mut self, scenario: &Manifest, _: u64) {
+        self.policy = match scenario
+            .domain_tables
+            .get(NAME)
+            .and_then(|t| t.get("faulted-policy"))
+        {
+            Some(DomainValue::Text(t)) if t == "stop-run" => Some(FaultPolicy::StopRun),
+            Some(_) => Some(FaultPolicy::Drop),
+            None => None,
+        };
+    }
+    fn faulted_policy(&self) -> FaultPolicy {
+        self.policy.unwrap_or(FaultPolicy::Drop)
+    }
     fn deliver(
         &mut self,
         _: Instant,

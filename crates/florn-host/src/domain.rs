@@ -27,6 +27,7 @@ use florn_model::manifest::{ActorKind, DomainMap, Port, domain_of};
 use florn_model::{Decimal, Manifest, Param};
 
 use crate::compound::{CallIn, Compound};
+use crate::run::FaultPolicy;
 use crate::world::{CLASS_MESSAGE, CLASS_TIMER, CoreWorld};
 
 /// A refusal a domain reports (RFC 004 §7; RFC 008 rule 18): a code of RFC 007 §4 with its
@@ -211,8 +212,32 @@ pub enum Action {
         target: Identity,
         payload: Vec<u8>,
     },
+    /// End the run now (RFC 012 finding F-7), as the request says. What the domain handles in
+    /// `event`, `change`, `intervene` and `start_calling` returns this as an action; what its
+    /// `deliver` finds is told by [`Domain::end_requested`], since a delivery returns no action.
+    EndRun(EndRequest),
     /// Something for the diagnostic log and the timeline (RFC 008 rule 3): never a guest input.
     Notify(Notification),
+}
+
+/// Why a domain asks the Host to end the run (RFC 012 finding F-7). A domain does not end a run
+/// for the user's reason, for the end's, or for the Host's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EndRequest {
+    /// Its solver could not find a state (`non-convergence`).
+    NonConvergence,
+    /// A guest of its world faulted and its policy is `stop-run` (`actor-fault`).
+    ActorFault,
+}
+
+impl EndRequest {
+    /// The end reason the run is recorded with.
+    pub fn reason(self) -> crate::EndReason {
+        match self {
+            Self::NonConvergence => crate::EndReason::NonConvergence,
+            Self::ActorFault => crate::EndReason::ActorFault,
+        }
+    }
 }
 
 /// An activation of a built-in actor (RFC 008 rule 19).
@@ -325,6 +350,19 @@ pub trait Domain {
         _calls: &mut dyn CallIn,
     ) -> Vec<Action> {
         self.event(event, alive)
+    }
+    /// What happens to the events of a guest of its worlds that faulted, as the scenario declares
+    /// (RFC 001 rule 26; RFC 012 rule 17 and finding F-14). Read once, after `compose`. The
+    /// policy of an actor of a world of several domains is the more severe of theirs, and the
+    /// Host's own option may be more severe still. The default drops them.
+    fn faulted_policy(&self) -> FaultPolicy {
+        FaultPolicy::Drop
+    }
+    /// Whether the domain asks the Host to end the run, for what `deliver` found (a delivery returns
+    /// no [`Action`], RFC 012 finding F-7). The Host reads it after every commit, and the request
+    /// is **taken**: it is told once. The default asks for nothing.
+    fn end_requested(&mut self) -> Option<EndRequest> {
+        None
     }
     /// The start hook (RFC 012 finding F-15; rule 30): called once, after every guest's `init`
     /// has run at tick 0 and before the first event is handled, domains in the scenario's
@@ -1072,6 +1110,12 @@ impl Domain for Lent {
     }
     fn start_calling(&mut self, _: &mut dyn CallIn) -> Result<Vec<Action>, Box<Notification>> {
         self.reached("start_calling")
+    }
+    fn end_requested(&mut self) -> Option<EndRequest> {
+        self.reached("end_requested")
+    }
+    fn faulted_policy(&self) -> FaultPolicy {
+        self.reached("faulted_policy")
     }
     fn undelivered(&mut self, _: &DomainEvent) -> Vec<Action> {
         self.reached("undelivered")

@@ -748,7 +748,14 @@ impl<E: Engine> Run<E> {
             s.swapped = None;
         }
         self.world.dead.insert(id);
-        let policy = self.options.fault_policy;
+        // The Host's option and what the scenario declares for the actor's world: the more severe.
+        let declared = self
+            .actors
+            .get(&id)
+            .and_then(|s| self.world_policy.get(&s.world.name))
+            .copied()
+            .unwrap_or(FaultPolicy::Drop);
+        let policy = self.options.fault_policy.max(declared);
         let n = Notification::new(
             "actor.faulted",
             Severity::Error,
@@ -763,7 +770,7 @@ impl<E: Engine> Run<E> {
         .at(at(instant));
         self.notify(n);
         if policy == FaultPolicy::StopRun {
-            self.end(EndReason::User);
+            self.end(EndReason::ActorFault);
         }
     }
 }

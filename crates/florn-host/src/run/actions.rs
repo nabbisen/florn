@@ -259,6 +259,11 @@ impl<E: Engine> Run<E> {
                     }
                 }
                 Action::Notify(n) => self.notify(n.at(at(instant))),
+                Action::EndRun(request) => {
+                    self.end(request.reason());
+                    // What follows would act on a run that is over.
+                    break;
+                }
             }
         }
     }

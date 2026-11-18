@@ -377,6 +377,17 @@ fn cmd_resume(args: &Args) -> Result<ExitCode, String> {
     finish(&mut c, args, &scenario)
 }
 
+/// Whether a run's end is a fault ending, which is exit code 3 (RFC 005 rule 31): every end
+/// reason but reaching the end (`user`, `host-fault`, `non-convergence`, `actor-fault`, and any
+/// that RFC 007 adds), whether or not `--to` was given; a run with no end reason is one stopped
+/// by `--to` and is not, and one asked for to its end that has none is.
+fn ends_as_fault(ended: Option<&str>, to_given: bool) -> bool {
+    match ended {
+        Some(reason) => reason != "end-reached",
+        None => !to_given,
+    }
+}
+
 /// The state lines, the run record and the exit code, once a run has advanced as far as asked.
 fn finish(
     c: &mut Controller<WasmtimeEngine>,
@@ -415,10 +426,7 @@ fn finish(
     // reason yet (`ended` is absent) and is judged as any run is, by whether it reproduces; a run
     // that ended for another reason than reaching its end, a fault met on the way to `--to`
     // included, is a fault. A run asked for to its end that has no reason is a fault as before.
-    let faulted = match state.ended.as_deref() {
-        Some(reason) => reason != "end-reached",
-        None => args.to.is_none(),
-    };
+    let faulted = ends_as_fault(state.ended.as_deref(), args.to.is_some());
     Ok(if faulted {
         ExitCode::from(3)
     } else if state.reproducible {
@@ -574,3 +582,6 @@ pub fn run(argv: Vec<String>) -> ExitCode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

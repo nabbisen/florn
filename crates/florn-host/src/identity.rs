@@ -49,6 +49,11 @@ pub enum EndReason {
     EndReached,
     User,
     HostFault,
+    /// A domain's solver gave up (RFC 012 finding F-7): the run is reproducible, the domain said
+    /// why.
+    NonConvergence,
+    /// A guest faulted under the policy `stop-run` (RFC 001 rule 26; RFC 012 finding F-7).
+    ActorFault,
 }
 
 impl EndReason {
@@ -57,6 +62,8 @@ impl EndReason {
             Self::EndReached => "end-reached",
             Self::User => "user",
             Self::HostFault => "host-fault",
+            Self::NonConvergence => "non-convergence",
+            Self::ActorFault => "actor-fault",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
@@ -64,6 +71,8 @@ impl EndReason {
             "end-reached" => Self::EndReached,
             "user" => Self::User,
             "host-fault" => Self::HostFault,
+            "non-convergence" => Self::NonConvergence,
+            "actor-fault" => Self::ActorFault,
             _ => return None,
         })
     }
