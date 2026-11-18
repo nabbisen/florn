@@ -22,6 +22,27 @@ Milestone M1 is done: PR-31 to PR-34a are merged and release 0.3.1 is published.
 
 PR-39 and PR-40 are done (`bdebadb`; `e8bf591` to `bd571cd`, 2026-11-19): several and composed worlds; imports that record effects, the start hook with refusal, a domain's end request, the end reasons `non-convergence` and `actor-fault`, the faulted-actor policy from the domains.
 
+**Since your last unit** (PR-38's second follow-up, `f8c59ef`), read this first. Another session built the units in between; you continue from `e63c80f`.
+
+- **PR-38 accepted after its verifier** (a fresh session that had not read the code: 38 checks, 20 planted defects, no defect found). Its checks are now `crates/florn-kernel/tests/compound_discard.rs` and `crates/florn-conformance/tests/compound_handle.rs`.
+- **RFC 012 rules 19 and 20, amended:**
+  - `send`, `set-timer` and `cancel-timer` in a device are all 12019.
+  - The length bound is inclusive.
+  - After a refused list result, only a fault closes the activation (12020); `commit`, `discard` and `call` are refused (`3ed5c80`).
+- **The example guests of `crates/florn/tests/guest_sdk.rs` are built once per test binary** (`aff50a2`, the macOS failure), and `zip` is pinned at 9.0.5 for RUSTSEC-2026-0548 (`bc2fe2b`).
+- **PR-39** (`bdebadb`):
+  - `Domain::world` is replaced by `Domain::worlds`, and `Domains::with_composed` registers a world of several domains.
+  - Every module's domains must be declared in the scenario, or the run fails with `domain.undeclared`.
+  - A contract of record may be several WIT blocks joined by one blank line (RFC 012 rule 22).
+  - `Controller::new` panics on a composition whose domains it holds but cannot build (`e8bf591`).
+- **PR-40** (`ac81d92`, `497e9cc`, `bd571cd`):
+  - A world's `records` imports are recorded as a `send` of eight canonical bytes.
+  - `Domain::start_calling` is the start hook, and it may refuse the run.
+  - A domain ends a run with `Action::EndRun` or `Domain::end_requested`, which the Host reads after every event.
+  - The end reasons gain `non-convergence` and `actor-fault`; a `stop-run` fault now ends as `actor-fault`.
+  - `Domain::faulted_policy` gives an actor's policy, the most severe of its domains' and the Host's.
+- **A rule that changed for you:** a unit may now record its own **Done** notes in RFC 012 section 11, and the amendments to older RFCs that RFC 012's table lists, in that table's words (section 4 of `implementation-handoff.md`). Anything else in an RFC is still the architect's.
+
 **Next: PR-41, units with dimensions.** Read its row in `task-breakdown-pr-plan.md`, section 3.4 of `implementation-handoff.md` and B-41 first; it starts from RFC 012 finding F-13 and rule 5, and RFC 004 rules 23 to 28. Read the code of PR-39 and PR-40 that it builds on (`Domain::units` and the config encoder) before you change it.
 
 ## What Phase 4 delivers
