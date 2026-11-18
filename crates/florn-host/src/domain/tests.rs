@@ -299,3 +299,50 @@ fn several_worlds_of_one_domain_may_import_one_interface_and_two_domains_may_not
         Some("import interface assigned twice")
     );
 }
+
+#[test]
+fn a_composition_the_host_holds_every_domain_of_and_cannot_build_is_a_defect() {
+    // RFC 012 finding F-9, as ruled in the review of PR-39: the Host's own configuration is wrong,
+    // and `Controller::new` stops on it. A domain the Host lacks is not a defect.
+    let spans = [("a", "a:w/one@0.1.0"), ("b", "b:w/one@0.1.0")];
+    // A composition that builds: no defect.
+    assert!(
+        registry()
+            .with_composed("c:w/ok@0.1.0", &spans)
+            .composition_defects()
+            .is_empty()
+    );
+    // A domain that is not held: left out, no defect.
+    let only_a = Domains::core()
+        .with(holder(
+            "a",
+            vec![world("a:w/one@0.1.0", None, "a:w/events@0.1.0")],
+        ))
+        .with_composed("c:w/ok@0.1.0", &spans);
+    assert!(only_a.composition_defects().is_empty());
+    // A named world its domain does not have.
+    let missing = registry().with_composed(
+        "c:w/missing@0.1.0",
+        &[("a", "a:w/nope@0.1.0"), ("b", "b:w/one@0.1.0")],
+    );
+    let defects = missing.composition_defects();
+    assert_eq!(defects.len(), 1, "{defects:?}");
+    assert!(defects[0].contains("c:w/missing@0.1.0") && defects[0].contains("a:w/nope@0.1.0"));
+    // Parts that differ on one interface.
+    let mut clash = world("b:w/one@0.1.0", Some("a:w/look@0.1.0"), "b:w/events@0.1.0");
+    clash.imports[0].1[0].params.push(("more", Ty::U32));
+    let differ = Domains::core()
+        .with(holder(
+            "a",
+            vec![world(
+                "a:w/one@0.1.0",
+                Some("a:w/look@0.1.0"),
+                "a:w/events@0.1.0",
+            )],
+        ))
+        .with(holder("b", vec![clash]))
+        .with_composed("c:w/differ@0.1.0", &spans);
+    let defects = differ.composition_defects();
+    assert_eq!(defects.len(), 1, "{defects:?}");
+    assert!(defects[0].contains("c:w/differ@0.1.0") && defects[0].contains("a:w/look@0.1.0"));
+}

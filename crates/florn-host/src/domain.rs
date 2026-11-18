@@ -417,6 +417,44 @@ impl Domains {
             .collect()
     }
 
+    /// The compositions the Host **holds every domain of** and cannot build: a named world that
+    /// its domain does not have, or parts that differ on one interface. Each is a defect of the
+    /// Host's own configuration (the shell that registered it and the domains it holds), not of
+    /// a scenario; [`Controller::new`](crate::Controller::new) stops on it. A composition with a
+    /// domain the Host does not hold is not a defect: it is left out (see
+    /// [`composed_worlds`](Self::composed_worlds)).
+    pub fn composition_defects(&self) -> Vec<String> {
+        let held = self.domain_worlds();
+        let mut out = Vec::new();
+        for c in &self.composed {
+            let domain_held = |d: &str| self.factories.iter().any(|(n, _)| *n == d);
+            if !c.spans.iter().all(|(d, _)| domain_held(d)) {
+                continue;
+            }
+            let mut parts = Vec::new();
+            let mut missing = false;
+            for (d, w) in &c.spans {
+                match held.iter().find(|(hd, hw)| hd == d && hw.name == *w) {
+                    Some((_, hw)) => parts.push(hw),
+                    None => {
+                        out.push(format!(
+                            "the composed world `{}` names the world `{w}` of the domain `{d}`, which has no such world",
+                            c.name
+                        ));
+                        missing = true;
+                    }
+                }
+            }
+            if !missing && let Err(why) = DomainWorld::compose(&c.name, &parts) {
+                out.push(format!(
+                    "the composed world `{}` cannot be built: {why}",
+                    c.name
+                ));
+            }
+        }
+        out
+    }
+
     /// The worlds every domain adds, and the composed ones the Host can offer, for admission
     /// (RFC 008 rule 6; RFC 002 rule 48).
     pub fn worlds(&self) -> Vec<WorldSpec> {

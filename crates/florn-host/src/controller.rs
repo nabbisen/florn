@@ -81,6 +81,11 @@ impl<E: Engine> Controller<E> {
         domains: Domains,
         options: Options,
     ) -> Self {
+        // A composition of domains the Host holds that it cannot build is a defect of the Host's
+        // own configuration (RFC 012 finding F-9): it stops here, in every build, naming it. One
+        // with a domain the Host lacks is left out, and a module of it is refused.
+        let defects = domains.composition_defects();
+        assert!(defects.is_empty(), "{}", defects.join("; "));
         // The domains' worlds are admitted beside the core's (RFC 008 rule 6).
         for w in domains.worlds() {
             admission.add_world(w);

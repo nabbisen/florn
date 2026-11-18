@@ -252,3 +252,34 @@ fn the_digest_of_a_run_of_the_composed_module_is_that_of_the_same_run_again() {
     };
     assert_eq!(digest(), digest());
 }
+
+// ---------------------------------------------------------------------------------------------
+// `Controller::new` stops on a composition it cannot build (the review of PR-39).
+// ---------------------------------------------------------------------------------------------
+
+fn controller(domains: Domains) -> florn_host::Controller<florn_engine_wasmtime::WasmtimeEngine> {
+    florn_host::Controller::new(
+        host::engine(),
+        Admission::default(),
+        Box::new(FixedPlatform::default()),
+        domains,
+        host::options(),
+    )
+}
+
+#[test]
+fn a_controller_is_built_over_a_composition_it_can_build_and_over_one_it_lacks_a_domain_for() {
+    let _ = controller(both());
+    let _ = controller(test_only());
+    let _ = controller(second_only());
+}
+
+#[test]
+#[should_panic(expected = "names the world `test:kit/nope@0.1.0` of the domain `second`")]
+fn a_controller_is_not_built_over_a_composition_naming_a_world_its_domain_lacks() {
+    let broken = second::domains().with_composed(
+        "test:kit/broken@0.1.0",
+        &[("test", td::WORLD), (second::NAME, "test:kit/nope@0.1.0")],
+    );
+    let _ = controller(broken);
+}
