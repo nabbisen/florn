@@ -326,6 +326,15 @@ pub trait Domain {
     ) -> Vec<Action> {
         self.event(event, alive)
     }
+    /// The start hook (RFC 012 finding F-15; rule 30): called once, after every guest's `init`
+    /// has run at tick 0 and before the first event is handled, domains in the scenario's
+    /// declaration order, with the call-in handle of finding F-3 (its activations are keyed as
+    /// the actor's own `init` event). The domain may return actions, and **may refuse the run**:
+    /// the run does not start, and the notification is what the Host reports. The default does
+    /// nothing.
+    fn start_calling(&mut self, _calls: &mut dyn CallIn) -> Result<Vec<Action>, Box<Notification>> {
+        Ok(Vec::new())
+    }
     /// An event of its classes that carried a message to an actor that faulted meanwhile:
     /// the frame is dropped at delivery (RFC 008 rule 5).
     fn undelivered(&mut self, _event: &DomainEvent) -> Vec<Action> {
@@ -869,6 +878,19 @@ impl Composite {
             std::mem::replace(&mut self.domains[i], Box::new(Lent { name })),
         ))
     }
+    /// Lend out the domain at `index` for the start hook, as [`Self::lend_class`] does for an
+    /// event: `None` when its world declares no compound activation (nothing is lent, and the
+    /// hook is called in place with a handle that refuses everything).
+    pub fn lend_index(&mut self, index: usize) -> Option<Box<dyn Domain>> {
+        if !self.compounding.contains(&index) {
+            return None;
+        }
+        let name = self.domains[index].name();
+        Some(std::mem::replace(
+            &mut self.domains[index],
+            Box::new(Lent { name }),
+        ))
+    }
     /// Put a lent domain back.
     pub fn take_back(&mut self, index: usize, domain: Box<dyn Domain>) {
         self.domains[index] = domain;
@@ -1047,6 +1069,9 @@ impl Domain for Lent {
     }
     fn event_calling(&mut self, _: &DomainEvent, _: bool, _: &mut dyn CallIn) -> Vec<Action> {
         self.reached("event_calling")
+    }
+    fn start_calling(&mut self, _: &mut dyn CallIn) -> Result<Vec<Action>, Box<Notification>> {
+        self.reached("start_calling")
     }
     fn undelivered(&mut self, _: &DomainEvent) -> Vec<Action> {
         self.reached("undelivered")

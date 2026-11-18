@@ -14,16 +14,20 @@ use florn_admission::{
 };
 use florn_control::{Ends, Notification, Scope, Severity, Value};
 use florn_engine::{Engine, EngineError, HostGlobal, ImportFunction, ImportSpec};
-use florn_kernel::{Config, Event, EventKey, EventKind, Identity, Kernel, Quotas, Sink, TiePolicy};
+use florn_kernel::{
+    Config, Event, EventKey, EventKind, Identity, Instant, Kernel, Quotas, Sink, TiePolicy,
+};
 use florn_model::Manifest;
 use florn_model::manifest::ActorKind;
 use florn_platform::Platform;
 
-use crate::domain::{self, BuiltinEvent, Composite, DomainUnits, Domains, WorldSigs};
+use crate::compound::NoCalls;
+use crate::domain::{self, Action, BuiltinEvent, Composite, DomainUnits, Domains, WorldSigs};
 use crate::identity::{Environment, ModuleInput, RunInputs};
 use crate::log::DiagnosticLog;
 use crate::world::CLASS_TIMER;
 
+use super::compound::Calls;
 use super::{Builtin, HostError, INIT, Options, Residency, Run, Seed, Slot, cost_table};
 
 impl<E: Engine> Run<E> {
@@ -81,6 +85,16 @@ impl<E: Engine> Run<E> {
         }
         run.keep_start();
         run.init_all();
+        // The start hook (RFC 012 finding F-15): after every guest's `init`, before any event.
+        if let Err(refusal) = run.start_domains() {
+            run.notify((*refusal).clone());
+            let (engine, admission) = run.into_parts();
+            return Err(Box::new((
+                HostError::Domain(vec![*refusal]),
+                engine,
+                admission,
+            )));
+        }
         Ok(run)
     }
 
@@ -742,6 +756,42 @@ impl<E: Engine> Run<E> {
 
     /// `init` for every actor, module-backed or built-in, in ascending identity order (RFC 002
     /// rule 36).
+    /// The start hook of every domain, in the scenario's order (RFC 012 finding F-15; rule 30),
+    /// once every guest's `init` has run: a domain whose world declares a compound activation is
+    /// lent out and given the call-in handle, any other is called in place with a handle that
+    /// refuses everything. The actions it returns are applied at tick 0 as the hook's own. A
+    /// refusal is returned and nothing after it runs.
+    pub(super) fn start_domains(&mut self) -> Result<(), Box<Notification>> {
+        for i in 0..self.world.domains().len() {
+            if self.ended.is_some() {
+                break;
+            }
+            let result = match self.world.lend_index(i) {
+                Some(mut d) => {
+                    let result = {
+                        let mut calls = Calls::for_start(self);
+                        let result = d.start_calling(&mut calls);
+                        calls.finish();
+                        result
+                    };
+                    self.world.take_back(i, d);
+                    result
+                }
+                None => self.world.domains_mut()[i].start_calling(&mut NoCalls),
+            };
+            let instant = Instant::new(0, 0);
+            for action in result? {
+                // An activation an action asks for is keyed as the actor's `init` too.
+                let ev = init_event(match &action {
+                    Action::Call { actor, .. } => *actor,
+                    _ => 0,
+                });
+                self.apply(instant, &ev, vec![action]);
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn init_all(&mut self) {
         let mut ids: Vec<Identity> = self.actors.keys().copied().collect();
         ids.extend(self.builtins.keys().copied());
@@ -750,20 +800,7 @@ impl<E: Engine> Run<E> {
             if self.ended.is_some() {
                 break;
             }
-            let event = Event {
-                key: EventKey {
-                    tick: 0,
-                    microstep: 0,
-                    class: florn_kernel::CLASS_CONTROL,
-                    tie: 0,
-                    origin: id,
-                    seq: 0,
-                },
-                target: id,
-                kind: EventKind::Domain {
-                    payload: Vec::new(),
-                },
-            };
+            let event = init_event(id);
             if let Some(b) = self.builtins.get(&id) {
                 let (ports, config) = (b.ports.clone(), b.config.clone());
                 self.activate_builtin(
@@ -785,5 +822,24 @@ impl<E: Engine> Run<E> {
             ];
             self.activate(id, event, INIT, &vals);
         }
+    }
+}
+
+/// The `init` event of an actor (RFC 002 rule 36; RFC 012 rule 21): tick 0, microstep 0, class
+/// control, origin and target the actor, sequence number 0.
+pub(super) fn init_event(id: Identity) -> Event {
+    Event {
+        key: EventKey {
+            tick: 0,
+            microstep: 0,
+            class: florn_kernel::CLASS_CONTROL,
+            tie: 0,
+            origin: id,
+            seq: 0,
+        },
+        target: id,
+        kind: EventKind::Domain {
+            payload: Vec::new(),
+        },
     }
 }

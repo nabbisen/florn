@@ -64,6 +64,9 @@ pub struct TestDomain {
     /// Frames counted per `test/sink`.
     sinks: BTreeMap<Identity, u64>,
     dropped: u64,
+    /// The `[test]` table: what the domain does at the start of a run (RFC 012 finding F-15).
+    refuse_start: bool,
+    start: Option<(Identity, String)>,
 }
 
 impl TestDomain {
@@ -347,13 +350,21 @@ impl Domain for TestDomain {
             }
         }
         if let Some(table) = scenario.domain_tables.get(NAME) {
-            for k in table.keys() {
-                if k != "note" {
-                    out.push(refusal(
+            for (k, v) in table {
+                let field = format!("{NAME}.{k}");
+                match (k.as_str(), v) {
+                    ("note", _) => {}
+                    ("refuse-start", DomainValue::Boolean(_)) => {}
+                    ("refuse-start", _) => out.push(wrong(field, "boolean")),
+                    ("start-script", DomainValue::Text(_)) => {}
+                    ("start-script", _) => out.push(wrong(field, "text")),
+                    ("start-actor", DomainValue::Integer(n)) if *n >= 0 => {}
+                    ("start-actor", _) => out.push(wrong(field, "unsigned-integer")),
+                    _ => out.push(refusal(
                         "manifest.unknown-key",
-                        format!("{NAME}.{k}"),
+                        field,
                         vec![("key", Param::Text(k.clone()))],
-                    ));
+                    )),
                 }
             }
         }
@@ -362,6 +373,15 @@ impl Domain for TestDomain {
 
     fn compose(&mut self, scenario: &Manifest, root_seed: u64) {
         let tick = scenario.time.tick;
+        if let Some(table) = scenario.domain_tables.get(NAME) {
+            self.refuse_start =
+                matches!(table.get("refuse-start"), Some(DomainValue::Boolean(true)));
+            if let (Some(DomainValue::Integer(a)), Some(DomainValue::Text(s))) =
+                (table.get("start-actor"), table.get("start-script"))
+            {
+                self.start = Some((*a as Identity, s.clone()));
+            }
+        }
         for c in &scenario.connections {
             if scenario.connection_domain(c) != NAME {
                 continue;
@@ -521,6 +541,26 @@ impl Domain for TestDomain {
         let script = String::from_utf8_lossy(&event.payload).into_owned();
         let report = steps::play(&script, event.target, event.key.tick, calls);
         vec![observed("compound", event.target, report)]
+    }
+
+    /// The start hook (RFC 012 finding F-15): refuse the run when the `[test]` table says so, else
+    /// play its `start-script` on its `start-actor` through the call-in handle.
+    fn start_calling(&mut self, calls: &mut dyn CallIn) -> Result<Vec<Action>, Box<Notification>> {
+        if self.refuse_start {
+            return Err(Box::new(refusal(
+                "manifest.invalid",
+                format!("{NAME}.refuse-start"),
+                vec![(
+                    "reason",
+                    Param::Text("the test domain refuses to start".into()),
+                )],
+            )));
+        }
+        let Some((actor, script)) = self.start.clone() else {
+            return Ok(Vec::new());
+        };
+        let report = steps::play(&script, actor, 0, calls);
+        Ok(vec![observed("start", actor, report)])
     }
 
     fn event(&mut self, event: &DomainEvent, alive: bool) -> Vec<Action> {

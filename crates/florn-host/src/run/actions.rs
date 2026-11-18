@@ -229,7 +229,7 @@ impl<E: Engine> Run<E> {
 
     /// What a domain asked for (RFC 008 rule 1): calls into actors, events of its classes,
     /// notes for the log.
-    fn apply(&mut self, instant: Instant, ev: &Event, actions: Vec<Action>) {
+    pub(super) fn apply(&mut self, instant: Instant, ev: &Event, actions: Vec<Action>) {
         for a in actions {
             match a {
                 Action::Call {

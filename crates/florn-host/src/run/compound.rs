@@ -23,6 +23,7 @@ use super::activation::{
     lowering_outcome, metered_of, read_globals, set_budget, trap_outcome,
 };
 use super::condition::MachineCondition;
+use super::start::init_event;
 
 /// The world a compound activation commits with: nothing is delivered. Its sends are refused
 /// before they are recorded (the handler is queueless), so this is never asked.
@@ -51,6 +52,9 @@ struct Open {
 pub(super) struct Calls<'a, E: Engine> {
     run: &'a mut Run<E>,
     event: Event,
+    /// The start hook (RFC 012 rule 30): an activation is keyed as the `init` event of the actor
+    /// it opens, not as an event the domain is handling.
+    start: bool,
     open: Option<Open>,
 }
 
@@ -59,6 +63,20 @@ impl<'a, E: Engine> Calls<'a, E> {
         Self {
             run,
             event,
+            start: false,
+            open: None,
+        }
+    }
+
+    /// The handle of the start hook: no event is being handled, so each activation is keyed as
+    /// the opened actor's own `init` (tick 0, microstep 0, class control, origin and target the
+    /// actor, sequence number 0; RFC 012 rule 21).
+    pub(super) fn for_start(run: &'a mut Run<E>) -> Self {
+        let event = init_event(0);
+        Self {
+            run,
+            event,
+            start: true,
             open: None,
         }
     }
@@ -269,7 +287,12 @@ impl<E: Engine> CallIn for Calls<'_, E> {
             });
         }
         let instant = self.run.kernel.now();
-        let act = self.run.kernel.begin(actor, self.event.clone());
+        let event = if self.start {
+            init_event(actor)
+        } else {
+            self.event.clone()
+        };
+        let act = self.run.kernel.begin(actor, event);
         let budget = {
             let slot = self.run.actors.get_mut(&actor).expect("checked");
             slot.sink.reset();
