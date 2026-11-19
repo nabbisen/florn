@@ -20,30 +20,24 @@ Milestone M1 is done: PR-31 to PR-34a are merged and release 0.3.1 is published.
 | PR-37 Floats and lists across the ABI | **Done** (`ceb6d49`, 2026-11-10): rows 12 to 16, `Ty::import_signature` and `Ty::export_signature`, the post-return required at admission and called by `florn_engine::call_lifting`; a result that holds a list or a string needs its post-return too | — |
 | PR-38 The kernel's discard and the call-in handle (V) | **Done** (`c45a08c` with `887c1fd`, `25cea3b`, `f8c59ef`; verified 2026-11-18, accepted 2026-11-18): `Kernel::discard`, `CallIn` with the domain lent out, calls through `call_lifting` with the length bound, fault parameter 12019, the Host fault's reason from RFC 007's set | — |
 
-PR-39 and PR-40 are done (`bdebadb`; `e8bf591` to `bd571cd`, 2026-11-19): several and composed worlds; imports that record effects, the start hook with refusal, a domain's end request, the end reasons `non-convergence` and `actor-fault`, the faulted-actor policy from the domains.
+PR-39, PR-40 and PR-41 are done (`bdebadb`; `e8bf591` to `bd571cd`; `91666f5`, 2026-11-19): several and composed worlds; recorded imports, the start hook, a domain's end request and the faulted-actor policy; units with dimensions, converted exactly and rounded once, and `quantity.dimension`.
 
-**Since your last unit** (PR-38's second follow-up, `f8c59ef`), read this first. Another session built the units in between; you continue from `e63c80f`.
+**Next: the PR-41 follow-up, then PR-42.** The follow-up is one review request with these commits, before PR-42 starts:
 
-- **PR-38 accepted after its verifier** (a fresh session that had not read the code: 38 checks, 20 planted defects, no defect found). Its checks are now `crates/florn-kernel/tests/compound_discard.rs` and `crates/florn-conformance/tests/compound_handle.rs`.
-- **RFC 012 rules 19 and 20, amended:**
-  - `send`, `set-timer` and `cancel-timer` in a device are all 12019.
-  - The length bound is inclusive.
-  - After a refused list result, only a fault closes the activation (12020); `commit`, `discard` and `call` are refused (`3ed5c80`).
-- **The example guests of `crates/florn/tests/guest_sdk.rs` are built once per test binary** (`aff50a2`, the macOS failure), and `zip` is pinned at 9.0.5 for RUSTSEC-2026-0548 (`bc2fe2b`).
-- **PR-39** (`bdebadb`):
-  - `Domain::world` is replaced by `Domain::worlds`, and `Domains::with_composed` registers a world of several domains.
-  - Every module's domains must be declared in the scenario, or the run fails with `domain.undeclared`.
-  - A contract of record may be several WIT blocks joined by one blank line (RFC 012 rule 22).
-  - `Controller::new` panics on a composition whose domains it holds but cannot build (`e8bf591`).
-- **PR-40** (`ac81d92`, `497e9cc`, `bd571cd`):
-  - A world's `records` imports are recorded as a `send` of eight canonical bytes.
-  - `Domain::start_calling` is the start hook, and it may refuse the run.
-  - A domain ends a run with `Action::EndRun` or `Domain::end_requested`, which the Host reads after every event.
-  - The end reasons gain `non-convergence` and `actor-fault`; a `stop-run` fault now ends as `actor-fault`.
-  - `Domain::faulted_policy` gives an actor's policy, the most severe of its domains' and the Host's.
-- **A rule that changed for you:** a unit may now record its own **Done** notes in RFC 012 section 11, and the amendments to older RFCs that RFC 012's table lists, in that table's words (section 4 of `implementation-handoff.md`). Anything else in an RFC is still the architect's.
+1. **A sign for a `real` quantity (RFC 012 finding F-17, RFC 004 rule 23 amended).**
+   - A quantity in a `real` field may begin with `-`; `+` is still refused.
+   - The value is converted as today and then negated, so `-x` is exactly the negation of `x`, and a written `-0` gives `+0.0`.
+   - A time, a count, or any field that cannot be negative refuses a sign with `quantity.out-of-range` naming the field.
+   - Tests: `-0.1nF` is the exact negation of `0.1nF`; `-0` gives `+0.0`; `-5ms` for a time is refused. Every recorded digest is unchanged.
+2. **The Host's check for a domain's attribute** (RFC 012 rule 5: "a parameter **or an attribute**"). Add a helper the domain calls from `validate` (for example on `DomainUnits`): it takes the field, the text and the expected dimension, and gives the SI value or the notification (`quantity.unknown-unit`, `quantity.dimension`, `quantity.out-of-range`), with the same conversion as a parameter. The circuit domain uses it from PR-44, because M3 adds nothing to the Host. A test in the kit's test domain. The network's `bandwidth` may stay as it is.
+3. **A core time unit written for a `real`** (`5ms` for an `ohm` parameter) is `quantity.dimension` with `expected` the declared dimension, not `quantity.unknown-unit`: the core's time units are of dimension `time`.
+4. **One symbol registered by two held domains** is a defect of the Host's configuration. `Controller::new` stops with a panic naming the symbol and the two domains, in every build (as for a composition it cannot build), and a test covers it.
+5. **Three Japanese texts**, nearer to what the quantities are:
+   - `enum.dimension.inertia`: 慣性モーメント
+   - `enum.dimension.friction` (N·m·s per radian): 粘性摩擦係数
+   - `enum.dimension.voltage-per-speed` (V·s per radian): 角速度あたりの電圧
 
-**Next: PR-41, units with dimensions.** Read its row in `task-breakdown-pr-plan.md`, section 3.4 of `implementation-handoff.md` and B-41 first; it starts from RFC 012 finding F-13 and rule 5, and RFC 004 rules 23 to 28. Read the code of PR-39 and PR-40 that it builds on (`Domain::units` and the config encoder) before you change it.
+Then PR-42, the comparison of Tier 2 (V). Read its row in `task-breakdown-pr-plan.md`, section 3.5 of `implementation-handoff.md` and B-42 first. A verifier session follows its push.
 
 ## What Phase 4 delivers
 
