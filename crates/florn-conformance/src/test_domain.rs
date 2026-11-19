@@ -18,7 +18,7 @@ use florn_control::{Ends, Notification, Scope, Severity, Value};
 use florn_engine_wasmtime::WasmtimeEngine;
 use florn_host::compound::CallIn;
 use florn_host::domain::{
-    Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, EndRequest, refusal,
+    Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, EndRequest, quantity_si, refusal,
 };
 use florn_host::{Domains, FaultPolicy, HostError, Options, Run, Seed, UnitDef};
 use florn_kernel::{Delivery, EventKind, Identity, Instant, Sink, Stream, StreamKey};
@@ -341,6 +341,18 @@ impl Domain for TestDomain {
                             out.push(wrong(field, "boolean"));
                         }
                     }
+                    // A resistance, read by the Host's helper as a parameter's quantity is
+                    // (RFC 012 rule 5, finding F-13): the value is not used, it is checked.
+                    "r" => match v {
+                        DomainValue::Text(text) => {
+                            if let Err(refused) =
+                                quantity_si(&self.units(), &field, text, "resistance")
+                            {
+                                out.push(*refused);
+                            }
+                        }
+                        _ => out.push(wrong(field, "quantity")),
+                    },
                     _ => out.push(refusal(
                         "manifest.unknown-key",
                         field,

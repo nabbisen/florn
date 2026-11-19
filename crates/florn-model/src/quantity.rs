@@ -281,11 +281,14 @@ fn multiply_digits(a: &str, b: &str) -> String {
         .collect()
 }
 
-/// A quantity as parsed: the number and the unit text.
+/// A quantity as parsed: the number, its sign and the unit text. The number is a magnitude; the
+/// sign is only ever set by [`Quantity::parse_signed`] (RFC 004 rule 23, RFC 012 finding F-17), and
+/// never for zero: `-0` is zero.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Quantity {
     pub number: Decimal,
     pub unit: String,
+    pub negative: bool,
 }
 
 /// Why a token is not a quantity.
@@ -338,13 +341,52 @@ impl Quantity {
         })
     }
 
+    /// [`Self::parse`] for a field that may be negative (a `real` quantity, RFC 004 rule 23): the
+    /// token may begin with `-`, never `+`; `-0` is zero, with no sign.
+    pub fn parse_signed(token: &str) -> Result<Self, QuantityError> {
+        Self::classify_signed(token).map_err(|e| match e {
+            QuantityRefusal::MissingUnit => QuantityError::MissingUnit,
+            QuantityRefusal::Malformed | QuantityRefusal::OutOfRange { .. } => {
+                QuantityError::Malformed
+            }
+        })
+    }
+
     /// [`Self::parse`] with the reason it refuses. A front end names a field with the reason: a
-    /// number out of range is `quantity.out-of-range`, a text that is no quantity is not. Not
-    /// part of the stable API: it is public for the crates of this workspace and may change in a
-    /// release that is not a patch release.
+    /// number out of range is `quantity.out-of-range`, a text that is no quantity is not. A sign
+    /// is out of range here, for a field whose value cannot be negative (a time, a count): the
+    /// refusal carries the token with its sign, `-0` included. Not part of the stable API: it is
+    /// public for the crates of this workspace and may change in a release that is not a patch
+    /// release.
     #[doc(hidden)]
     pub fn classify(token: &str) -> Result<Self, QuantityRefusal> {
+        if token.trim_start().starts_with('-') {
+            return match Self::classify_signed(token) {
+                Ok(q) => Err(QuantityRefusal::OutOfRange {
+                    number: shown(&format!("-{}", q.number.shortest())),
+                    unit: shown(&q.unit),
+                }),
+                Err(e) => Err(e),
+            };
+        }
+        Self::classify_signed(token)
+    }
+
+    /// [`Self::classify`] for a field that may be negative: one leading `-` is the sign. Not part
+    /// of the stable API (see [`Self::classify`]).
+    #[doc(hidden)]
+    pub fn classify_signed(token: &str) -> Result<Self, QuantityRefusal> {
         let token = token.trim();
+        let (negative, token) = match token.strip_prefix('-') {
+            Some(rest) => (true, rest),
+            None => (false, token),
+        };
+        let mut q = Self::classify_magnitude(token)?;
+        q.negative = negative && q.number.mantissa != 0;
+        Ok(q)
+    }
+
+    fn classify_magnitude(token: &str) -> Result<Self, QuantityRefusal> {
         let split = token
             .find(|c: char| {
                 !(c.is_ascii_digit() || c == '.' || c == 'e' || c == 'E' || c == '-' || c == '+')
@@ -389,6 +431,7 @@ impl Quantity {
             Some(number) => Ok(Self {
                 number,
                 unit: unit.to_string(),
+                negative: false,
             }),
             None => Err(QuantityRefusal::OutOfRange {
                 number: shown(num),
@@ -397,8 +440,13 @@ impl Quantity {
         }
     }
 
+    /// The number as text, with its sign, and the unit.
     pub fn as_pair(&self) -> (String, String) {
-        (self.number.shortest(), self.unit.clone())
+        let sign = if self.negative { "-" } else { "" };
+        (
+            format!("{sign}{}", self.number.shortest()),
+            self.unit.clone(),
+        )
     }
 
     /// The time units the core knows (rule 25), as the exponent of the unit in femtoseconds.
@@ -467,7 +515,13 @@ impl Quantity {
 
 impl fmt::Display for Quantity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.number, self.unit)
+        write!(
+            f,
+            "{}{}{}",
+            if self.negative { "-" } else { "" },
+            self.number,
+            self.unit
+        )
     }
 }
 

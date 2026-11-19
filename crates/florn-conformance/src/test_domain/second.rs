@@ -37,17 +37,37 @@ pub static ASKED: AtomicUsize = AtomicUsize::new(0);
 pub struct SecondDomain {
     /// `[second] faulted-policy`: what happens to a guest of one of its worlds that faulted.
     policy: Option<FaultPolicy>,
+    /// A unit it registers (of `frequency`), for the test of one symbol held by two domains.
+    unit: Option<&'static str>,
 }
 
 impl SecondDomain {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// A second domain that registers the unit `symbol`.
+    pub fn with_unit(symbol: &'static str) -> Self {
+        Self {
+            unit: Some(symbol),
+            ..Self::default()
+        }
+    }
 }
 
 impl Domain for SecondDomain {
     fn name(&self) -> &'static str {
         NAME
+    }
+    fn units(&self) -> Vec<florn_host::UnitDef> {
+        self.unit
+            .map(|symbol| florn_host::UnitDef {
+                symbol,
+                factor: florn_model::Decimal::parse("1").expect("a decimal"),
+                dimension: "frequency",
+            })
+            .into_iter()
+            .collect()
     }
     fn connection_types(&self) -> Vec<&'static str> {
         Vec::new()

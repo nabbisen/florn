@@ -44,6 +44,10 @@ fn model_error(path: &str, kind: florn_model::Kind) -> Error {
     Error::at(Kind::Model(Box::new(kind)), path)
 }
 
+fn boxed_error(path: &str, kind: Box<florn_model::Kind>) -> Error {
+    Error::at(Kind::Model(kind), path)
+}
+
 /// An `f64` parameter written as a number: a value that is not finite, or that is not zero and
 /// becomes zero, is `quantity.out-of-range` and never a parameter (finding F-13); the text is
 /// read as one decimal number and rounded once.
@@ -64,6 +68,96 @@ fn f64_of_number(text: &str, path: &str) -> Result<f64, Error> {
         return Err(out_of_range());
     }
     Ok(f)
+}
+
+impl Units for Vec<UnitDef> {
+    fn unit(&self, symbol: &str) -> Option<UnitDef> {
+        self.iter().find(|u| u.symbol == symbol).copied()
+    }
+}
+
+/// A unit of the core (RFC 004 rules 25 and 26): a time or a number of bytes. A domain's field of
+/// another dimension written in one is of the wrong dimension, not in a unit nobody knows.
+fn is_core_unit(unit: &str) -> bool {
+    Quantity::time_unit_femto_exponent(unit).is_some()
+        || matches!(unit, "B" | "KiB" | "MiB" | "GiB")
+}
+
+/// The SI value of a quantity written for a field of the dimension `expected` (RFC 012 rule 5,
+/// finding F-13, F-17): the unit must be one a domain registers, of that dimension; the number and
+/// the unit's factor are converted by exact decimal arithmetic and rounded once, and the sign is
+/// applied after, so that `-x` is exactly the negation of `x`. A value that would be infinity, or
+/// that is not zero and would be zero, is `quantity.out-of-range`.
+pub fn convert_quantity(
+    units: &dyn Units,
+    field: &str,
+    q: &Quantity,
+    expected: &'static str,
+) -> Result<f64, Box<florn_model::Kind>> {
+    use florn_model::Kind;
+    let wrong_dimension = || {
+        Box::new(Kind::QuantityDimension {
+            field: field.to_string(),
+            value: q.as_pair(),
+            expected,
+        })
+    };
+    let Some(written) = units.unit(&q.unit) else {
+        return Err(if is_core_unit(&q.unit) {
+            wrong_dimension()
+        } else {
+            Box::new(Kind::QuantityUnknownUnit {
+                field: field.to_string(),
+                unit: q.unit.clone(),
+            })
+        });
+    };
+    if written.dimension != expected {
+        return Err(wrong_dimension());
+    }
+    let magnitude =
+        q.number
+            .times_as_f64(written.factor)
+            .map_err(|_| Kind::QuantityOutOfRange {
+                field: field.to_string(),
+                value: {
+                    let (number, unit) = q.as_pair();
+                    (shown(&number), shown(&unit))
+                },
+            })?;
+    Ok(if q.negative { -magnitude } else { magnitude })
+}
+
+/// A quantity in the text of a field a domain reads itself, an attribute (RFC 012 rule 5: "a
+/// parameter **or an attribute**"), converted as a parameter is: the SI value, or the refusal the
+/// core would give a scenario's field: `quantity.missing-unit`, `manifest.type` for a text that is
+/// no quantity, `quantity.unknown-unit`, `quantity.dimension`, `quantity.out-of-range`. A domain
+/// calls it from `validate` with its own units and the dimension the field expects; the sign is
+/// allowed, and a field that cannot be negative is the domain's to check on the value.
+pub fn quantity_si(
+    units: &dyn Units,
+    field: &str,
+    text: &str,
+    expected: &'static str,
+) -> Result<f64, Box<florn_model::Kind>> {
+    use florn_model::Kind;
+    match Quantity::classify_signed(text) {
+        Ok(q) => convert_quantity(units, field, &q, expected),
+        Err(QuantityRefusal::OutOfRange { number, unit }) => {
+            Err(Box::new(Kind::QuantityOutOfRange {
+                field: field.to_string(),
+                value: (number, unit),
+            }))
+        }
+        Err(QuantityRefusal::MissingUnit) => Err(Box::new(Kind::QuantityMissingUnit {
+            field: field.to_string(),
+            dimension: expected,
+        })),
+        Err(_) => Err(Box::new(Kind::ManifestType {
+            field: field.to_string(),
+            expected: "quantity",
+        })),
+    }
 }
 
 /// `value / unit` as a whole number, or `None` if it is not whole or does not fit.
@@ -104,7 +198,11 @@ fn encode_one(
     // 23; SEC-005): the value as written, cut, and the parameter's path.
     if let (ParamType::Ticks | ParamType::Integer | ParamType::Real, DomainValue::Text(s)) =
         (param.ty, value)
-        && let Err(QuantityRefusal::OutOfRange { number, unit }) = Quantity::classify(s)
+        && let Err(QuantityRefusal::OutOfRange { number, unit }) = match param.ty {
+            // Only a `real` may be negative (RFC 004 rule 23); a sign elsewhere is out of range.
+            ParamType::Real => Quantity::classify_signed(s),
+            _ => Quantity::classify(s),
+        }
     {
         return Err(Error::at(
             Kind::Model(Box::new(florn_model::Kind::QuantityOutOfRange {
@@ -163,19 +261,21 @@ fn encode_one(
                         path,
                     ));
                 }
-                // Not a time unit: a unit a domain registers is of another dimension; any
-                // other is unknown.
+                // Not a time unit: a unit a domain registers, or one of the core's own (bytes), is
+                // of another dimension; any other is unknown.
                 Err(None) => {
-                    let kind = match units.unit(&q.unit) {
-                        Some(_) => florn_model::Kind::QuantityDimension {
+                    let known = units.unit(&q.unit).is_some() || is_core_unit(&q.unit);
+                    let kind = if known {
+                        florn_model::Kind::QuantityDimension {
                             field: path.to_string(),
                             value: q.as_pair(),
                             expected: "time",
-                        },
-                        None => florn_model::Kind::QuantityUnknownUnit {
+                        }
+                    } else {
+                        florn_model::Kind::QuantityUnknownUnit {
                             field: path.to_string(),
                             unit: q.unit.clone(),
-                        },
+                        }
                     };
                     return Err(model_error(path, kind));
                 }
@@ -222,43 +322,20 @@ fn encode_one(
             out.extend_from_slice(&n.to_le_bytes());
         }
         (ParamType::Real, DomainValue::Text(s)) => {
-            let q = Quantity::parse(s).map_err(|_| wrong())?;
-            let unknown = |unit: &str| {
+            let q = Quantity::parse_signed(s).map_err(|_| wrong())?;
+            let declared_symbol = param.unit.as_deref().unwrap_or("");
+            // The declared unit is the module's: one the registry does not know is named as such.
+            let declared = units.unit(declared_symbol).ok_or_else(|| {
                 model_error(
                     path,
                     florn_model::Kind::QuantityUnknownUnit {
                         field: path.to_string(),
-                        unit: unit.to_string(),
-                    },
-                )
-            };
-            let declared_symbol = param.unit.as_deref().unwrap_or("");
-            let written = units.unit(&q.unit).ok_or_else(|| unknown(&q.unit))?;
-            // The declared unit is the module's: one the registry does not know is named as such.
-            let declared = units
-                .unit(declared_symbol)
-                .ok_or_else(|| unknown(declared_symbol))?;
-            if written.dimension != declared.dimension {
-                return Err(model_error(
-                    path,
-                    florn_model::Kind::QuantityDimension {
-                        field: path.to_string(),
-                        value: q.as_pair(),
-                        expected: declared.dimension,
-                    },
-                ));
-            }
-            // The SI value: the number and the unit's factor, exactly, rounded once. A value that
-            // would be infinity, or that is not zero and would be zero, is out of range.
-            let f = q.number.times_as_f64(written.factor).map_err(|_| {
-                model_error(
-                    path,
-                    florn_model::Kind::QuantityOutOfRange {
-                        field: path.to_string(),
-                        value: (shown(&q.number.shortest()), shown(&q.unit)),
+                        unit: declared_symbol.to_string(),
                     },
                 )
             })?;
+            let f = convert_quantity(units, path, &q, declared.dimension)
+                .map_err(|kind| boxed_error(path, kind))?;
             out.extend_from_slice(&florn_abi::canonical_f64(f).to_le_bytes());
         }
         _ => return Err(wrong()),

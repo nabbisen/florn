@@ -186,3 +186,113 @@ fn a_time_parameter_written_in_a_unit_of_a_domain_is_of_the_wrong_dimension() {
     .expect_err("refused");
     assert_eq!(none.codes(), ["quantity.unknown-unit"]);
 }
+
+#[test]
+fn a_real_may_be_negative_and_is_exactly_the_negation_of_its_magnitude() {
+    // RFC 004 rule 23 (amended) and RFC 012 finding F-17: the value is converted and rounded
+    // once, and the sign applied after.
+    for text in ["0.1nF", "0.3tF", "3.3uF", "1.5F", "4.7uF", "1e-9F"] {
+        let positive = real(text).unwrap();
+        let negative = real(&format!("-{text}")).unwrap();
+        assert_eq!(negative.to_bits(), (-positive).to_bits(), "{text}");
+        assert!(negative < 0.0, "{text}");
+    }
+    assert_eq!(real("-12ohm").unwrap(), -12.0);
+    assert_eq!(real("-1.5kohm").unwrap(), -1500.0);
+    // `-0` is zero, with no sign: the bytes are those of +0.0.
+    for zero in ["-0ohm", "-0.0ohm", "-0kohm"] {
+        assert_eq!(real(zero).unwrap().to_bits(), 0.0f64.to_bits(), "{zero}");
+    }
+    // The range checks apply to the magnitude, and a refusal shows the sign.
+    for text in ["-1e400ohm", "-1e-400ohm"] {
+        let r = real(text).expect_err(text);
+        assert_eq!(r[0].code, "quantity.out-of-range", "{text}");
+        assert!(r[0].params[1].contains('-'), "{text}: {:?}", r[0].params);
+    }
+    // The dimension check names the signed value.
+    let r = encode("real", "ohm", DomainValue::Text("-5V".into())).expect_err("refused");
+    assert_eq!(r[0].code, "quantity.dimension");
+    assert!(r[0].params[1].contains("-5"), "{:?}", r[0].params);
+    // Never `+`, and a sign is the wrong type where no quantity is meant.
+    assert_eq!(real("+5ohm").expect_err("plus")[0].code, "config.type");
+    assert_eq!(real("--5ohm").expect_err("two")[0].code, "config.type");
+}
+
+#[test]
+fn a_sign_is_out_of_range_for_a_time_a_count_and_every_unsigned_field() {
+    for (ty, unit, value) in [
+        ("ticks", "", "-5ms"),
+        ("ticks", "", "-0ms"),
+        ("integer", "0.01USD", "-5USD"),
+        ("integer", "0.01USD", "-0USD"),
+    ] {
+        let r = encode(ty, unit, DomainValue::Text(value.into())).expect_err(value);
+        assert_eq!(r[0].code, "quantity.out-of-range", "{ty} {value}");
+        assert_eq!(r[0].field.as_deref(), Some("config.p"), "{ty} {value}");
+        assert!(r[0].params[1].contains('-'), "{value}: {:?}", r[0].params);
+    }
+}
+
+#[test]
+fn a_unit_of_the_core_written_for_a_real_is_of_the_wrong_dimension() {
+    // `5ms` for an `ohm` field is a time where a resistance was asked for, not a unit nobody knows.
+    for text in ["5ms", "5ns", "5KiB", "-5ms"] {
+        let r = real(text).expect_err(text);
+        assert_eq!(r[0].code, "quantity.dimension", "{text}: {r:?}");
+        assert!(
+            r[0].params[2].contains("resistance"),
+            "{text}: {:?}",
+            r[0].params
+        );
+    }
+    // A bytes unit for a time field is of the wrong dimension too.
+    let r = encode("ticks", "", DomainValue::Text("5KiB".into())).expect_err("bytes");
+    assert_eq!(r[0].code, "quantity.dimension");
+    assert!(r[0].params[2].contains("time"), "{:?}", r[0].params);
+    // A unit no one knows stays unknown.
+    assert_eq!(
+        real("5parsec").expect_err("parsec")[0].code,
+        "quantity.unknown-unit"
+    );
+}
+
+#[test]
+fn an_attribute_is_converted_as_a_parameter_is() {
+    // The helper a domain calls from `validate` (RFC 012 rule 5, "a parameter or an attribute").
+    let units = vec![
+        Registry.unit("ohm").unwrap(),
+        Registry.unit("kohm").unwrap(),
+        Registry.unit("nF").unwrap(),
+    ];
+    let si = |text: &str, dimension| {
+        florn_admission::config::quantity_si(&units, "connections[0].attrs.r", text, dimension)
+    };
+    assert_eq!(si("1.5kohm", "resistance").unwrap(), 1500.0);
+    assert_eq!(si("-1.5kohm", "resistance").unwrap(), -1500.0);
+    assert_eq!(
+        si("0.1nF", "capacitance").unwrap().to_bits(),
+        1e-10f64.to_bits()
+    );
+    let code = |text, dimension| {
+        let kind = si(text, dimension).expect_err(text);
+        florn_model::Error::new(*kind).code()
+    };
+    assert_eq!(code("5parsec", "resistance"), "quantity.unknown-unit");
+    assert_eq!(code("5nF", "resistance"), "quantity.dimension");
+    assert_eq!(code("5ms", "resistance"), "quantity.dimension");
+    assert_eq!(code("1e400ohm", "resistance"), "quantity.out-of-range");
+    assert_eq!(code("5", "resistance"), "quantity.missing-unit");
+    assert_eq!(code("ten", "resistance"), "manifest.type");
+    assert_eq!(code("+5ohm", "resistance"), "manifest.type");
+}
+
+#[test]
+fn a_size_in_a_module_manifest_refuses_a_sign_as_out_of_range() {
+    // `[resources] memory = "-1MiB"`: a size cannot be negative (RFC 004 rule 23, F-17).
+    let text = "florn-module = 1\nworld = \"w\"\nkind = \"k\"\n[resources]\nmemory = \"-1MiB\"\n";
+    let e = parse_manifest(text).expect_err("a negative size");
+    assert_eq!(e.codes(), ["quantity.out-of-range"]);
+    assert_eq!(e.0[0].field.as_deref(), Some("resources.memory"));
+    let ok = "florn-module = 1\nworld = \"w\"\nkind = \"k\"\n[resources]\nmemory = \"1MiB\"\n";
+    assert!(parse_manifest(ok).is_ok());
+}

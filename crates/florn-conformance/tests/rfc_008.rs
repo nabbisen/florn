@@ -136,6 +136,18 @@ fn units_registered_by_the_domain_reach_the_config() {
     assert!(weight("0.1nhop").is_ok(), "a registered prefix");
     let e = weight("2ohm").err().expect("an unknown unit is refused");
     assert_eq!(domain_codes(e), vec!["quantity.unknown-unit"]);
+    // A `real` may be negative (RFC 004 rule 23, F-17); `+` is no sign.
+    assert!(weight("-2khop").is_ok(), "a signed real");
+    assert!(weight("-0hop").is_ok(), "-0 is zero");
+    assert_eq!(
+        domain_codes(weight("+2khop").err().expect("plus")),
+        vec!["config.type"]
+    );
+    // A time written for it is of the wrong dimension, not an unknown unit.
+    assert_eq!(
+        domain_codes(weight("2ms").err().expect("a time")),
+        vec!["quantity.dimension"]
+    );
 }
 
 /// RFC 012 rule 5 and finding F-13: a unit has a dimension, the parameter declares one, and a
@@ -592,4 +604,52 @@ fn a_checkpoint_carries_the_domain_state() {
     .unwrap();
     third.run_to_end();
     assert_ne!(third.chain_hex(), whole.chain_hex());
+}
+
+/// A wire with the attribute `r` as given, started under the test domain.
+fn wire_r(value: &str) -> Result<host::Host, HostError> {
+    let body = format!(
+        "{}{}{}",
+        td::prober(1, 1),
+        td::prober(2, 1),
+        td::wire(100, &[(1, 0), (2, 0)], &format!("r = \"{value}\""))
+    );
+    td::try_start(&td::text("attr", 50, 1, &body), host::options())
+}
+
+fn attribute_codes(value: &str) -> Vec<String> {
+    match wire_r(value) {
+        Ok(_) => Vec::new(),
+        Err(e) => domain_codes(e),
+    }
+}
+
+/// RFC 012 rule 5, "a parameter **or an attribute**": the Host's helper converts a domain's
+/// attribute as a parameter is, and refuses with the same codes, naming the attribute's field.
+#[test]
+fn an_attribute_is_checked_by_the_hosts_helper_as_a_parameter_is() {
+    assert!(attribute_codes("2khop").is_empty(), "a registered unit");
+    assert!(
+        attribute_codes("-2khop").is_empty(),
+        "a sign is allowed: r is a real"
+    );
+    assert!(attribute_codes("0.1nhop").is_empty());
+    assert_eq!(attribute_codes("2pps"), ["quantity.dimension"]);
+    assert_eq!(attribute_codes("2ms"), ["quantity.dimension"]);
+    assert_eq!(attribute_codes("2parsec"), ["quantity.unknown-unit"]);
+    assert_eq!(attribute_codes("1e400khop"), ["quantity.out-of-range"]);
+    assert_eq!(attribute_codes("1e-400hop"), ["quantity.out-of-range"]);
+    assert_eq!(attribute_codes("2"), ["quantity.missing-unit"]);
+    assert_eq!(attribute_codes("ten"), ["manifest.type"]);
+    // The refusal names the attribute's field and the dimension expected, in a notification the
+    // catalogue accepts.
+    let Err(HostError::Domain(ns)) = wire_r("2pps") else {
+        panic!("2pps is a frequency in a field of resistance");
+    };
+    let n = &ns[0];
+    assert_eq!(n.scope.field.as_deref(), Some("connections[0].attrs.r"));
+    assert!(n.params.iter().any(
+        |(name, v)| name == "expected" && *v == florn_control::Value::Enum("resistance".into())
+    ));
+    n.check().expect("quantity.dimension is in the catalogue");
 }

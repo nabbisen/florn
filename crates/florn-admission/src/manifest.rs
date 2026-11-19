@@ -353,6 +353,20 @@ impl Reader {
     }
     fn bytes(&mut self, t: &toml::Table, path: &str, key: &str) -> Option<u64> {
         let s = self.string(t, path, key, false)?;
+        // A size cannot be negative: a sign is out of range, naming the field (RFC 004 rule 23).
+        if s.trim_start().starts_with('-')
+            && let Err(florn_model::QuantityRefusal::OutOfRange { number, unit }) =
+                Quantity::classify(&s)
+        {
+            self.errors.push(Error::at(
+                Kind::Model(Box::new(florn_model::Kind::QuantityOutOfRange {
+                    field: format!("{path}{key}"),
+                    value: (number, unit),
+                })),
+                format!("{path}{key}"),
+            ));
+            return None;
+        }
         let q = Quantity::parse(&s).ok();
         match q.and_then(|q| q.to_bytes().ok().flatten()) {
             Some(b) => Some(b),
@@ -436,9 +450,9 @@ pub fn value_fits(ty: ParamType, v: &DomainValue) -> bool {
         (ParamType::Bytes, DomainValue::Text(s)) => {
             s.len() % 2 == 0 && s.bytes().all(|b| b.is_ascii_hexdigit())
         }
-        (ParamType::Ticks | ParamType::Integer | ParamType::Real, DomainValue::Text(s)) => {
-            Quantity::parse(s).is_ok()
-        }
+        // Only a `real` may be negative (RFC 004 rule 23); a sign elsewhere is refused before this.
+        (ParamType::Real, DomainValue::Text(s)) => Quantity::parse_signed(s).is_ok(),
+        (ParamType::Ticks | ParamType::Integer, DomainValue::Text(s)) => Quantity::parse(s).is_ok(),
         _ => false,
     }
 }

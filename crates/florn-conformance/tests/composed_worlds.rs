@@ -283,3 +283,23 @@ fn a_controller_is_not_built_over_a_composition_naming_a_world_its_domain_lacks(
     );
     let _ = controller(broken);
 }
+
+#[test]
+#[should_panic(expected = "the unit `hop` is registered by the domains `test` and `second`")]
+fn a_controller_is_not_built_over_two_domains_that_register_one_unit() {
+    // RFC 004 rule 27 and finding F-13: a symbol two held domains register would be read as
+    // whichever came first, so the Host's configuration is wrong and it stops, naming it.
+    let clash = Domains::core()
+        .with(TestDomain::new)
+        .with(|| SecondDomain::with_unit("hop"));
+    let _ = controller(clash);
+}
+
+#[test]
+fn two_domains_with_different_units_are_fine() {
+    let _ = controller(
+        Domains::core()
+            .with(TestDomain::new)
+            .with(|| SecondDomain::with_unit("rps")),
+    );
+}

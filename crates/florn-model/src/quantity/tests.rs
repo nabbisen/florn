@@ -153,3 +153,41 @@ fn infinity_and_a_nonzero_value_that_becomes_zero_are_refused() {
     );
     assert!(dec("1e-310").times_as_f64(dec("1")).unwrap() > 0.0);
 }
+
+#[test]
+fn a_sign_is_read_only_where_it_is_asked_for() {
+    // RFC 004 rule 23 (amended, F-17): a `real` quantity may begin with `-`, never `+`; `-0` is
+    // zero with no sign; a field that cannot be negative refuses a sign as out of range, `-0` too.
+    let q = Quantity::parse_signed("-12V").unwrap();
+    assert!(q.negative);
+    assert_eq!(q.as_pair(), ("-12".to_string(), "V".to_string()));
+    assert_eq!(q.to_string(), "-12V");
+    for zero in ["-0V", "-0.0V", "-0e5V"] {
+        let q = Quantity::parse_signed(zero).unwrap();
+        assert!(!q.negative, "{zero}: -0 is zero, with no sign");
+        assert_eq!(q.as_pair().0, "0");
+    }
+    assert!(!Quantity::parse_signed("5V").unwrap().negative);
+    // The exponent's own sign is not the number's.
+    let q = Quantity::parse_signed("-1e-3s").unwrap();
+    assert!(q.negative && q.number == dec("0.001"));
+    // Never `+`, never two signs, no space after it.
+    for bad in ["+5V", "--5V", "-+5V", "- 5V", "-", "-V", "-e5V"] {
+        assert!(Quantity::parse_signed(bad).is_err(), "{bad}");
+    }
+    // The unsigned readers refuse a sign as out of range, with the sign in the refusal.
+    for token in ["-5ms", "-0ms", "-0.5mH"] {
+        let Err(QuantityRefusal::OutOfRange { number, unit }) = Quantity::classify(token) else {
+            panic!("{token} was not refused as out of range");
+        };
+        assert!(number.starts_with('-'), "{token}: {number}");
+        assert!(!unit.is_empty());
+        assert!(Quantity::parse(token).is_err(), "{token}");
+    }
+    // An unsigned token is read as before by both.
+    assert_eq!(Quantity::parse("5ms"), Quantity::parse_signed("5ms"));
+    assert_eq!(
+        Quantity::classify("+5ms").err(),
+        Some(QuantityRefusal::Malformed)
+    );
+}

@@ -500,7 +500,8 @@ impl Domains {
     }
 
     /// The compositions the Host **holds every domain of** and cannot build: a named world that
-    /// its domain does not have, or parts that differ on one interface. Each is a defect of the
+    /// its domain does not have, or parts that differ on one interface; and a unit symbol that
+    /// two held domains register, or one registers twice. Each is a defect of the
     /// Host's own configuration (the shell that registered it and the domains it holds), not of
     /// a scenario; [`Controller::new`](crate::Controller::new) stops on it. A composition with a
     /// domain the Host does not hold is not a defect: it is left out (see
@@ -508,6 +509,24 @@ impl Domains {
     pub fn composition_defects(&self) -> Vec<String> {
         let held = self.domain_worlds();
         let mut out = Vec::new();
+        // A unit symbol registered twice, by two domains or by one, would be read as whichever
+        // came first: the Host's configuration is wrong (RFC 004 rule 27; finding F-13).
+        let mut owner_of: Vec<(&'static str, &'static str)> = Vec::new();
+        for (domain, make) in &self.factories {
+            for unit in make().units() {
+                match owner_of.iter().find(|(symbol, _)| *symbol == unit.symbol) {
+                    Some((_, first)) if first == domain => out.push(format!(
+                        "the unit `{}` is registered twice by the domain `{domain}`",
+                        unit.symbol
+                    )),
+                    Some((_, first)) => out.push(format!(
+                        "the unit `{}` is registered by the domains `{first}` and `{domain}`",
+                        unit.symbol
+                    )),
+                    None => owner_of.push((unit.symbol, domain)),
+                }
+            }
+        }
         for c in &self.composed {
             let domain_held = |d: &str| self.factories.iter().any(|(n, _)| *n == d);
             if !c.spans.iter().all(|(d, _)| domain_held(d)) {
@@ -584,6 +603,24 @@ impl Domains {
         }
         Ok(out)
     }
+}
+
+/// A quantity in the text of an attribute a domain reads itself (RFC 012 rule 5: "a parameter **or
+/// an attribute**"), converted as a parameter is: its SI value, or the notification of the refusal
+/// the core would give a scenario's field (`quantity.missing-unit`, `manifest.type`,
+/// `quantity.unknown-unit`, `quantity.dimension`, `quantity.out-of-range`). A domain calls it from
+/// `validate` with its own units (`&self.units()`, or [`DomainUnits`]) and the dimension the
+/// field expects. A sign is allowed; a field that cannot be negative is the domain's to check.
+pub fn quantity_si(
+    units: &dyn Units,
+    field: &str,
+    text: &str,
+    expected: &'static str,
+) -> Result<f64, Box<Notification>> {
+    florn_admission::config::quantity_si(units, field, text, expected).map_err(|kind| {
+        let error = florn_model::Error::new(*kind);
+        Box::new(refusal(error.code(), field, error.params()))
+    })
 }
 
 /// The units of every composed domain, for config encoding (RFC 004 rule 27).

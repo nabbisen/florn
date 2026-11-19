@@ -306,3 +306,23 @@ fn zero_is_a_whole_number_of_ticks_in_every_tick_length() {
     let (code, _, _) = only_error(&scenario_at("1ns", "0y", "1MiB"));
     assert_eq!(code, "quantity.unknown-unit");
 }
+
+/// RFC 004 rule 23 (amended, F-17): a time, a count and every field that cannot be negative
+/// refuse a sign as `quantity.out-of-range` naming the field, the value shown with its sign; `-0`
+/// is refused too, since the sign is what is refused.
+#[test]
+fn a_sign_in_a_time_or_a_size_is_out_of_range() {
+    for (text, field) in [
+        (scenario("-5ns", "1MiB"), "time.end"),
+        (scenario("-0ns", "1MiB"), "time.end"),
+        (scenario("5ns", "-1MiB"), "limits.default.memory"),
+    ] {
+        let (code, at, texts) = only_error(&text);
+        assert_eq!(code, "quantity.out-of-range", "{field}");
+        assert_eq!(at.as_deref(), Some(field));
+        assert!(texts[0].starts_with('-'), "{field}: {texts:?}");
+    }
+    // `+` is no sign: the token is no quantity.
+    let e = parse(&scenario("+5ns", "1MiB")).unwrap_err();
+    assert_eq!(e.codes(), ["manifest.type"]);
+}
