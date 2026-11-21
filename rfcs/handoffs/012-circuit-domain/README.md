@@ -22,22 +22,9 @@ Milestone M1 is done: PR-31 to PR-34a are merged and release 0.3.1 is published.
 
 PR-39, PR-40 and PR-41 are done (`bdebadb`; `e8bf591` to `bd571cd`; `91666f5`, 2026-11-19): several and composed worlds; recorded imports, the start hook, a domain's end request and the faulted-actor policy; units with dimensions, converted exactly and rounded once, and `quantity.dimension`.
 
-**Next: the PR-41 follow-up, then PR-42.** The follow-up is one review request with these commits, before PR-42 starts:
+PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17), the Host's `quantity_si` checks a domain's attribute, a core unit on a `real` is `quantity.dimension`, and one unit symbol in two domains stops the controller.
 
-1. **A sign for a `real` quantity (RFC 012 finding F-17, RFC 004 rule 23 amended).**
-   - A quantity in a `real` field may begin with `-`; `+` is still refused.
-   - The value is converted as today and then negated, so `-x` is exactly the negation of `x`, and a written `-0` gives `+0.0`.
-   - A time, a count, or any field that cannot be negative refuses a sign with `quantity.out-of-range` naming the field.
-   - Tests: `-0.1nF` is the exact negation of `0.1nF`; `-0` gives `+0.0`; `-5ms` for a time is refused. Every recorded digest is unchanged.
-2. **The Host's check for a domain's attribute** (RFC 012 rule 5: "a parameter **or an attribute**"). Add a helper the domain calls from `validate` (for example on `DomainUnits`): it takes the field, the text and the expected dimension, and gives the SI value or the notification (`quantity.unknown-unit`, `quantity.dimension`, `quantity.out-of-range`), with the same conversion as a parameter. The circuit domain uses it from PR-44, because M3 adds nothing to the Host. A test in the kit's test domain. The network's `bandwidth` may stay as it is.
-3. **A core time unit written for a `real`** (`5ms` for an `ohm` parameter) is `quantity.dimension` with `expected` the declared dimension, not `quantity.unknown-unit`: the core's time units are of dimension `time`.
-4. **One symbol registered by two held domains** is a defect of the Host's configuration. `Controller::new` stops with a panic naming the symbol and the two domains, in every build (as for a composition it cannot build), and a test covers it.
-5. **Three Japanese texts**, nearer to what the quantities are:
-   - `enum.dimension.inertia`: 慣性モーメント
-   - `enum.dimension.friction` (N·m·s per radian): 粘性摩擦係数
-   - `enum.dimension.voltage-per-speed` (V·s per radian): 角速度あたりの電圧
-
-Then PR-42, the comparison of Tier 2 (V). Read its row in `task-breakdown-pr-plan.md`, section 3.5 of `implementation-handoff.md` and B-42 first. A verifier session follows its push.
+**Next: PR-42, the comparison of Tier 2 (V).** Read its row in `task-breakdown-pr-plan.md`, section 3.5 of `implementation-handoff.md` and B-42 first. It starts from RFC 001 section 1.1 and rules 41, 50 and 62, RFC 013 rules 20 and 21, RFC 012 finding F-5 and RFC 007. A verifier session follows its push: the review request says so, and the team waits for the verifier's report and its review before PR-43.
 
 ## What Phase 4 delivers
 
