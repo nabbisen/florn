@@ -257,6 +257,45 @@ pub enum BuiltinEvent<'a> {
     Domain(&'a DomainEvent),
 }
 
+/// The tolerance of the comparison of Tier 2 (RFC 001 rule 62; RFC 013 rule 20): two values `a`
+/// and `b` of one numeric field agree when `|a − b| ≤ atol + rtol·max(|a|, |b|)` in SI units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tolerance {
+    pub atol: f64,
+    pub rtol: f64,
+}
+
+/// Where in an activation's effects a payload sits, for [`Domain::numeric_fields`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Site {
+    /// The payload of a committed `send` on this port.
+    Send { port: u32 },
+    /// The payload of a `report` on this channel.
+    Report { channel: u32 },
+}
+
+/// A payload read for the comparison of Tier 2 (RFC 013 rule 20): its numeric fields, which take the
+/// tolerance, and what is left of it, which is compared exactly (a tick such as `condition`'s
+/// `located`, a count, a flag).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Numeric {
+    pub fields: Vec<NumericField>,
+    /// The bytes of the payload that are no numeric field, in their order.
+    pub exact: Vec<u8>,
+}
+
+/// One numeric field of a payload (RFC 013 rule 20, item 2): an `f64` the comparison holds to the
+/// tolerance, in SI units. A field held in another unit says so: `factor` is the unit's factor to
+/// the SI unit (the value in SI is `value × factor`), and `unit` its symbol, empty for a
+/// dimensionless field (RFC 007 rule 6).
+#[derive(Clone, Debug, PartialEq)]
+pub struct NumericField {
+    pub name: String,
+    pub unit: String,
+    pub factor: f64,
+    pub value: f64,
+}
+
 /// A domain of the Host core (RFC 008 rule 1). Every operation has the default of a domain
 /// without that feature; `name`, the types and `deliver` are the least a domain gives.
 pub trait Domain {
@@ -363,6 +402,26 @@ pub trait Domain {
     /// no [`Action`], RFC 012 finding F-7). The Host reads it after every commit, and the request
     /// is **taken**: it is told once. The default asks for nothing.
     fn end_requested(&mut self) -> Option<EndRequest> {
+        None
+    }
+    /// The tolerance of the comparison of Tier 2 for a run of this domain (RFC 001 rule 62; RFC 013
+    /// rule 20), when the domain is **continuous** (RFC 001 section 1.1: the Host computes with
+    /// floating point); `None` for a discrete domain, whose runs are compared exactly across Hosts
+    /// too. Read once the domain is composed, so it may come from the scenario's own table.
+    fn tolerance(&self) -> Option<Tolerance> {
+        None
+    }
+    /// Whether an actor is of a continuous class (a controller, a sensor, a guest device, a
+    /// detector): its consumed work and its draws are exempt from the comparison of Tier 2
+    /// (RFC 013 rule 20, item 4). The default exempts none.
+    fn continuous_actor(&self, _actor: Identity) -> bool {
+        false
+    }
+    /// The numeric fields of a payload an actor of this domain committed, in the order of the
+    /// payload, with the rest of it, for the comparison of Tier 2 (RFC 013 rule 20, items 2 and 3),
+    /// or `None` for a payload that has none, which is compared by digest. Only a continuous
+    /// domain answers.
+    fn numeric_fields(&self, _actor: Identity, _site: Site, _payload: &[u8]) -> Option<Numeric> {
         None
     }
     /// The start hook (RFC 012 finding F-15; rule 30): called once, after every guest's `init`
@@ -1150,6 +1209,15 @@ impl Domain for Lent {
     }
     fn end_requested(&mut self) -> Option<EndRequest> {
         self.reached("end_requested")
+    }
+    fn tolerance(&self) -> Option<Tolerance> {
+        self.reached("tolerance")
+    }
+    fn continuous_actor(&self, _: Identity) -> bool {
+        self.reached("continuous_actor")
+    }
+    fn numeric_fields(&self, _: Identity, _: Site, _: &[u8]) -> Option<Numeric> {
+        self.reached("numeric_fields")
     }
     fn faulted_policy(&self) -> FaultPolicy {
         self.reached("faulted_policy")

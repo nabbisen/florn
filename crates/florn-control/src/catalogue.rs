@@ -120,6 +120,10 @@ pub enum Code {
     ExportPreview,
     ReplayMatched,
     ReplayDiverged,
+    ReplayWithinTolerance,
+    ReplayValueDiffers,
+    ReplayRecordDiffers,
+    ReplayNeedsPayloads,
     CheckpointMismatch,
     CheckpointTaken,
     CheckpointBudget,
@@ -912,6 +916,52 @@ pub const CATALOGUE: &[Entry] = &[
         ends: Ends::Nothing,
     },
     Entry {
+        code: Code::ReplayWithinTolerance,
+        name: "replay.within-tolerance",
+        params: &[
+            ("compared", ParamType::Count),
+            ("differing", ParamType::Count),
+            ("worst", ParamType::Name),
+            ("largest", ParamType::Quantity),
+            ("at", ParamType::Tick),
+        ],
+        severity: Severity::Info,
+        scope: ScopeKind::Run,
+        ends: Ends::Nothing,
+    },
+    Entry {
+        code: Code::ReplayValueDiffers,
+        name: "replay.value-differs",
+        params: &[
+            ("record", ParamType::Count),
+            ("field", ParamType::Name),
+            ("recorded", ParamType::Quantity),
+            ("replayed", ParamType::Quantity),
+        ],
+        severity: Severity::Error,
+        scope: ScopeKind::Run,
+        ends: Ends::Nothing,
+    },
+    Entry {
+        code: Code::ReplayRecordDiffers,
+        name: "replay.record-differs",
+        params: &[
+            ("record", ParamType::Count),
+            ("what", ParamType::Enum("record-difference")),
+        ],
+        severity: Severity::Error,
+        scope: ScopeKind::Run,
+        ends: Ends::Nothing,
+    },
+    Entry {
+        code: Code::ReplayNeedsPayloads,
+        name: "replay.needs-payloads",
+        params: &[("side", ParamType::Enum("replay-side"))],
+        severity: Severity::Error,
+        scope: ScopeKind::Run,
+        ends: Ends::Nothing,
+    },
+    Entry {
         code: Code::CheckpointMismatch,
         name: "checkpoint.mismatch",
         params: &[
@@ -1212,6 +1262,11 @@ pub const ENUMERATIONS: &[(&str, &[&str])] = &[
     ),
     ("drop-reason", &["down", "too-large", "loss", "faulted"]),
     ("link-state", &["up", "down"]),
+    (
+        "record-difference",
+        &["key", "structure", "payload", "length"],
+    ),
+    ("replay-side", &["recorded", "replayed", "both"]),
 ];
 
 pub fn enumeration(set: &str) -> Option<&'static [&'static str]> {

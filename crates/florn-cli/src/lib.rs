@@ -13,8 +13,8 @@
 //!
 //! Messages are English from the built-in table; `run` prints the chain, `replay` the
 //! comparison, `admit` the manifest and the admitted hash, `probe` the capacity. Exit codes: 0
-//! done, 1 refused or failed, 2 a replay diverged, 3 the run ended with a run fault (the
-//! `ended` line says which).
+//! done (a replay that matched, or is within tolerance), 1 refused or failed (a replay that needs
+//! payloads), 2 a replay diverged, 3 the run ended with a run fault (the `ended` line says which).
 #![forbid(unsafe_code)]
 
 pub mod english;
@@ -54,7 +54,7 @@ struct Args {
 }
 
 fn usage() -> &'static str {
-    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads] [--cost-model N] [--residency resident|swap] [--checkpoint-at TICK --checkpoint-out <file>]\n  florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--to TICK] [--out <file>] [--trace] [--payloads] [--residency resident|swap]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--residency resident|swap]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done; 1 refused or failed; 2 the replay diverged; 3 the run ended with a run fault"
+    "usage:\n  florn run <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--seed N] [--out <file>] [--trace] [--payloads] [--cost-model N] [--residency resident|swap] [--checkpoint-at TICK --checkpoint-out <file>]\n  florn resume <run.florn-checkpoint> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--to TICK] [--out <file>] [--trace] [--payloads] [--residency resident|swap]\n  florn replay <run.florn-run> <scenario.toml|package.florn> [--module <file>]... [--modules <dir>] [--residency resident|swap]\n  florn admit <module.wasm>\n  florn probe [--instances N] [--memory BYTES]\n  florn help\nexit codes: 0 done (a replay that matched or is within tolerance); 1 refused or failed (a replay that needs payloads); 2 the replay diverged; 3 the run ended with a run fault"
 }
 
 fn parse_args(argv: &[String]) -> Result<Args, String> {
@@ -453,29 +453,38 @@ fn cmd_replay(args: &Args) -> Result<ExitCode, String> {
     let replies = c.handle(Envelope::new(Message::Command(Command::Advance {
         unit: Unit::ToTick(u64::MAX),
     })));
-    let mut outcome: Option<&str> = None;
-    for m in &replies {
-        if let Message::Notification(n) = m {
-            match n.code.as_str() {
-                "replay.matched" => outcome = Some("matched"),
-                "replay.diverged" => outcome = Some("diverged"),
-                _ => {}
-            }
-        }
-    }
+    let codes: Vec<&str> = replies
+        .iter()
+        .filter_map(|m| match m {
+            Message::Notification(n) => Some(n.code.as_str()),
+            _ => None,
+        })
+        .collect();
+    let outcome = replay_result(&codes);
     report(replies);
     print_state(&mut c);
     match outcome {
-        Some("matched") => {
-            println!("replay = matched");
-            Ok(ExitCode::SUCCESS)
-        }
-        Some(_) => {
-            println!("replay = diverged");
-            Ok(ExitCode::from(2))
+        Some((word, code)) => {
+            println!("replay = {word}");
+            Ok(ExitCode::from(code))
         }
         None => Err("the replay reported no comparison".into()),
     }
+}
+
+/// The word `replay` prints and its exit code, from the codes of the notifications of the replay
+/// (RFC 013 rule 20): `matched` and `within-tolerance` are 0, `needs-payloads` is 1, `diverged` is
+/// 2. The first record that differs is said in place of `replay.diverged`.
+fn replay_result(codes: &[&str]) -> Option<(&'static str, u8)> {
+    codes.iter().find_map(|code| match *code {
+        "replay.matched" => Some(("matched", 0)),
+        "replay.within-tolerance" => Some(("within-tolerance", 0)),
+        "replay.diverged" | "replay.value-differs" | "replay.record-differs" => {
+            Some(("diverged", 2))
+        }
+        "replay.needs-payloads" => Some(("needs-payloads", 1)),
+        _ => None,
+    })
 }
 
 fn cmd_admit(args: &Args) -> Result<ExitCode, String> {

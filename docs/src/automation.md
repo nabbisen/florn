@@ -31,7 +31,7 @@ florn help
 |---|---|---|
 | `run` | Admits the modules, starts a run with the seed given (or one the machine chooses, which is then printed), runs to the scenario's end, writes the run record | `state`, `seed`, `handled`, `records`, `chain`, `ended`, `run-record` |
 | `resume` | Starts a run from a checkpoint file (RFC 009 rule 6) with the scenario and its modules, to the scenario's end or to `--to`, and writes the run record; `--residency swap` as for `run` | the same as `run`, with `handled` and `records` counted from the start of the run the checkpoint came from |
-| `replay` | Starts a run from the record's inputs, applies the recorded interventions, compares the chain at every stored point | the same, plus `replay = matched` or `diverged` |
+| `replay` | Starts a run from the record's inputs, applies the recorded interventions, compares the chain at every stored point | the same, plus `replay = matched`, `within-tolerance`, `needs-payloads` or `diverged` |
 | `admit` | The admission step alone | `module`, `source`, `admitted`, `contract`, `kind`, `description`, `port-kind`, `param`, `channel`, `needs` lines |
 | `probe` | The capacity and the build | `instances`, `memory`, `engine`, `arch`, `florn`, `control` |
 
@@ -45,10 +45,12 @@ Modules are found by the hash the scenario names: give each file with `--module`
 
 | Code | Meaning |
 |---|---|
-| 0 | Done: the run reached the scenario's end, or the replay matched, or the module was admitted |
-| 1 | Refused or failed: a coded message on standard error says why |
-| 2 | The replay diverged: the first divergent interval is in the message |
+| 0 | Done: the run reached the scenario's end, or the replay matched or is within the tolerance (`replay = within-tolerance`), or the module was admitted |
+| 1 | Refused or failed: a coded message on standard error says why; a replay that needs payloads (`replay = needs-payloads`: the chains differ across Hosts and the record or the replay lacks its trace or its payloads) |
+| 2 | The replay diverged: the first divergent interval, or the first record that differs, is in the message |
 | 3 | The run ended with a run fault: the `ended` line says `host-fault` (a limit of RFC 001 rule 13, or a Host fault that made the run not reproducible) |
+
+A replay across Hosts of a scenario whose domain is continuous (RFC 001 section 1.1, Tier 2; RFC 013 rule 20) is compared record by record when the chains differ: the numeric fields within the tolerance the domain declares, everything else exactly. That needs the trace and the payloads of both runs, so `florn replay` reads the record's `trace/` and `payloads/` and keeps its own run's for such a scenario, whatever `--trace` and `--payloads` say; a record exported without them gives `needs-payloads` when the chains differ and `matched` when they agree. Two runs of one build, and runs of two florn versions, are compared by their chains alone: any difference is `diverged`.
 
 ## The run record
 

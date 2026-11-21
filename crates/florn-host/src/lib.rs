@@ -6,6 +6,7 @@
 //! Implemented by PR-07 of `rfcs/handoffs/005-host-architecture/task-breakdown-pr-plan.md`.
 #![forbid(unsafe_code)]
 
+pub mod compare;
 pub mod compound;
 pub mod controller;
 pub mod domain;
@@ -18,7 +19,10 @@ pub mod world;
 
 pub use compound::{CallError, CallIn, Compound};
 pub use controller::Controller;
-pub use domain::{Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, Domains};
+pub use domain::{
+    Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, Domains, Numeric, NumericField, Site,
+    Tolerance,
+};
 pub use florn_admission::config::UnitDef;
 pub use florn_kernel::Advance;
 pub use identity::{EndReason, Environment, ModuleInput, Parent, RunInputs, RunToml};

@@ -14,10 +14,12 @@ mod checkpoint;
 mod compound;
 mod condition;
 mod end;
+mod replayed;
 mod start;
 
 pub use actions::decode_intervention;
 pub(crate) use activation::fault_code;
+pub use replayed::{Replayed, Side};
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
@@ -382,7 +384,7 @@ pub struct Run<E: Engine> {
     options: Options,
     ended: Option<EndReason>,
     reproducible: bool,
-    replay_against: Option<Vec<(u64, Digest)>>,
+    replay_against: Option<replayed::Reference>,
     /// The signatures of every world a module of the run uses, by world name.
     worlds: BTreeMap<String, Arc<WorldSigs>>,
     /// The policy the scenario declares for a fault of a guest of each world (RFC 001 rule 26;

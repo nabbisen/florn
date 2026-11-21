@@ -20,7 +20,10 @@ use florn_host::compound::CallIn;
 use florn_host::domain::{
     Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, EndRequest, quantity_si, refusal,
 };
-use florn_host::{Domains, FaultPolicy, HostError, Options, Run, Seed, UnitDef};
+use florn_host::{
+    Domains, FaultPolicy, HostError, Numeric, NumericField, Options, Run, Seed, Site, Tolerance,
+    UnitDef,
+};
 use florn_kernel::{Delivery, EventKind, Identity, Instant, Sink, Stream, StreamKey};
 use florn_model::canonical::{Decoder, Encoder};
 use florn_model::manifest::{ActorKind, DomainMap, DomainValue};
@@ -79,6 +82,20 @@ pub struct TestDomain {
     end_at_start: Option<EndRequest>,
     end_from: Option<(u64, EndRequest)>,
     pending_end: Option<EndRequest>,
+    /// `[test] atol` and `rtol`: the domain is **continuous** and its runs are compared across
+    /// Hosts within this tolerance (RFC 013 rule 20); `[test] continuous-actors` are the actors of
+    /// a continuous class, whose consumed work and draws the comparison does not read. A report on
+    /// channel 1 of 16 bytes is a `level` (an `f64` in `khop`) and a whole `located` tick.
+    tolerance: Option<Tolerance>,
+    continuous_actors: BTreeSet<Identity>,
+}
+
+fn decimal_f64(v: &DomainValue) -> Option<f64> {
+    match v {
+        DomainValue::Integer(i) => Some(*i as f64),
+        DomainValue::Decimal(s) => s.parse().ok(),
+        _ => None,
+    }
 }
 
 fn end_reason(v: &DomainValue) -> Option<EndRequest> {
@@ -410,6 +427,12 @@ impl Domain for TestDomain {
                     ("end-at-start" | "end-reason", _) => out.push(wrong(field, "text")),
                     ("end-from-tick", DomainValue::Integer(n)) if *n >= 0 => {}
                     ("end-from-tick", _) => out.push(wrong(field, "unsigned-integer")),
+                    ("atol" | "rtol", v) if decimal_f64(v).is_some_and(|x| x >= 0.0) => {}
+                    ("atol" | "rtol", _) => out.push(wrong(field, "quantity")),
+                    ("continuous-actors", DomainValue::List(l))
+                        if l.iter()
+                            .all(|v| matches!(v, DomainValue::Integer(n) if *n >= 0)) => {}
+                    ("continuous-actors", _) => out.push(wrong(field, "unsigned-integer")),
                     _ => out.push(refusal(
                         "manifest.unknown-key",
                         field,
@@ -435,6 +458,22 @@ impl Domain for TestDomain {
                 Some(DomainValue::Text(t)) if t == "stop-run" => Some(FaultPolicy::StopRun),
                 Some(DomainValue::Text(_)) => Some(FaultPolicy::Drop),
                 _ => None,
+            };
+            self.tolerance = match (table.get("atol"), table.get("rtol")) {
+                (Some(a), Some(r)) => decimal_f64(a)
+                    .zip(decimal_f64(r))
+                    .map(|(atol, rtol)| Tolerance { atol, rtol }),
+                _ => None,
+            };
+            self.continuous_actors = match table.get("continuous-actors") {
+                Some(DomainValue::List(l)) => l
+                    .iter()
+                    .filter_map(|v| match v {
+                        DomainValue::Integer(i) => Some(*i as Identity),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => BTreeSet::new(),
             };
             self.end_at_start = table.get("end-at-start").and_then(end_reason);
             if let (Some(DomainValue::Integer(from)), Some(r)) = (
@@ -650,6 +689,30 @@ impl Domain for TestDomain {
 
     fn faulted_policy(&self) -> FaultPolicy {
         self.policy.unwrap_or(FaultPolicy::Drop)
+    }
+
+    fn tolerance(&self) -> Option<Tolerance> {
+        self.tolerance
+    }
+
+    fn continuous_actor(&self, actor: Identity) -> bool {
+        self.continuous_actors.contains(&actor)
+    }
+
+    fn numeric_fields(&self, _: Identity, site: Site, payload: &[u8]) -> Option<Numeric> {
+        let (Site::Report { channel: 1 }, true) = (site, self.tolerance.is_some()) else {
+            return None;
+        };
+        let bytes: [u8; 16] = payload.try_into().ok()?;
+        Some(Numeric {
+            fields: vec![NumericField {
+                name: "level".into(),
+                unit: "khop".into(),
+                factor: 1000.0,
+                value: f64::from_le_bytes(bytes[..8].try_into().ok()?),
+            }],
+            exact: bytes[8..].to_vec(),
+        })
     }
 
     fn end_requested(&mut self) -> Option<EndRequest> {

@@ -1086,7 +1086,12 @@ impl ViewModel {
                     self.refresh_selected();
                 }
             }
-            "replay.matched" | "replay.diverged" => {
+            "replay.matched"
+            | "replay.within-tolerance"
+            | "replay.diverged"
+            | "replay.value-differs"
+            | "replay.record-differs"
+            | "replay.needs-payloads" => {
                 self.status.replay = Some(n.code.clone());
             }
             "run.ended" => {

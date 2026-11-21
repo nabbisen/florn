@@ -712,7 +712,7 @@ impl<E: Engine> Controller<E> {
                     Ok(read) => self.new_run(
                         SeedChoice::Given(read.run.inputs.root_seed),
                         florn_control::Residency::Resident,
-                        Some(read.run),
+                        Some(read),
                         out,
                     ),
                     Err(reason) if reason == "file.too-large" => {
@@ -882,7 +882,7 @@ impl<E: Engine> Controller<E> {
         &mut self,
         seed: SeedChoice,
         residency: florn_control::Residency,
-        replay: Option<crate::identity::RunToml>,
+        replay: Option<record::Read_>,
         out: &mut Vec<Message>,
     ) {
         let Some(loaded) = &self.scenario else {
@@ -915,6 +915,8 @@ impl<E: Engine> Controller<E> {
             };
         }
         let result = match replay {
+            // The record's trace and payloads go with it: a continuous domain's replay is compared
+            // with them within a tolerance across Hosts (RFC 013 rule 20).
             Some(record) => Run::replay(
                 engine,
                 admission,
@@ -922,9 +924,13 @@ impl<E: Engine> Controller<E> {
                 &self.domains,
                 manifest,
                 &modules,
-                &record,
+                &record.run,
                 options,
-            ),
+            )
+            .map(|mut run| {
+                run.record_trace(record.trace, record.payloads);
+                run
+            }),
             None => {
                 let seed = match seed {
                     SeedChoice::Given(s) => Seed::Given(s),

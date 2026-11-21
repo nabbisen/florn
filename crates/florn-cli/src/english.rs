@@ -301,6 +301,22 @@ pub const TABLE: &[(&str, &str)] = &[
         "The replay diverged from the record between records {from} and {to}.",
     ),
     (
+        "replay.within-tolerance",
+        "The replay agrees with the record within the tolerance: {compared} records compared, {differing} differ, the largest in {worst} by {largest} at tick {at}.",
+    ),
+    (
+        "replay.value-differs",
+        "At record {record} the field {field} was {recorded} in the record and is {replayed} in the replay, beyond the tolerance.",
+    ),
+    (
+        "replay.record-differs",
+        "The replay differs from the record at record {record}: {what}.",
+    ),
+    (
+        "replay.needs-payloads",
+        "The replay cannot be compared within a tolerance: the trace and the payloads of {side} are missing.",
+    ),
+    (
         "checkpoint.taken",
         "A checkpoint was taken at tick {instant} ({bytes}); {kept} are kept.",
     ),

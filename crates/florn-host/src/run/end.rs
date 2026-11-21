@@ -11,6 +11,7 @@ use florn_kernel::{Advance, Instant};
 use florn_model::Manifest;
 use florn_platform::Platform;
 
+use crate::compare::Reading;
 use crate::domain::Domains;
 use crate::identity::{EndReason, RunToml};
 
@@ -127,35 +128,10 @@ impl<E: Engine> Run<E> {
             .with("reason", Value::Enum(reason.as_str().into()))
             .at(at(self.kernel.now()));
         self.notify(n);
-        if let Some(stored) = self.replay_against.take() {
-            let c = florn_kernel::trace::compare_reference(&self.kernel.trace.stored(), &stored);
-            let n = match c {
-                Comparison::Matched { points } => Notification::new(
-                    "replay.matched",
-                    Severity::Info,
-                    Scope::run(),
-                    Ends::Nothing,
-                )
-                .with("points", Value::Count(points)),
-                Comparison::Diverged { from, to } => Notification::new(
-                    "replay.diverged",
-                    Severity::Error,
-                    Scope::run(),
-                    Ends::Nothing,
-                )
-                .with("from", Value::Count(from))
-                .with("to", Value::Count(to)),
-                Comparison::Incomparable => Notification::new(
-                    "replay.diverged",
-                    Severity::Error,
-                    Scope::run(),
-                    Ends::Nothing,
-                )
-                .with("from", Value::Count(0))
-                .with("to", Value::Count(0)),
-            };
-            self.notify(n);
-            self.replay_against = Some(stored);
+        if let Some(replayed) = self.replayed() {
+            for n in replayed.notifications() {
+                self.notify(n);
+            }
         }
     }
 
@@ -238,7 +214,20 @@ impl<E: Engine> Run<E> {
         run.kernel
             .trace
             .watch(record.chain.iter().map(|(n, _)| *n).collect());
-        run.replay_against = Some(record.chain.clone());
+        run.replay_against = Some(super::replayed::Reference {
+            chain: record.chain.clone(),
+            environment: record.environment.clone(),
+            ended: record.ended.is_some(),
+            trace: None,
+            payloads: BTreeMap::new(),
+        });
+        // A continuous domain compares its trace within a tolerance across Hosts (RFC 013 rule 20),
+        // which needs this run's records and payloads as well as the record's (`florn replay`
+        // keeps them for such a scenario whatever was asked).
+        if run.reading().tolerance().is_some() {
+            run.options.keep_payloads = true;
+            run.kernel.trace.start_recording();
+        }
         // A branch's provenance travels with its replay (RFC 009 rule 12: compared by nothing).
         run.parent = record.parent.clone();
         run.instantiate_all()?;
@@ -252,11 +241,11 @@ impl<E: Engine> Run<E> {
     /// record holds (RFC 001 rule 50; a record exported before its run ended, or a branch's
     /// parent, holds fewer than the scenario's end), as `replay.matched` says it.
     pub fn comparison(&self) -> Option<Comparison> {
-        let stored = self.replay_against.as_ref()?;
+        let reference = self.replay_against.as_ref()?;
         self.ended?;
         Some(florn_kernel::trace::compare_reference(
             &self.kernel.trace.stored(),
-            stored,
+            &reference.chain,
         ))
     }
 
