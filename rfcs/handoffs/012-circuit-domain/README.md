@@ -24,7 +24,20 @@ PR-39, PR-40 and PR-41 are done (`bdebadb`; `e8bf591` to `bd571cd`; `91666f5`, 2
 
 PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17), the Host's `quantity_si` checks a domain's attribute, a core unit on a `real` is `quantity.dimension`, and one unit symbol in two domains stops the controller.
 
-**Next: PR-42, the comparison of Tier 2 (V).** Read its row in `task-breakdown-pr-plan.md`, section 3.5 of `implementation-handoff.md` and B-42 first. It starts from RFC 001 section 1.1 and rules 41, 50 and 62, RFC 013 rules 20 and 21, RFC 012 finding F-5 and RFC 007. A verifier session follows its push: the review request says so, and the team waits for the verifier's report and its review before PR-43.
+**PR-42 is in review** (`b043712`, 2026-11-22): the comparison of Tier 2, the replay codes, the results file. Its design is accepted, including the three `Domain` methods (`tolerance`, `continuous_actor`, `numeric_fields`), which are F-5's change: only the domain knows its payloads.
+
+**Next: the PR-42 follow-up**, two commits, one review request, before the verifier starts:
+
+1. **Wasmtime `=48.0.9`.** Eight advisories (RUSTSEC-2026-0566 to 0573) name 48.0.8.
+   - None reaches florn: admission refuses a module of the GC proposal ("gc proposal not supported"), so a function subtype never reaches the engine; florn never enables threads; and it uses neither `wasmtime-wasi`, WASI HTTP, the component model nor `get_module_export`.
+   - The pin still moves to the patch release of the same line, so that `cargo deny` keeps meaning something. Do not use an ignore list in `deny.toml`.
+   - Every digest stays unchanged (`ac_001`), and `cargo deny` is green.
+   - Correct the comment in `florn-engine-wasmtime`'s `Engine::new`. "As is the GC proposal" is not true: the proposal is on by default in Wasmtime, and it is admission that refuses it (RFC 003 rule 5).
+   - A `CHANGELOG.md` line says why and that florn was not affected.
+2. **`replay.exempt-only`** (RFC 013 rule 20 and RFC 012 F-5, amended). When the chains differ only by values item 4 exempts (consumed work, draws of a continuous actor), `replay.within-tolerance` would name no field ("the largest in  by 0"). Report `replay.exempt-only` (info; `compared: count`) instead. The outcome word is still `within-tolerance` and the exit code is 0. Add sentences in both languages, the runner's English table and RFC 007, and a test.
+   - RFC 013 rule 20 now also says where the differences that are not listed go, as you did them: a target or actor is `key`; a kind of record, a Fault's fields, or a discrete actor's work or draws is `structure`; an intervention is `payload`.
+
+Then a verifier session verifies PR-42 (`b043712` with the follow-up), and the team waits for its review before PR-43.
 
 ## What Phase 4 delivers
 
