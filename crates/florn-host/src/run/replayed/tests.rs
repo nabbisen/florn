@@ -41,7 +41,7 @@ fn the_notifications_of_every_outcome_are_the_catalogues() {
                 worst: None,
                 consumption_differing: 1,
             }),
-            "replay.within-tolerance",
+            "replay.exempt-only",
         ),
         (diverged(None), "replay.diverged"),
         (
@@ -68,17 +68,27 @@ fn the_notifications_of_every_outcome_are_the_catalogues() {
         assert_eq!(ns[0].code, code);
         ns[0].check().unwrap_or_else(|e| panic!("{code}: {e:?}"));
     }
-    // A tolerance comparison with nothing that differs in a number says so with an empty name.
+    // Only exempt values differ: no field is named, and the one parameter is the count compared.
     let n = &Replayed::WithinTolerance(Agreement {
         compared: 4,
         differing: 0,
         worst: None,
+        consumption_differing: 2,
+    })
+    .notifications()[0];
+    assert_eq!(n.code, "replay.exempt-only");
+    assert_eq!(n.params, [("compared".to_string(), Value::Count(4))]);
+    // A numeric difference is the other code, with its field.
+    let n = &Replayed::WithinTolerance(Agreement {
+        compared: 4,
+        differing: 1,
+        worst: Some(Worst {
+            field: "v".into(),
+            largest: ("1".into(), "V".into()),
+            at: 3,
+        }),
         consumption_differing: 0,
     })
     .notifications()[0];
-    assert!(
-        n.params
-            .iter()
-            .any(|(k, v)| k == "worst" && *v == Value::Name(String::new()))
-    );
+    assert_eq!(n.code, "replay.within-tolerance");
 }

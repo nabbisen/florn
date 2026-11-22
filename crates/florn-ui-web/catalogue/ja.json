@@ -79,6 +79,7 @@
  "code.export.preview": "{kind}のエクスポートは{size}になります。ペイロードのバイト列を含む：{payloads}。",
  "code.replay.matched": "再実行は記録と{points}個すべての保存点で一致しました。",
  "code.replay.diverged": "再実行はレコード{from}から{to}の間で記録から分岐しました。",
+ "code.replay.exempt-only": "再実行は記録と一致しました。比較したレコードは{compared}件で、違いは連続系のアクターが消費した量だけで、比較の対象ではありません。",
  "code.replay.within-tolerance": "再実行は許容差の範囲で記録と一致しました。比較したレコードは{compared}件、差のあるものは{differing}件で、最大は{worst}の{largest}（ティック{at}）です。",
  "code.replay.value-differs": "レコード{record}で、フィールド{field}は記録では{recorded}、再実行では{replayed}で、許容差を超えています。",
  "code.replay.record-differs": "再実行はレコード{record}で記録と異なります:{what}。",

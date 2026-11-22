@@ -301,6 +301,10 @@ pub const TABLE: &[(&str, &str)] = &[
         "The replay diverged from the record between records {from} and {to}.",
     ),
     (
+        "replay.exempt-only",
+        "The replay agrees with the record: {compared} records compared, and the runs differ only in what a continuous actor consumed, which the comparison does not read.",
+    ),
+    (
         "replay.within-tolerance",
         "The replay agrees with the record within the tolerance: {compared} records compared, {differing} differ, the largest in {worst} by {largest} at tick {at}.",
     ),

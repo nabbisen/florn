@@ -478,7 +478,8 @@ fn cmd_replay(args: &Args) -> Result<ExitCode, String> {
 fn replay_result(codes: &[&str]) -> Option<(&'static str, u8)> {
     codes.iter().find_map(|code| match *code {
         "replay.matched" => Some(("matched", 0)),
-        "replay.within-tolerance" => Some(("within-tolerance", 0)),
+        // The word stays `within-tolerance` when only exempt values differ (RFC 013 rule 20).
+        "replay.within-tolerance" | "replay.exempt-only" => Some(("within-tolerance", 0)),
         "replay.diverged" | "replay.value-differs" | "replay.record-differs" => {
             Some(("diverged", 2))
         }

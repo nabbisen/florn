@@ -303,6 +303,13 @@ fn a_difference_in_consumed_work_alone_is_within_tolerance_for_a_continuous_acto
         panic!("{outcome:?}");
     };
     assert_eq!((a.differing, a.consumption_differing), (0, 1));
+    // Nothing compared differs: `replay.exempt-only`, not a tolerance comparison naming no field.
+    let (run, _) = replay(true, &from_another_host(r.clone()));
+    assert_eq!(codes(&run), ["replay.exempt-only"]);
+    assert_eq!(
+        param(&run, "replay.exempt-only", "compared"),
+        Some(florn_control::Value::Count(a.compared))
+    );
     // The same on one build is diverged.
     let mut same = r.clone();
     let last = same.run.chain.len() - 1;
@@ -663,6 +670,16 @@ fn the_replay_notifications_are_in_the_catalogue() {
     let mut same = honest(true);
     let last = same.run.chain.len() - 1;
     same.run.chain[last].1[0] ^= 1;
+    let mut work_only = honest(true);
+    for record in work_only.trace.as_mut().unwrap() {
+        if let Record::Handled {
+            target: 1, metered, ..
+        } = record
+        {
+            *metered += 1000;
+            break;
+        }
+    }
     let mut seen = std::collections::BTreeSet::new();
     for record in [
         honest(true),
@@ -670,6 +687,7 @@ fn the_replay_notifications_are_in_the_catalogue() {
         from_another_host(bare),
         from_another_host(length),
         from_another_host(beyond),
+        from_another_host(work_only),
         same,
     ] {
         let (run, _) = replay(true, &record);
@@ -683,6 +701,7 @@ fn the_replay_notifications_are_in_the_catalogue() {
     let expected: std::collections::BTreeSet<String> = [
         "replay.matched",
         "replay.within-tolerance",
+        "replay.exempt-only",
         "replay.diverged",
         "replay.value-differs",
         "replay.record-differs",

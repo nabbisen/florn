@@ -37,6 +37,7 @@ fn a_replay_prints_its_word_and_exits_as_rfc_013_rule_20_says() {
             vec!["replay.within-tolerance"],
             Some(("within-tolerance", 0)),
         ),
+        (vec!["replay.exempt-only"], Some(("within-tolerance", 0))),
         (vec!["replay.diverged"], Some(("diverged", 2))),
         (vec!["replay.value-differs"], Some(("diverged", 2))),
         (vec!["replay.record-differs"], Some(("diverged", 2))),

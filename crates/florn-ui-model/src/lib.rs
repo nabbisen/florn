@@ -1088,6 +1088,7 @@ impl ViewModel {
             }
             "replay.matched"
             | "replay.within-tolerance"
+            | "replay.exempt-only"
             | "replay.diverged"
             | "replay.value-differs"
             | "replay.record-differs"

@@ -78,6 +78,11 @@ impl Replayed {
             Self::Matched { points } => {
                 new("replay.matched", Severity::Info).with("points", Value::Count(*points))
             }
+            // Nothing compared differs and only an exempt value does (rule 20, item 4): there is
+            // no field to name.
+            Self::WithinTolerance(a) if a.differing == 0 => {
+                new("replay.exempt-only", Severity::Info).with("compared", Value::Count(a.compared))
+            }
             Self::WithinTolerance(a) => {
                 let (worst, largest, at) = match &a.worst {
                     Some(w) => (w.field.clone(), quantity(&w.largest), w.at),
