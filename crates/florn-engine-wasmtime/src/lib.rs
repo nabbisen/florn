@@ -20,7 +20,7 @@ use wasmtime::{
 };
 
 /// The pinned Wasmtime version (RFC 005 rule 44); a test keeps it equal to `Cargo.lock`.
-pub const WASMTIME_VERSION: &str = "48.0.8";
+pub const WASMTIME_VERSION: &str = "48.0.9";
 
 /// What the Host allows one instance's store to hold (RFC 003 rule 20; RFC 005 rule 9). Every
 /// instance has a store of its own, so that dropping it (RFC 009 rule 13: a swapped-out actor)
@@ -82,7 +82,11 @@ impl WasmtimeEngine {
     /// canonicalisation (RFC 003 section 9); epoch interruption on, as the watchdog.
     pub fn new(limits: Limits) -> Result<Self, EngineError> {
         let mut cfg = Config::new();
-        // Threads are absent at compile time (the `threads` feature is off), as is the GC proposal.
+        // Threads are absent at compile time (the `threads` feature is off). The GC proposal is not:
+        // Wasmtime's `Config` has it on by default and this engine does not switch it off. It is
+        // admission that keeps it out: every module is validated with `admitted_features()`, which
+        // has no GC, so a module of the proposal is `module.invalid` (RFC 003 rule 5) and never
+        // reaches the engine.
         cfg.wasm_simd(false);
         cfg.wasm_relaxed_simd(false);
         cfg.wasm_tail_call(false);
