@@ -208,7 +208,10 @@ fn b18_the_tier_is_decided_by_the_environment_of_the_two_runs() {
         "engine"
     );
     assert_eq!(
-        mk(&|d| d.toml.environment.arch = "aarch64".into()),
+        // An architecture that is no machine's: the check must differ from the one it runs on (it
+        // was "aarch64", which is the replay's own on an AArch64 runner, where the environments
+        // are then the same and the comparison is exact).
+        mk(&|d| d.toml.environment.arch = "an-other-architecture".into()),
         "within-tolerance",
         "arch"
     );
