@@ -2,12 +2,12 @@
 //! (RFC 009 rules 2, 3, 5 and 7), going back and the trace window (RFC 001 rules 51 to 55), a branch
 //! (RFC 001 rule 54; RFC 009 rules 10 to 12).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use florn_admission::{ADMISSION_VERSION, Admission, STACK_EXPORT};
 use florn_control::{Ends, Notification, Scope, Severity, Value};
 use florn_engine::{Engine, EngineError, GlobalValue};
-use florn_kernel::{Advance, AppliedIntervention, Identity, Kernel};
+use florn_kernel::{Advance, AppliedIntervention, Digest, Identity, Kernel};
 use florn_model::Manifest;
 use florn_platform::Platform;
 
@@ -395,6 +395,39 @@ impl<E: Engine> Run<E> {
         out
     }
 
+    /// [`trace_window`](Self::trace_window) with the payload bytes of its reports (RFC 014 rule 2):
+    /// those the run kept, and those of a window it re-executes, for which payloads are kept for
+    /// the time of the re-execution whatever the Host's own option is. The bytes are by digest.
+    pub fn trace_window_payloads(
+        &mut self,
+        from: u64,
+        count: u32,
+    ) -> (Vec<florn_kernel::Record>, BTreeMap<Digest, Vec<u8>>) {
+        let kept_before: Option<BTreeSet<Digest>> =
+            (!self.options.keep_payloads).then(|| self.payloads.keys().copied().collect());
+        let option = self.options.keep_payloads;
+        self.options.keep_payloads = true;
+        let records = self.trace_window(from, count);
+        self.options.keep_payloads = option;
+        let mut found = BTreeMap::new();
+        for record in &records {
+            if let florn_kernel::Record::Handled { effects, .. } = record {
+                for e in effects {
+                    if let florn_kernel::trace::CommittedEffect::Report { digest, .. } = e
+                        && let Some(bytes) = self.payloads.get(digest)
+                    {
+                        found.insert(*digest, bytes.clone());
+                    }
+                }
+            }
+        }
+        // A Host that keeps no payloads keeps none of the window's.
+        if let Some(before) = kept_before {
+            self.payloads.retain(|d, _| before.contains(d));
+        }
+        (records, found)
+    }
+
     /// A restore for detail by replay (rule 9): the undone interventions are re-applied at their
     /// instants whatever the run, nothing is said, and the kept set is untouched.
     fn restore_quietly(&mut self, checkpoint: &Checkpoint) -> Result<(), HostError> {
@@ -508,6 +541,9 @@ impl<E: Engine> Run<E> {
         self.telemetry.clear();
         if let Some(a) = &mut self.activity {
             a.clear();
+        }
+        if let Some(r) = &mut self.reported {
+            r.clear();
         }
         self.world.take_display();
         self.last_checkpoint_handled = checkpoint.kernel.handled;

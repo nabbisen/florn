@@ -8,12 +8,12 @@
 //! a reader needs no state to decode it.
 //!
 //! ```text
-//! offset  size  field   instant        flight                          activity
-//! 0       1     kind    0              1                               2
-//! 1       1     byte    0              the sender's port index         bit 0: a fault occurred
-//! 2       2     half    0              the connection's index          activations (saturating)
-//! 4       4     word    0              the delay in ticks, as an f32   the actor
-//! 8       8     tick    the instant    the instant sent                the last activation
+//! offset  size  field   instant        flight                          activity                        sample
+//! 0       1     kind    0              1                               2                               3
+//! 1       1     byte    0              the sender's port index         bit 0: a fault occurred         the index of the f64 field
+//! 2       2     half    0              the connection's index          activations (saturating)        the actor's index in id order
+//! 4       4     word    0              the delay in ticks, as an f32   the actor                       the value, as an f32
+//! 8       8     tick    the instant    the instant sent                the last activation             the tick of the report
 //! ```
 //!
 //! Every field is little-endian. A connection's index is its position among the scenario's
@@ -21,12 +21,41 @@
 //! one beyond the 255th); the front end has both from the `scenario` query. The delay is a
 //! 32-bit float because the display interpolates a flight's position and a float keeps every
 //! delay a scenario can state; the exact ticks are in the trace.
+//!
+//! A `sample` is one `f64` field of a report that a domain draws as a series (RFC 014 rules 2 and 3;
+//! RFC 012 finding F-6). The index is the field's place among the actor's declared `f64` fields,
+//! counted in channel order and then field order, so that a front end computes it from the channel
+//! summaries it holds; the value is a float of 32 bits because the display interpolates and draws,
+//! and the exact `f64` is in the trace.
+//!
+//! **Reader rules** (RFC 014 rule 3). A record of a kind the reader does not know is skipped by its
+//! fixed size (every record is sixteen bytes); the stream's version is [`VERSION`], carried in the
+//! ring's header and in the first word of every message batch, and a reader of a newer version
+//! refuses the stream before it reads a record ([`check_version`]).
 use std::collections::BTreeMap;
 
 /// The size of one record.
 pub const RECORD_BYTES: usize = 16;
-/// The stream's layout version, carried by the transport, not by each record.
-pub const VERSION: u32 = 1;
+/// The stream's layout version, carried by the transport (the ring's header, the first word of a
+/// message batch), not by each record. Version 2 adds the `sample` record (RFC 012 finding F-6).
+pub const VERSION: u32 = 2;
+
+/// A stream of a newer version than this reader's: refused before a record is read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NewerStream {
+    /// The version the stream declares.
+    pub found: u32,
+}
+
+/// Whether a reader of [`VERSION`] may read a stream that declares `found`: an older stream is read
+/// (a record kind it lacks is not in it), a newer one is refused.
+pub fn check_version(found: u32) -> Result<(), NewerStream> {
+    if found > VERSION {
+        Err(NewerStream { found })
+    } else {
+        Ok(())
+    }
+}
 
 /// One record of the display stream.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -49,11 +78,21 @@ pub enum Record {
         faulted: bool,
         last: u64,
     },
+    /// One `f64` field of a report drawn as a series: the field's `index` among the actor's
+    /// declared `f64` fields, the actor's place in id order, the `value` as a float of 32 bits, and
+    /// the `tick` of the report (RFC 014 rule 3).
+    Sample {
+        index: u8,
+        actor: u16,
+        value: f32,
+        tick: u64,
+    },
 }
 
 const KIND_INSTANT: u8 = 0;
 const KIND_FLIGHT: u8 = 1;
 const KIND_ACTIVITY: u8 = 2;
+const KIND_SAMPLE: u8 = 3;
 
 impl Record {
     /// The sixteen bytes.
@@ -72,6 +111,12 @@ impl Record {
                 faulted,
                 last,
             } => (KIND_ACTIVITY, u8::from(faulted), count, actor, last),
+            Record::Sample {
+                index,
+                actor,
+                value,
+                tick,
+            } => (KIND_SAMPLE, index, actor, value.to_bits(), tick),
         };
         let mut b = [0u8; RECORD_BYTES];
         b[0] = kind;
@@ -82,7 +127,8 @@ impl Record {
         b
     }
 
-    /// The record of sixteen bytes, or `None` for a short slice or an unknown kind.
+    /// The record of sixteen bytes, or `None` for a short slice or an unknown kind (a reader that
+    /// skips unknown kinds does so by [`decode_all`]).
     pub fn decode(b: &[u8]) -> Option<Self> {
         if b.len() < RECORD_BYTES {
             return None;
@@ -105,6 +151,12 @@ impl Record {
                 faulted: byte & 1 == 1,
                 last: tick,
             },
+            KIND_SAMPLE => Record::Sample {
+                index: byte,
+                actor: half,
+                value: f32::from_bits(word),
+                tick,
+            },
             _ => return None,
         })
     }
@@ -119,18 +171,21 @@ pub fn encode_all(records: &[Record]) -> Vec<u8> {
     out
 }
 
-/// The records of a byte string; `None` when its length is no multiple of a record's or a
-/// record is of no known kind.
+/// The records of a byte string, in order; `None` when its length is no multiple of a record's. A
+/// record of a kind this reader does not know is **skipped by its fixed size** (RFC 014 rule 3):
+/// a newer Host's kind costs the reader that record and no more.
 pub fn decode_all(bytes: &[u8]) -> Option<Vec<Record>> {
     if !bytes.len().is_multiple_of(RECORD_BYTES) {
         return None;
     }
-    bytes
-        .as_chunks::<RECORD_BYTES>()
-        .0
-        .iter()
-        .map(|c| Record::decode(c))
-        .collect()
+    Some(
+        bytes
+            .as_chunks::<RECORD_BYTES>()
+            .0
+            .iter()
+            .filter_map(|c| Record::decode(c))
+            .collect(),
+    )
 }
 
 /// `enum(transport)` of RFC 007: what carries the stream to the display.
@@ -185,12 +240,14 @@ pub struct Activity {
 /// The reduction above the transport (rule 14), the same for both: the batches a display read
 /// since it last drew, folded into one update. Every flight is kept, in order (what to draw of
 /// them, to the display's ceiling, is the view model's choice); an actor's activity is summed;
-/// the instant is the last reached.
+/// every sample is kept, in order (they are bounded by the sensors' periods, RFC 014 rule 3); the
+/// instant is the last reached.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Reduced {
     pub instant: Option<u64>,
     pub flights: Vec<Record>,
     pub activity: BTreeMap<u32, Activity>,
+    pub samples: Vec<Record>,
 }
 
 impl Reduced {
@@ -200,6 +257,7 @@ impl Reduced {
             match *r {
                 Record::Instant { tick } => self.instant = Some(tick),
                 Record::Flight { .. } => self.flights.push(*r),
+                Record::Sample { .. } => self.samples.push(*r),
                 Record::Activity {
                     actor,
                     count,
@@ -219,6 +277,7 @@ impl Reduced {
         self.instant = None;
         self.flights.clear();
         self.activity.clear();
+        self.samples.clear();
     }
 }
 

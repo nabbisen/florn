@@ -5,7 +5,7 @@
 // goes, through the one reader interface over the ring or over messages, and reports what it
 // read beside what the worker wrote. The result is written into #out as JSON for a person or
 // the Playwright driver.
-import { createReader, count } from "./display.js";
+import { createReader, count, probeVersions } from "./display.js";
 
 const out = document.getElementById("out");
 const query = new URLSearchParams(location.search);
@@ -79,7 +79,7 @@ class Display {
     this.stallMs = stallMs;
     this.stallUntil = null;
     this.chunks = [];
-    this.counts = { records: 0, instants: 0, flights: 0, activity: 0, unknown: 0 };
+    this.counts = { records: 0, instants: 0, flights: 0, activity: 0, samples: 0, unknown: 0 };
     this.intervals = [];
     this.reads = [];
     this.last = null;
@@ -119,6 +119,8 @@ class Display {
     return {
       transport: this.transport,
       path: this.reader.kind,
+      version: this.reader.version ?? null,
+      refused: this.reader.refused ?? null,
       ...this.counts,
       received_digest: await sha256Hex(this.chunks),
       dropped: this.reader.dropped(),
@@ -260,6 +262,10 @@ worker.onmessage = async (e) => {
   const m = e.data;
   if (m.type === "ready") {
     try {
+      if (query.get("bench") === "display-versions") {
+        show({ bench: "display-versions", isolated: self.crossOriginIsolated === true, ...probeVersions() });
+        return;
+      }
       const req = await request(worker);
       if (!req) {
         show({ ready: true, isolated: self.crossOriginIsolated === true, hint: "add ?scenario=NAME or ?bench=crossing" });

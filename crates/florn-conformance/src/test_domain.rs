@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use florn_abi::Ty;
 use florn_abi::core_world::Signature;
 use florn_admission::Admission;
+use florn_control::message::{InspectField, InspectValue};
 use florn_control::{Ends, Notification, Scope, Severity, Value};
 use florn_engine_wasmtime::WasmtimeEngine;
 use florn_host::compound::CallIn;
@@ -88,6 +89,9 @@ pub struct TestDomain {
     /// channel 1 of 16 bytes is a `level` (an `f64` in `khop`) and a whole `located` tick.
     tolerance: Option<Tolerance>,
     continuous_actors: BTreeSet<Identity>,
+    /// `[test] inspect-guests`: the domain answers `inspect` for any identity, a guest's too, to
+    /// show that the Host does not ask it (a guest is the `actor` query's).
+    inspect_guests: bool,
 }
 
 fn decimal_f64(v: &DomainValue) -> Option<f64> {
@@ -427,6 +431,8 @@ impl Domain for TestDomain {
                     ("end-at-start" | "end-reason", _) => out.push(wrong(field, "text")),
                     ("end-from-tick", DomainValue::Integer(n)) if *n >= 0 => {}
                     ("end-from-tick", _) => out.push(wrong(field, "unsigned-integer")),
+                    ("inspect-guests", DomainValue::Boolean(_)) => {}
+                    ("inspect-guests", _) => out.push(wrong(field, "boolean")),
                     ("atol" | "rtol", v) if decimal_f64(v).is_some_and(|x| x >= 0.0) => {}
                     ("atol" | "rtol", _) => out.push(wrong(field, "quantity")),
                     ("continuous-actors", DomainValue::List(l))
@@ -459,6 +465,10 @@ impl Domain for TestDomain {
                 Some(DomainValue::Text(_)) => Some(FaultPolicy::Drop),
                 _ => None,
             };
+            self.inspect_guests = matches!(
+                table.get("inspect-guests"),
+                Some(DomainValue::Boolean(true))
+            );
             self.tolerance = match (table.get("atol"), table.get("rtol")) {
                 (Some(a), Some(r)) => decimal_f64(a)
                     .zip(decimal_f64(r))
@@ -713,6 +723,53 @@ impl Domain for TestDomain {
             }],
             exact: bytes[8..].to_vec(),
         })
+    }
+
+    /// A report of 16 bytes on channel 1 is a `level` (an `f64`, the first and only `f64` field of
+    /// the test domain's reports): one series, index 0.
+    fn display_series(&self, _: Identity, channel: u32, payload: &[u8]) -> Vec<(u8, f64)> {
+        match (channel, <[u8; 16]>::try_from(payload)) {
+            (1, Ok(b)) if self.tolerance.is_some() => {
+                vec![(
+                    0,
+                    f64::from_le_bytes(b[..8].try_into().expect("eight bytes")),
+                )]
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// A wire, a sink and the domain's world (RFC 012 finding F-12): what the kit's inspectors read.
+    fn inspect(&self, target: Identity) -> Option<Vec<InspectField>> {
+        let text = |name: &str, value: String| InspectField {
+            name: name.into(),
+            value: InspectValue::Text(value),
+        };
+        if let Some(w) = self.wires.get(&target) {
+            return Some(vec![
+                text("enabled", w.enabled.to_string()),
+                text("pins", w.ports.len().to_string()),
+                InspectField {
+                    name: "delay".into(),
+                    value: InspectValue::Real {
+                        value: w.delay as f64,
+                        unit: "ticks".into(),
+                    },
+                },
+            ]);
+        }
+        if let Some(frames) = self.sinks.get(&target) {
+            return Some(vec![text("frames", frames.to_string())]);
+        }
+        // The domain's world has an identity beyond the reserved one (RFC 004 rule 8).
+        (self.inspect_guests || target >= florn_model::manifest::IDENTITY_RESERVED_FROM).then(
+            || {
+                vec![
+                    text("wires", self.wires.len().to_string()),
+                    text("dropped", self.dropped.to_string()),
+                ]
+            },
+        )
     }
 
     fn end_requested(&mut self) -> Option<EndRequest> {

@@ -17,6 +17,7 @@ fn triangle() -> ViewModel {
         class: "default".into(),
         ports: vec![port(0), port(1)],
         config: Vec::new(),
+        builtin: None,
     };
     let link = |id: u32, a: (u32, u32), b: (u32, u32)| ConnectionSummary {
         id,

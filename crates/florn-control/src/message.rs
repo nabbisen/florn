@@ -301,6 +301,12 @@ pub enum Query {
     },
     /// The kept checkpoints of the run (RFC 009 rule 3; 0.3).
     Checkpoints,
+    /// What a domain says of a built-in actor, a connection or its world, by identity (RFC 012
+    /// finding F-12; 0.4): a list of named fields, read from the last accepted state. The answer is
+    /// `None` when no domain of the scenario inspects the identity. A guest is `actor`'s.
+    Inspect {
+        id: u32,
+    },
 }
 
 impl Query {
@@ -315,6 +321,7 @@ impl Query {
             Self::Decode { .. } => "decode",
             Self::Payload { .. } => "payload",
             Self::Checkpoints => "checkpoints",
+            Self::Inspect { .. } => "inspect",
         }
     }
     /// The largest trace window one answer carries.
@@ -449,6 +456,10 @@ pub struct ActorSummary {
     pub ports: Vec<PortSummary>,
     /// `[actors.config]` as text, in the manifest's order (0.2).
     pub config: Vec<(String, String)>,
+    /// The built-in's `<domain>/<name>`, for an actor that is one (0.4; RFC 012 finding F-12, so
+    /// that an authoring draft can keep built-ins). A trailing optional section of the answer
+    /// carries it: an answer of a Host without it reads as `None`.
+    pub builtin: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -596,6 +607,9 @@ pub enum TraceEntry {
         effects: u32,
         /// The committed sends among the effects (0.2).
         sends: Vec<SendSummary>,
+        /// The committed reports among the effects, with their payload bytes when the run keeps
+        /// payloads (0.4; RFC 014 rule 2). A trailing optional section of the answer carries them.
+        reports: Vec<ReportEntry>,
     },
     Fault {
         at: At,
@@ -612,6 +626,40 @@ pub enum TraceEntry {
         seq: u64,
         len: u32,
     },
+}
+
+/// A committed report of a trace entry (RFC 014 rule 2): its sequence number and channel, its
+/// length and, when the run keeps payloads, its bytes, so that a front end decodes it with the
+/// channel's layout as the inspector does.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReportEntry {
+    pub seq: u64,
+    pub channel: u32,
+    pub len: u32,
+    pub payload: Option<Vec<u8>>,
+}
+
+/// One named field of an inspection (RFC 012 finding F-12).
+#[derive(Clone, Debug, PartialEq)]
+pub struct InspectField {
+    pub name: String,
+    pub value: InspectValue,
+}
+
+/// A field's value: text, or a real with its unit (empty for a dimensionless field).
+#[derive(Clone, Debug, PartialEq)]
+pub enum InspectValue {
+    Text(String),
+    Real { value: f64, unit: String },
+}
+
+/// What a domain says of one of its elements (RFC 012 finding F-12): the identity asked about, what
+/// kind of element it is (`builtin`, `connection` or `world`) and its fields in the domain's order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Inspection {
+    pub id: u32,
+    pub kind: String,
+    pub fields: Vec<InspectField>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -641,7 +689,7 @@ pub struct ExportPreview {
     pub modules: Vec<(String, String)>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Answer {
     Scenario(Option<ScenarioSummary>),
     RunState(RunStateInfo),
@@ -668,6 +716,8 @@ pub enum Answer {
     Payload(Option<Vec<u8>>),
     /// `checkpoints` (0.3): the kept checkpoints, oldest first.
     Checkpoints(Vec<CheckpointSummary>),
+    /// `inspect` (0.4): what a domain says of the element, or `None`.
+    Inspection(Option<Inspection>),
 }
 
 /// One kept checkpoint (RFC 009 rule 3): its index for `restore` and `export`, the instant it
@@ -689,7 +739,7 @@ pub struct Progress {
     pub records: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Message {
     Command(Command),
     Query(Query),
@@ -702,7 +752,7 @@ pub enum Message {
 }
 
 /// A message with the interface version in front.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Envelope {
     pub version: u32,
     pub message: Message,

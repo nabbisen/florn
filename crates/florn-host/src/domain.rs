@@ -21,6 +21,7 @@ use florn_admission::config::{UnitDef, Units};
 use florn_admission::manifest::ModuleManifest;
 use florn_admission::world::{FuncSig, ImportInterface, WorldInterfaces, WorldSpec};
 use florn_control::display::Record as DisplayRecord;
+use florn_control::message::InspectField;
 use florn_control::{Ends, Notification};
 use florn_kernel::{Delivery, EventKey, Identity, Instant, Sink, Tick, World};
 use florn_model::manifest::{ActorKind, DomainMap, Port, domain_of};
@@ -422,6 +423,23 @@ pub trait Domain {
     /// or `None` for a payload that has none, which is compared by digest. Only a continuous
     /// domain answers.
     fn numeric_fields(&self, _actor: Identity, _site: Site, _payload: &[u8]) -> Option<Numeric> {
+        None
+    }
+    /// The series a committed report of an actor of this domain carries for the display's plots
+    /// (RFC 014 rules 2 and 3; RFC 012 finding F-6): each `f64` field the domain draws, with its
+    /// **index among the actor's declared `f64` fields, counted in channel order and then field
+    /// order** (so that a front end computes it from the channel summaries it holds), and its
+    /// value. The Host writes a `sample` record for each, before the batch's `instant`. The
+    /// default draws nothing.
+    fn display_series(&self, _actor: Identity, _channel: u32, _payload: &[u8]) -> Vec<(u8, f64)> {
+        Vec::new()
+    }
+    /// What the domain says of one of its elements (RFC 012 finding F-12): a built-in actor, a
+    /// connection or its world, by identity. Named fields in the domain's order, text, or a real
+    /// with its unit; read from the **last accepted state**, and changing nothing: opening an
+    /// inspector leaves the run's digest as it was (RFC 001 rule 39). `None` for an identity the
+    /// domain does not inspect; a guest is `actor`'s. The default inspects nothing.
+    fn inspect(&self, _target: Identity) -> Option<Vec<InspectField>> {
         None
     }
     /// The start hook (RFC 012 finding F-15; rule 30): called once, after every guest's `init`
@@ -1218,6 +1236,12 @@ impl Domain for Lent {
     }
     fn numeric_fields(&self, _: Identity, _: Site, _: &[u8]) -> Option<Numeric> {
         self.reached("numeric_fields")
+    }
+    fn display_series(&self, _: Identity, _: u32, _: &[u8]) -> Vec<(u8, f64)> {
+        self.reached("display_series")
+    }
+    fn inspect(&self, _: Identity) -> Option<Vec<InspectField>> {
+        self.reached("inspect")
     }
     fn faulted_policy(&self) -> FaultPolicy {
         self.reached("faulted_policy")

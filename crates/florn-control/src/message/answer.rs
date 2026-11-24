@@ -30,6 +30,8 @@ fn actor_summary_r(d: &mut Decoder) -> Option<ActorSummary> {
             })
         })?,
         config: pairs_r(d)?,
+        // Carried by the answer's trailing section, when there is one.
+        builtin: None,
     })
 }
 fn module_summary_w(e: &mut Encoder, m: &ModuleSummary) {
@@ -178,6 +180,7 @@ fn trace_entry_w(e: &mut Encoder, t: &TraceEntry) {
             draws,
             effects,
             sends,
+            reports: _,
         } => {
             e.u8(1);
             at_w(e, *at);
@@ -194,6 +197,7 @@ fn trace_entry_w(e: &mut Encoder, t: &TraceEntry) {
                 e.u32(s.len);
                 e.text(&s.digest);
             });
+            // The reports are in the answer's trailing section.
         }
         TraceEntry::Fault {
             at,
@@ -242,6 +246,7 @@ fn trace_entry_r(d: &mut Decoder) -> Option<TraceEntry> {
                     digest: d.text()?,
                 })
             })?,
+            reports: Vec::new(),
         },
         2 => TraceEntry::Fault {
             at: at_r(d)?,
@@ -261,7 +266,7 @@ fn trace_entry_r(d: &mut Decoder) -> Option<TraceEntry> {
         _ => return None,
     })
 }
-pub(super) fn answer_w(e: &mut Encoder, a: &Answer) {
+fn answer_body_w(e: &mut Encoder, a: &Answer) {
     match a {
         Answer::Scenario(s) => {
             e.u8(0);
@@ -347,6 +352,27 @@ pub(super) fn answer_w(e: &mut Encoder, a: &Answer) {
             e.u8(11);
             e.option(bytes.as_deref(), Encoder::bytes);
         }
+        Answer::Inspection(i) => {
+            e.u8(13);
+            e.option(i.as_ref(), |e, i| {
+                e.u32(i.id);
+                e.text(&i.kind);
+                e.list(&i.fields, |e, f| {
+                    e.text(&f.name);
+                    match &f.value {
+                        InspectValue::Text(t) => {
+                            e.u8(0);
+                            e.text(t);
+                        }
+                        InspectValue::Real { value, unit } => {
+                            e.u8(1);
+                            e.u64(value.to_bits());
+                            e.text(unit);
+                        }
+                    }
+                });
+            });
+        }
         Answer::Checkpoints(list) => {
             e.u8(12);
             e.list(list, |e, c| {
@@ -359,7 +385,7 @@ pub(super) fn answer_w(e: &mut Encoder, a: &Answer) {
         }
     }
 }
-pub(super) fn answer_r(d: &mut Decoder) -> Option<Answer> {
+fn answer_body_r(d: &mut Decoder) -> Option<Answer> {
     Some(match d.u8()? {
         0 => Answer::Scenario(d.option(scenario_r)?),
         1 => Answer::RunState(RunStateInfo {
@@ -422,6 +448,25 @@ pub(super) fn answer_r(d: &mut Decoder) -> Option<Answer> {
         9 => Answer::Done,
         10 => Answer::Decoded(d.option(pairs_r)?),
         11 => Answer::Payload(d.option(Decoder::bytes)?),
+        13 => Answer::Inspection(d.option(|d| {
+            Some(Inspection {
+                id: d.u32()?,
+                kind: d.text()?,
+                fields: d.list(|d| {
+                    Some(InspectField {
+                        name: d.text()?,
+                        value: match d.u8()? {
+                            0 => InspectValue::Text(d.text()?),
+                            1 => InspectValue::Real {
+                                value: f64::from_bits(d.u64()?),
+                                unit: d.text()?,
+                            },
+                            _ => return None,
+                        },
+                    })
+                })?,
+            })
+        })?),
         12 => Answer::Checkpoints(d.list(|d| {
             Some(CheckpointSummary {
                 index: d.u32()?,
@@ -433,4 +478,119 @@ pub(super) fn answer_r(d: &mut Decoder) -> Option<Answer> {
         })?),
         _ => return None,
     })
+}
+
+// ---- the trailing optional section of an answer (RFC 012 finding F-12) ---------------------------
+//
+// An addition to an answer of control version 1 is a **trailing optional section** after the
+// answer's own encoding: the section's version (`1`) and a length-prefixed block. A Host that has
+// nothing to put there writes nothing, so that such an answer is byte for byte the answer of
+// release 0.3; a reader that finds nothing after the answer reads the additions as absent; a
+// reader that finds a section of a version it does not know skips it by its length. The block of
+// version 1 depends on the answer: a scenario carries each actor's built-in name, an actor's own
+// answer its built-in name, a trace window each entry's reports.
+
+/// The version of the trailing section this release writes and reads.
+const EXTENSION_VERSION: u8 = 1;
+
+/// An answer and its trailing section, when it has anything to say there.
+pub(super) fn answer_w(e: &mut Encoder, a: &Answer) {
+    answer_body_w(e, a);
+    let mut block = Encoder::default();
+    if !extension_w(&mut block, a) {
+        return;
+    }
+    e.u8(EXTENSION_VERSION);
+    e.bytes(&block.finish());
+}
+
+/// An answer and its trailing section: nothing after it is no additions, a section of another
+/// version is skipped by its length.
+pub(super) fn answer_r(d: &mut Decoder) -> Option<Answer> {
+    let mut a = answer_body_r(d)?;
+    if d.done() {
+        return Some(a);
+    }
+    let version = d.u8()?;
+    let block = d.bytes()?;
+    if version == EXTENSION_VERSION {
+        extension_r(&mut Decoder::new(&block), &mut a)?;
+    }
+    Some(a)
+}
+
+/// The block of version 1 for `a`; `false` when it has nothing to say (and nothing is written).
+fn extension_w(e: &mut Encoder, a: &Answer) -> bool {
+    match a {
+        Answer::Scenario(Some(s)) if s.actors.iter().any(|x| x.builtin.is_some()) => {
+            e.list(&s.actors, |e, x| opt_text_w(e, &x.builtin));
+            true
+        }
+        Answer::Actor(Some(i)) if i.summary.builtin.is_some() => {
+            opt_text_w(e, &i.summary.builtin);
+            true
+        }
+        Answer::TraceWindow(entries)
+            if entries.iter().any(
+                |t| matches!(t, TraceEntry::Handled { reports, .. } if !reports.is_empty()),
+            ) =>
+        {
+            e.list(entries, |e, t| {
+                let none: &[ReportEntry] = &[];
+                let reports = match t {
+                    TraceEntry::Handled { reports, .. } => reports.as_slice(),
+                    _ => none,
+                };
+                e.list(reports, |e, r| {
+                    e.u64(r.seq);
+                    e.u32(r.channel);
+                    e.u32(r.len);
+                    e.option(r.payload.as_deref(), Encoder::bytes);
+                });
+            });
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Apply the block of version 1 to `a`; `None` when the block does not fit the answer.
+fn extension_r(d: &mut Decoder, a: &mut Answer) -> Option<()> {
+    match a {
+        Answer::Scenario(Some(s)) => {
+            let names = d.list(opt_text_r)?;
+            if names.len() != s.actors.len() {
+                return None;
+            }
+            for (actor, name) in s.actors.iter_mut().zip(names) {
+                actor.builtin = name;
+            }
+        }
+        Answer::Actor(Some(i)) => i.summary.builtin = opt_text_r(d)?,
+        Answer::TraceWindow(entries) => {
+            let all = d.list(|d| {
+                d.list(|d| {
+                    Some(ReportEntry {
+                        seq: d.u64()?,
+                        channel: d.u32()?,
+                        len: d.u32()?,
+                        payload: d.option(Decoder::bytes)?,
+                    })
+                })
+            })?;
+            if all.len() != entries.len() {
+                return None;
+            }
+            for (entry, found) in entries.iter_mut().zip(all) {
+                if let TraceEntry::Handled { reports, .. } = entry {
+                    *reports = found;
+                } else if !found.is_empty() {
+                    return None;
+                }
+            }
+        }
+        // A section for an answer that has none to read: skipped.
+        _ => {}
+    }
+    Some(())
 }

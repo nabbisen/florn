@@ -10,8 +10,8 @@ use florn_control::display::{DisplayPath, Record as DisplayRecord, Transport};
 use florn_control::message::{
     ActorInfo, ActorSummary, CapacityInfo, ChangeSummary, ChannelSummary, CheckpointSummary,
     ConnectionSummary, ExportPreview, FaultInfo, ModuleSummary, ParamSummary, PortSummary,
-    RunStateInfo, ScenarioSummary, SendSummary, SupportInfo, TelemetryRecord, TraceEntry,
-    control_invalid, control_not_now,
+    ReportEntry, RunStateInfo, ScenarioSummary, SendSummary, SupportInfo, TelemetryRecord,
+    TraceEntry, control_invalid, control_not_now,
 };
 use florn_control::{
     Answer, At, CONTROL_VERSION, Code, Command, Envelope, ExportKind, FileKind, Message, Pacing,
@@ -19,7 +19,7 @@ use florn_control::{
     decode, encode,
 };
 use florn_engine::Engine;
-use florn_kernel::{Advance, Record};
+use florn_kernel::{Advance, Digest, Record};
 use florn_model::canonical::hex;
 use florn_model::{Manifest, Package, PackageMeta};
 use florn_platform::Platform;

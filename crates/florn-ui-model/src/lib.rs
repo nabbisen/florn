@@ -810,6 +810,8 @@ impl ViewModel {
                 });
             }
             Answer::Done => {}
+            // An inspector of a plant is drawn by the circuit workspace (RFC 014, PR-53).
+            Answer::Inspection(_) => {}
             Answer::Checkpoints(list) => self.checkpoints = list.clone(),
         }
     }

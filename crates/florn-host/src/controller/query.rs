@@ -191,13 +191,19 @@ impl<E: Engine> Controller<E> {
                 self.run
                     .as_mut()
                     .map(|r| {
-                        r.trace_window(*from, *count)
+                        // The reports carry their payloads: those the Host kept, and those of
+                        // the window it re-executed with recording on (RFC 014 rule 2).
+                        let (records, payloads) = r.trace_window_payloads(*from, *count);
+                        records
                             .iter()
-                            .map(trace_entry)
+                            .map(|record| trace_entry(record, &payloads))
                             .collect()
                     })
                     .unwrap_or_default(),
             ),
+            Query::Inspect { id } => {
+                Answer::Inspection(self.run.as_ref().and_then(|r| r.inspect(*id)))
+            }
             Query::Capacity => {
                 let c = self.platform.capacity();
                 Answer::Capacity(CapacityInfo {

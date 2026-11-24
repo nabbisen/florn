@@ -377,6 +377,9 @@ pub struct Run<E: Engine> {
     /// Each actor's activations in the display batch in progress (count, faulted, last), when
     /// a front end subscribed to the display stream (RFC 005 rule 14).
     activity: Option<BTreeMap<Identity, (u16, bool, u64)>>,
+    /// The reports committed in the display batch in progress, when a front end draws: the series
+    /// a domain reads from them become `sample` records when the batch is taken (RFC 014 rule 3).
+    reported: Option<Vec<Telemetry>>,
     /// The tick the last advance reached: every event before it is handled (the kernel's clock
     /// stays at the last event handled). The display batch's instant.
     reached: u64,
@@ -515,6 +518,7 @@ impl<E: Engine> Run<E> {
     pub fn set_display(&mut self, on: bool) {
         self.world.set_display(on);
         self.activity = on.then(BTreeMap::new);
+        self.reported = on.then(Vec::new);
     }
 
     /// The display batch since the last take: the flights in order, then each actor's
@@ -533,8 +537,74 @@ impl<E: Engine> Run<E> {
                 last,
             },
         ));
+        records.extend(self.samples());
         records.push(DisplayRecord::Instant { tick: self.reached });
         records
+    }
+
+    /// What a domain says of an element of the scenario (RFC 012 finding F-12): a built-in actor, a
+    /// connection or a domain's world, by identity. A guest is the `actor` query's, so it, an
+    /// identity the scenario lacks and one no domain inspects are `None`. Nothing is changed.
+    pub fn inspect(&self, id: Identity) -> Option<florn_control::message::Inspection> {
+        let scenario = &self.scenario;
+        let kind = if scenario
+            .actor(id)
+            .is_some_and(|a| matches!(a.kind, florn_model::ActorKind::Builtin(_)))
+        {
+            "builtin"
+        } else if scenario.connection(id).is_some() {
+            "connection"
+        } else if scenario
+            .domains
+            .iter()
+            .any(|d| scenario.world_identity(d) == Some(id))
+        {
+            "world"
+        } else {
+            return None;
+        };
+        let fields = self.world.domains().iter().find_map(|d| d.inspect(id))?;
+        Some(florn_control::message::Inspection {
+            id,
+            kind: kind.to_string(),
+            fields,
+        })
+    }
+
+    /// The `sample` records of the reports committed since the last take (RFC 014 rules 2 and 3):
+    /// what the domains draw as series, in the order the reports were committed, an actor's place
+    /// in id order, the value as a float of 32 bits. An actor beyond the 65,535th gets no record.
+    fn samples(&mut self) -> Vec<DisplayRecord> {
+        let Some(reported) = self.reported.as_mut() else {
+            return Vec::new();
+        };
+        let reported = std::mem::take(reported);
+        let mut ids: Vec<Identity> = self.scenario.actors.iter().map(|a| a.id).collect();
+        ids.sort_unstable();
+        let mut out = Vec::new();
+        for r in reported {
+            let Some(actor) = ids
+                .binary_search(&r.actor)
+                .ok()
+                .and_then(|i| u16::try_from(i).ok())
+            else {
+                continue;
+            };
+            for (index, value) in self
+                .world
+                .domains()
+                .iter()
+                .flat_map(|d| d.display_series(r.actor, r.channel, &r.payload))
+            {
+                out.push(DisplayRecord::Sample {
+                    index,
+                    actor,
+                    value: value as f32,
+                    tick: r.at.tick,
+                });
+            }
+        }
+        out
     }
 
     /// Count an activation for the display batch.

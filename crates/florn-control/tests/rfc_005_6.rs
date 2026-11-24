@@ -185,6 +185,7 @@ fn every_message_round_trips() {
             ty: "core/port".into(),
         }],
         config: vec![("period".into(), "7".into())],
+        builtin: None,
     };
     let answers = vec![
         Answer::Scenario(None),
@@ -268,6 +269,12 @@ fn every_message_round_trips() {
                     port: 0,
                     len: 3,
                     digest: "cc".into(),
+                }],
+                reports: vec![florn_control::message::ReportEntry {
+                    seq: 1,
+                    channel: 2,
+                    len: 3,
+                    payload: Some(vec![9, 8, 7]),
                 }],
             },
             TraceEntry::Fault {

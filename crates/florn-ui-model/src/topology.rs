@@ -280,6 +280,8 @@ impl Topology {
                     self.instant = tick;
                     self.flights.retain(|f| !f.arrived(tick));
                 }
+                // A series is drawn by the plots panel (RFC 014 rule 2), not by the topology.
+                Record::Sample { .. } => {}
             }
         }
     }

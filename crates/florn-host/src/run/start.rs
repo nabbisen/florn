@@ -459,6 +459,7 @@ impl<E: Engine> Run<E> {
             telemetry: VecDeque::new(),
             telemetry_dropped: 0,
             activity: options.display.then(BTreeMap::new),
+            reported: options.display.then(Vec::new),
             reached: 0,
             payloads: BTreeMap::new(),
             options,

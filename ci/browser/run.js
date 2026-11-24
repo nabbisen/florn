@@ -185,12 +185,27 @@ for (const name of browsers) {
       check(d.path === path && transportOf(r) === (path === "ring" ? "shared" : "messages"), `${name}: the ${path} is in use and the log says so`, { path: d.path, transport: transportOf(r), isolated: r.isolated });
       check(d.received_digest === d.produced_digest && d.records === d.produced && d.records > 0, `${name}: every record written to the ${path} was read`, { records: d.records, produced: d.produced, batches: d.batches, instants: d.instants, flights: d.flights, activity: d.activity, unknown: d.unknown });
       check(d.dropped === 0 && droppedOf(r).length === 0, `${name}: nothing dropped on the ${path}`, { dropped: d.dropped, reported: droppedOf(r) });
+      // The stream's version is 2 (RFC 014 rule 3), in the ring's header and in the first word of every batch.
+      check(d.version === 2 && d.refused === null, `${name}: the stream read from the ${path} declares version 2 and is not refused`, { version: d.version, refused: d.refused });
       console.log(JSON.stringify({ figure: "display", browser: name, path, records: d.records, frames: d.frames, interval_p95_ms: d.interval_p95_ms, read_p95_ms: d.read_p95_ms, read_max_ms: d.read_max_ms }));
     } catch (err) {
       check(false, `${name}: display over the ${path}`, { error: String(err).split("\n")[0] });
     }
   }
   check(received.ring && received.ring === received.messages, `${name}: the ring and the messages deliver identical records`, received);
+  // The reader rules (RFC 014 rule 3), on each transport this origin has: a stream of an older or
+  // the same version is delivered whole (a kind the reader does not know is in it: the Host's
+  // decoder skips it by its size), and one of a newer version is refused before a record is read.
+  for (const [path, at, sw] of paths) {
+    try {
+      const v = await open(`bench=display-versions&${sw}`, 60000, at);
+      const cells = path === "ring" ? v.ring : v.queue;
+      const ok = cells && cells.older.records === 4 && cells.older.refused === null && cells.same.records === 4 && cells.same.refused === null && cells.newer.records === 0 && cells.newer.refused === v.version + 1;
+      check(ok, `${name}: on the ${path} an older and the same stream are read whole and a newer one is refused before a record`, { version: v.version, cells });
+    } catch (err) {
+      check(false, `${name}: the reader rules over the ${path}`, { error: String(err).split("\n")[0] });
+    }
+  }
   // The transport's cell: each batch padded to 2,000 records at the display's cadence for the
   // run's length, on both paths; every record read, the read cost a figure. Then the same
   // with the page not reading for two seconds (batches every 8 ms, so that the queue's bound

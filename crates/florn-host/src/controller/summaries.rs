@@ -29,6 +29,10 @@ pub(super) fn actor_summary(a: &florn_model::Actor) -> ActorSummary {
             })
             .collect(),
         config: domain_map_text(&a.config),
+        builtin: match &a.kind {
+            florn_model::ActorKind::Builtin(name) => Some(name.clone()),
+            _ => None,
+        },
     }
 }
 
@@ -139,7 +143,7 @@ fn domain_value_text(v: &florn_model::DomainValue) -> String {
     }
 }
 
-pub(super) fn trace_entry(r: &Record) -> TraceEntry {
+pub(super) fn trace_entry(r: &Record, payloads: &BTreeMap<Digest, Vec<u8>>) -> TraceEntry {
     match r {
         Record::Handled {
             key,
@@ -169,6 +173,24 @@ pub(super) fn trace_entry(r: &Record) -> TraceEntry {
                         port: *port,
                         len: *len,
                         digest: hex(digest),
+                    }),
+                    _ => None,
+                })
+                .collect(),
+            // The reports with their bytes, when the Host holds them (RFC 014 rule 2).
+            reports: effects
+                .iter()
+                .filter_map(|e| match e {
+                    florn_kernel::trace::CommittedEffect::Report {
+                        seq,
+                        channel,
+                        len,
+                        digest,
+                    } => Some(ReportEntry {
+                        seq: *seq,
+                        channel: *channel,
+                        len: *len,
+                        payload: payloads.get(digest).cloned(),
                     }),
                     _ => None,
                 })

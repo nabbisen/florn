@@ -19,6 +19,7 @@ fn entries_are_ordered_by_instant_and_filtered() {
                 draws: 0,
                 effects: 0,
                 sends: Vec::new(),
+                reports: Vec::new(),
             },
             TraceEntry::Fault {
                 at: At {

@@ -270,6 +270,10 @@ fn query_w(e: &mut Encoder, q: &Query) {
             e.text(digest);
         }
         Query::Checkpoints => e.u8(8),
+        Query::Inspect { id } => {
+            e.u8(9);
+            e.u32(*id);
+        }
     }
 }
 fn query_r(d: &mut Decoder) -> Option<Query> {
@@ -289,6 +293,7 @@ fn query_r(d: &mut Decoder) -> Option<Query> {
         },
         7 => Query::Payload { digest: d.text()? },
         8 => Query::Checkpoints,
+        9 => Query::Inspect { id: d.u32()? },
         _ => return None,
     })
 }

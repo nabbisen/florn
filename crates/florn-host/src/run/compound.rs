@@ -346,6 +346,7 @@ impl<E: Engine> CallIn for Calls<'_, E> {
             payloads,
             telemetry,
             telemetry_dropped,
+            reported,
             ..
         } = &mut *self.run;
         let slot = actors
@@ -368,6 +369,7 @@ impl<E: Engine> CallIn for Calls<'_, E> {
                 telemetry,
                 telemetry_dropped,
                 telemetry_capacity: options.telemetry_capacity,
+                reported: reported.as_mut(),
                 instant: open.instant,
             },
         );

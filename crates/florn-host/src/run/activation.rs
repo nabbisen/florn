@@ -348,6 +348,9 @@ pub(super) struct Records<'a> {
     pub telemetry: &'a mut VecDeque<Telemetry>,
     pub telemetry_dropped: &'a mut u64,
     pub telemetry_capacity: usize,
+    /// The committed reports of the display batch in progress, when a front end draws (RFC 014
+    /// rule 2: the series of a domain are read from them when the batch is taken).
+    pub reported: Option<&'a mut Vec<Telemetry>>,
     pub instant: Instant,
 }
 
@@ -361,7 +364,7 @@ pub(super) fn committed_outcome(
     actor: Identity,
     act: Activation,
     metered: u64,
-    out: Records<'_>,
+    mut out: Records<'_>,
 ) -> Outcome {
     // Collect what the display path and the payload store need before the kernel takes the
     // effects; they are kept only if the commit succeeds (RFC 002 rule 34).
@@ -389,6 +392,14 @@ pub(super) fn committed_outcome(
                 .map(|(_, payload)| String::from_utf8_lossy(payload).into_owned())
                 .collect();
             for (channel, payload) in reports {
+                if let Some(reported) = out.reported.as_deref_mut() {
+                    reported.push(Telemetry {
+                        at: out.instant,
+                        actor,
+                        channel,
+                        payload: payload.clone(),
+                    });
+                }
                 if out.telemetry.len() >= out.telemetry_capacity {
                     out.telemetry.pop_front();
                     *out.telemetry_dropped += 1;
@@ -441,6 +452,7 @@ fn activate_slot<E: Engine>(
     telemetry: &mut VecDeque<Telemetry>,
     telemetry_dropped: &mut u64,
     telemetry_capacity: usize,
+    reported: Option<&mut Vec<Telemetry>>,
     instant: Instant,
 ) -> Outcome {
     let actor = act.actor;
@@ -493,6 +505,7 @@ fn activate_slot<E: Engine>(
                 telemetry,
                 telemetry_dropped,
                 telemetry_capacity,
+                reported,
                 instant,
             },
         ),
@@ -658,6 +671,7 @@ impl<E: Engine> Run<E> {
                 payloads,
                 telemetry,
                 telemetry_dropped,
+                reported,
                 ..
             } = self;
             let slot = actors.get_mut(&id).expect("checked above");
@@ -674,6 +688,7 @@ impl<E: Engine> Run<E> {
                 telemetry,
                 telemetry_dropped,
                 options.telemetry_capacity,
+                reported.as_mut(),
                 instant,
             )
         };

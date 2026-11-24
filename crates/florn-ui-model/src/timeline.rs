@@ -113,6 +113,7 @@ impl Timeline {
                     draws: _,
                     effects: _,
                     sends,
+                    reports: _,
                 } => Entry {
                     at: *at,
                     kind: Kind::Activation,

@@ -41,6 +41,7 @@ fn config_fields_follow_the_declaration() {
             ("period".into(), "100ns".into()),
             ("note".into(), "x".into()),
         ],
+        builtin: None,
     };
     let module = ModuleSummary {
         name: "dv".into(),
