@@ -784,3 +784,41 @@ fn the_results_command_writes_the_file_from_a_record_with_payloads() {
     .unwrap_err();
     assert!(e.contains("not started") || e.contains("mismatch"), "{e}");
 }
+
+#[test]
+fn chains_that_differ_while_no_record_does_are_diverged_not_agreement() {
+    // RFC 013 rule 20: when the chains differ and no record differs at all, exempt values
+    // included, nothing explains the difference; the comparison must not call it agreement.
+    // Across Hosts, the trace and payloads of the record intact, one chain bit doctored:
+    let r = from_another_host(honest(true));
+    let (run, outcome) = replay(true, &r);
+    assert!(
+        matches!(
+            outcome,
+            Replayed::Diverged {
+                difference: None,
+                ..
+            }
+        ),
+        "{outcome:?}"
+    );
+    assert_eq!(codes(&run), ["replay.diverged"]);
+    // The same record with one exempt difference (the work of the continuous actor) is
+    // `replay.exempt-only`: something does explain the chains.
+    let mut exempt = r.clone();
+    for record in exempt.trace.as_mut().unwrap() {
+        if let Record::Handled {
+            target: 1, metered, ..
+        } = record
+        {
+            *metered += 1;
+            break;
+        }
+    }
+    let (run, outcome) = replay(true, &exempt);
+    assert!(
+        matches!(outcome, Replayed::WithinTolerance(_)),
+        "{outcome:?}"
+    );
+    assert_eq!(codes(&run), ["replay.exempt-only"]);
+}

@@ -208,6 +208,13 @@ impl<E: florn_engine::Engine> Run<E> {
         recorded.shrink_to_fit();
         Some(
             match compare_rows(&recorded, &replayed, tolerance, &reading) {
+                // The chains differ and no record does, exempt values included: nothing explains
+                // the difference, so it is not agreement (RFC 013 rule 20).
+                Ok(agreement)
+                    if agreement.differing == 0 && agreement.consumption_differing == 0 =>
+                {
+                    plain
+                }
                 Ok(agreement) => Replayed::WithinTolerance(agreement),
                 Err(difference) => Replayed::Diverged {
                     from,
