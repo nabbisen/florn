@@ -26,13 +26,19 @@ PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17),
 
 **PR-42 is in review** (`b043712`, 2026-11-22): the comparison of Tier 2, the replay codes, the results file. Its design is accepted, including the three `Domain` methods (`tolerance`, `continuous_actor`, `numeric_fields`), which are F-5's change: only the domain knows its payloads.
 
-The follow-up is done (`db80c92` Wasmtime `=48.0.9`, `d8270ee` `url` 2.5.9 in the lock, `f34a196` `replay.exempt-only`).
+PR-42 is done and verified (`b043712` to `13f9b4f`, 2026-11-22 to 2026-11-24): the comparison of Tier 2, five replay codes, the results file, Wasmtime 48.0.9. Its verifier's report is ruled in RFC 013 rule 20 (amended 2026-11-25).
 
-**Next: one small commit, then PR-42's verifier.** No review of mine in between: I review this commit and the verifier's report together.
+**Next: PR-43, what the application reads.** Read its row in `task-breakdown-pr-plan.md`, section 3.5 of `implementation-handoff.md` and B-43 first; it starts from RFC 012 findings F-6 and F-12, RFC 014 rules 2 and 3 and RFC 005 rule 14.
 
-- **Chains that differ while no record differs at all** (exempt values included) are `diverged`, with `replay.diverged` (RFC 013 rule 20, amended). Nothing explains the difference, so the comparison must not call it agreement; today it says `replay.exempt-only`. `replay.exempt-only` stays for a difference in exempt values alone. A test with a doctored chain bit and equal rows. Add a line to the existing follow-up request.
+**Its first commit, from PR-42's verifier** (RFC 013 rule 20 as amended):
 
-Then the owner starts a **new** verifier session on PR-42 (`b043712` with `db80c92`, `d8270ee`, `f34a196` and this commit). The team waits for the review before PR-43.
+1. **`Comparison::Incomparable` is `replay.diverged` at once** under every tier. Today, under Tier 2, `Run::replayed` goes on to compare rows, so a record whose stored points are at other positions can come out `within-tolerance`.
+2. **A numeric field differs when its bits differ.** `-0` against `+0`, or two NaNs of other bits, differ and agree. A trace that differs only there is `within-tolerance` and names the field; today it is `diverged` with nothing named.
+3. **`record` counts from 1**, as the stored points count records; today it counts from 0.
+4. **The sentence of `replay.needs-payloads`**, in both languages, says "the trace or the payload bytes of {side} are missing": a record can hold its trace and lack some payloads.
+5. **The verifier's checks join the tests**, as PR-38's did: `verifier_pr42.rs` (in the verifier's folder beside PR-42's review request) goes to `crates/florn-conformance/tests/` under a name that says what it checks (for example `replay_tier2_checks.rs`).
+   - Its B5c expects `structure` for a continuous actor's Fault metered work. The ruling is the other way: that work is exempt, as an activation's is, and the RFC text was corrected (V-1). So that one assertion changes to `within-tolerance` with `replay.exempt-only`. Note in the request that this change follows the ruling.
+   - Its B23 and B8d pass after points 1 and 2.
 
 ## What Phase 4 delivers
 
