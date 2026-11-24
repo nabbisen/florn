@@ -83,7 +83,7 @@
  "code.replay.within-tolerance": "再実行は許容差の範囲で記録と一致しました。比較したレコードは{compared}件、差のあるものは{differing}件で、最大は{worst}の{largest}（ティック{at}）です。",
  "code.replay.value-differs": "レコード{record}で、フィールド{field}は記録では{recorded}、再実行では{replayed}で、許容差を超えています。",
  "code.replay.record-differs": "再実行はレコード{record}で記録と異なります:{what}。",
- "code.replay.needs-payloads": "許容差による比較はできません。{side}のトレースとペイロードがありません。",
+ "code.replay.needs-payloads": "許容差による比較はできません。{side}のトレースまたはペイロードのバイトがありません。",
  "code.checkpoint.mismatch": "記録の{what}は{expected}ですが、この実行では{found}です。",
  "code.checkpoint.taken": "ティック{instant}でチェックポイントを取りました（{bytes}）。{kept}個を保持しています。",
  "code.checkpoint.budget": "チェックポイントのメモリ予算により古いチェックポイント{dropped}個を破棄しました。{kept}個を保持しています（{bytes}）。",

@@ -83,7 +83,7 @@
  "code.replay.within-tolerance": "The replay agrees with the record within the tolerance: {compared} records compared, {differing} differ, the largest in {worst} by {largest} at tick {at}.",
  "code.replay.value-differs": "At record {record} the field {field} was {recorded} in the record and is {replayed} in the replay, beyond the tolerance.",
  "code.replay.record-differs": "The replay differs from the record at record {record}: {what}.",
- "code.replay.needs-payloads": "The replay cannot be compared within a tolerance: the trace and the payloads of {side} are missing.",
+ "code.replay.needs-payloads": "The replay cannot be compared within a tolerance: the trace or the payload bytes of {side} are missing.",
  "code.checkpoint.mismatch": "The record's {what} is {expected}; this run's is {found}.",
  "code.checkpoint.taken": "A checkpoint was taken at tick {instant} ({bytes}); {kept} are kept.",
  "code.checkpoint.budget": "The checkpoints' memory budget dropped {dropped} older checkpoints; {kept} are kept ({bytes}).",

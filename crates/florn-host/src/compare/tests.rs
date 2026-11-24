@@ -195,7 +195,7 @@ fn the_field_is_compared_in_si_units() {
     else {
         panic!("1.001 kohm is not 1 kohm within 1e-6");
     };
-    assert_eq!((record, field.as_str()), (0, "r"));
+    assert_eq!((record, field.as_str()), (1, "r"), "the first record");
     // Both values are shown in the field's own unit, not in SI.
     assert_eq!(recorded, ("1".to_string(), "kohm".to_string()));
     assert_eq!(replayed, ("1.001".to_string(), "kohm".to_string()));
@@ -295,7 +295,7 @@ fn a_difference_beyond_the_tolerance_names_the_first_record_and_field() {
     assert_eq!(
         compare(&a, &b, TOLERANCE, &fake(&[])),
         Err(Difference::Value {
-            record: 1,
+            record: 2,
             field: "level".into(),
             recorded: ("1".into(), "V".into()),
             replayed: ("1.1".into(), "V".into()),
@@ -307,7 +307,7 @@ fn a_difference_beyond_the_tolerance_names_the_first_record_and_field() {
 fn the_other_differences_are_named_by_what_differs() {
     use RecordDifference as D;
     let base = handled(1, 2, 10, level(1.0));
-    let record = |what| Err(Difference::Record { record: 0, what });
+    let record = |what| Err(Difference::Record { record: 1, what });
     let run = |b: Row| compare(std::slice::from_ref(&base), &[b], TOLERANCE, &fake(&[]));
     // The key, the target.
     let mut k = key(1, 1);
@@ -385,14 +385,14 @@ fn a_different_number_of_records_is_the_length_at_the_end_of_the_shorter() {
     assert_eq!(
         compare(&[r(1), r(2), r(3)], &[r(1), r(2)], TOLERANCE, &fake(&[])),
         Err(Difference::Record {
-            record: 2,
+            record: 3,
             what: RecordDifference::Length
         })
     );
     assert_eq!(
         compare(&[r(1)], &[r(1), r(2)], TOLERANCE, &fake(&[])),
         Err(Difference::Record {
-            record: 1,
+            record: 2,
             what: RecordDifference::Length
         })
     );
@@ -404,7 +404,7 @@ fn a_different_number_of_records_is_the_length_at_the_end_of_the_shorter() {
     assert!(matches!(
         compare(&[r(1), r(2)], &[wrong], TOLERANCE, &fake(&[])),
         Err(Difference::Record {
-            record: 0,
+            record: 1,
             what: RecordDifference::Key
         })
     ));
@@ -423,7 +423,7 @@ fn work_and_draws_are_exempt_for_a_continuous_actor_only() {
     assert_eq!(
         compare(&a, &more_work, TOLERANCE, &fake(&[7])),
         Err(Difference::Record {
-            record: 0,
+            record: 1,
             what: RecordDifference::Structure
         })
     );
@@ -503,4 +503,58 @@ fn numbers_are_written_as_the_shortest_text_with_an_exponent_when_far_from_one()
     ] {
         assert_eq!(number_text(v).parse::<f64>().unwrap(), v, "{v}");
     }
+}
+
+#[test]
+fn a_field_differs_when_its_bits_differ_and_agrees_by_the_bound() {
+    // RFC 013 rule 20 (amended): `-0` against `+0`, and two NaNs of other bits, differ and agree:
+    // the pair is within tolerance and the field is named, with no distance between them.
+    let nan_a = f64::from_bits(0x7ff8_0000_0000_0001);
+    let nan_b = f64::from_bits(0x7ff8_0000_0000_0000);
+    for (a, b) in [(-0.0, 0.0), (0.0, -0.0), (nan_a, nan_b), (f64::NAN, nan_a)] {
+        let one = |v: f64| vec![handled(1, 2, 10, level(v))];
+        let agreement = compare(&one(a), &one(b), TOLERANCE, &fake(&[])).expect("they agree");
+        assert_eq!(
+            agreement.differing, 1,
+            "{a:?} against {b:?} differ in their bits"
+        );
+        let worst = agreement.worst.expect("the field is named");
+        assert_eq!((worst.field.as_str(), worst.at), ("level", 1));
+        assert_eq!(
+            worst.largest,
+            ("0".to_string(), "V".to_string()),
+            "no distance"
+        );
+    }
+    // The same bits are no difference at all, whatever the value (NaN included).
+    for v in [0.0, -0.0, f64::NAN, f64::INFINITY] {
+        let one = vec![handled(1, 2, 10, level(v))];
+        assert_eq!(
+            compare(&one, &one, TOLERANCE, &fake(&[]))
+                .unwrap()
+                .differing,
+            0,
+            "{v:?}"
+        );
+    }
+    // A pair beyond the bound is still a value difference, signs of zero or not.
+    let near = vec![handled(1, 2, 10, level(0.0))];
+    let far = vec![handled(1, 2, 10, level(1.0))];
+    assert!(matches!(
+        compare(&near, &far, TOLERANCE, &fake(&[])),
+        Err(Difference::Value { .. })
+    ));
+}
+
+#[test]
+fn the_worst_field_is_the_largest_share_among_pairs_that_differ_in_bits_only() {
+    // A pair of signed zeros has share zero: a later pair with a real, tiny difference is worse.
+    let a = vec![handled(1, 2, 10, level(0.0)), handled(2, 2, 10, level(1.0))];
+    let b = vec![
+        handled(1, 2, 10, level(-0.0)),
+        handled(2, 2, 10, level(f64::from_bits(1.0f64.to_bits() + 1))),
+    ];
+    let agreement = compare(&a, &b, TOLERANCE, &fake(&[])).unwrap();
+    assert_eq!(agreement.differing, 2);
+    assert_eq!(agreement.worst.unwrap().at, 2);
 }

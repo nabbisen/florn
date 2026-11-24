@@ -55,8 +55,13 @@ fn payload(level: f64, located: u64) -> Vec<u8> {
 const REPORTS: [(u64, f64, u64); 3] = [(50, 1.5, 10), (120, 2.5, 20), (220, 3.5, 30)];
 
 fn start(continuous: bool) -> Host {
+    start_with(continuous, REPORTS)
+}
+
+/// The same run with other reports.
+fn start_with(continuous: bool, reports: [(u64, f64, u64); 3]) -> Host {
     let mut run = td::try_start(&scenario(continuous), host::options()).expect("starts");
-    for (tick, level, located) in REPORTS {
+    for (tick, level, located) in reports {
         run.intervene(
             Some(tick),
             &Intervention::Message {
@@ -410,7 +415,7 @@ fn a_different_record_count_a_key_and_a_structure_are_diverged() {
     );
     assert_eq!(
         host::log_param(&run, "replay.record-differs", "record").as_deref(),
-        Some((total - 1).to_string().as_str())
+        Some(total.to_string().as_str())
     );
     // A key: the tick of the first handled record moved.
     let mut r = honest(true);
@@ -821,4 +826,73 @@ fn chains_that_differ_while_no_record_does_are_diverged_not_agreement() {
         "{outcome:?}"
     );
     assert_eq!(codes(&run), ["replay.exempt-only"]);
+}
+
+#[test]
+fn stored_points_at_other_positions_are_diverged_under_every_tier() {
+    // RFC 013 rule 20: the kernel's `Incomparable` is unchanged and still `replay.diverged`: the rows
+    // are not compared, so a record whose first stored point is at another position is diverged
+    // even when its trace agrees within the tolerance across Hosts.
+    let mut r = honest(true);
+    let level = f64::from_le_bytes(nth_report(&r, 1)[..8].try_into().unwrap());
+    change_report(&mut r, 1, payload(f64::from_bits(level.to_bits() + 1), 20));
+    let mut r = from_another_host(r);
+    r.run.chain[0].0 += 1;
+    let (run, outcome) = replay(true, &r);
+    assert_eq!(
+        outcome,
+        Replayed::Diverged {
+            from: 0,
+            to: 0,
+            difference: None
+        }
+    );
+    assert_eq!(codes(&run), ["replay.diverged"]);
+}
+
+#[test]
+fn a_pair_of_signed_zeros_is_within_tolerance_and_names_the_field() {
+    // RFC 013 rule 19 leaves the sign of a zero to the target: a trace that differs only there is
+    // within tolerance and names the field, not an unexplained difference. The run reports `+0` at
+    // its second report; the record, as another Host's, holds `-0`.
+    let zeros = [(50, 1.5, 10), (120, 0.0, 20), (220, 3.5, 30)];
+    let mut r = record_of(&mut start_with(true, zeros));
+    change_report(&mut r, 1, payload(-0.0, 20));
+    let (run, outcome) = replay(true, &from_another_host(r));
+    let Replayed::WithinTolerance(a) = &outcome else {
+        panic!("{outcome:?}");
+    };
+    assert_eq!(a.differing, 1);
+    assert_eq!(codes(&run), ["replay.within-tolerance"]);
+    assert_eq!(
+        param(&run, "replay.within-tolerance", "worst"),
+        Some(florn_control::Value::Name("level".into()))
+    );
+    assert_eq!(
+        param(&run, "replay.within-tolerance", "largest"),
+        Some(florn_control::Value::Quantity("0".into(), "khop".into()))
+    );
+}
+
+#[test]
+fn a_record_is_counted_from_one() {
+    // `record` counts from 1, as the stored points count records.
+    let mut r = honest(true);
+    change_report(&mut r, 0, payload(9.0, 10));
+    let (run, _) = replay(true, &from_another_host(r.clone()));
+    let first_numeric = r
+        .trace
+        .as_ref()
+        .unwrap()
+        .iter()
+        .position(|record| {
+            matches!(record, Record::Handled { effects, .. }
+                if effects.iter().any(|e| matches!(e, CommittedEffect::Report { len: 16, .. })))
+        })
+        .expect("a numeric report")
+        + 1;
+    assert_eq!(
+        param(&run, "replay.value-differs", "record"),
+        Some(florn_control::Value::Count(first_numeric as u64))
+    );
 }

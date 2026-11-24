@@ -360,10 +360,20 @@ fn agree(a: f64, b: f64, tolerance: Tolerance) -> bool {
     (a - b).abs() <= tolerance.atol + tolerance.rtol * a.abs().max(b.abs())
 }
 
+/// How far apart two values are: zero for two that are the same number (`-0` and `+0`, equal
+/// infinities, any two NaNs), so that a pair that differs only in its bits has no distance.
+fn distance(a: f64, b: f64) -> f64 {
+    if a == b || (a.is_nan() && b.is_nan()) {
+        0.0
+    } else {
+        (a - b).abs()
+    }
+}
+
 /// The share of its tolerance a difference uses, for finding the field nearest it.
 fn share(a: f64, b: f64, tolerance: Tolerance) -> f64 {
     let allowed = tolerance.atol + tolerance.rtol * a.abs().max(b.abs());
-    let difference = (a - b).abs();
+    let difference = distance(a, b);
     if difference == 0.0 {
         0.0
     } else if allowed > 0.0 {
@@ -390,7 +400,8 @@ pub fn compare(
     };
     let mut worst_share = 0.0f64;
     for (n, (a, b)) in recorded.iter().zip(replayed).enumerate() {
-        let record = n as u64;
+        // Records are counted from 1, as the stored points count records (RFC 013 rule 20).
+        let record = n as u64 + 1;
         let record_difference = |what| Box::new(Difference::Record { record, what });
         if std::mem::discriminant(a) != std::mem::discriminant(b) {
             return Err(record_difference(RecordDifference::Structure));
@@ -489,9 +500,9 @@ pub fn compare(
                                             replayed: (number_text(g.value()), g.unit.clone()),
                                         }));
                                     }
-                                    if f.value() != g.value()
-                                        && !(f.value().is_nan() && g.value().is_nan())
-                                    {
+                                    // A field differs when its bits differ (RFC 013 rule 20): `-0`
+                                    // and `+0`, or two NaNs of other bits, differ and agree.
+                                    if f.value != g.value {
                                         differs = true;
                                         let used = share(fa, fb, tolerance);
                                         if agreement.worst.is_none() || used > worst_share {
@@ -499,7 +510,7 @@ pub fn compare(
                                             agreement.worst = Some(Worst {
                                                 field: f.name.clone(),
                                                 largest: (
-                                                    number_text((f.value() - g.value()).abs()),
+                                                    number_text(distance(f.value(), g.value())),
                                                     f.unit.clone(),
                                                 ),
                                                 at: a.key().tick,
@@ -570,7 +581,7 @@ pub fn compare(
     }
     if recorded.len() != replayed.len() {
         return Err(Box::new(Difference::Record {
-            record: recorded.len().min(replayed.len()) as u64,
+            record: recorded.len().min(replayed.len()) as u64 + 1,
             what: RecordDifference::Length,
         }));
     }

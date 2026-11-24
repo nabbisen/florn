@@ -177,8 +177,15 @@ impl<E: florn_engine::Engine> Run<E> {
             &reference.chain,
         ) {
             Comparison::Matched { points } => return Some(Replayed::Matched { points }),
-            // Stored points at different positions: unchanged, reported as `replay.diverged`.
-            Comparison::Incomparable => (0, 0),
+            // Stored points at different positions: unchanged under every tier, `replay.diverged`
+            // at once (RFC 013 rule 20): the rows are not compared.
+            Comparison::Incomparable => {
+                return Some(Replayed::Diverged {
+                    from: 0,
+                    to: 0,
+                    difference: None,
+                });
+            }
             Comparison::Diverged { from, to } => (from, to),
         };
         let plain = Replayed::Diverged {

@@ -67,3 +67,19 @@ fn values_are_formatted_by_type() {
     assert_eq!(render(&n), "The run ended: end reached.");
     assert_eq!(line(&n), "info: run.ended: The run ended: end reached.");
 }
+
+#[test]
+fn a_replay_that_lacks_what_it_needs_says_the_trace_or_the_payload_bytes() {
+    // RFC 013 rule 20: a record can hold its trace and lack some payloads, so the sentence says
+    // "or"; and the five outcomes' codes each have a sentence naming what they count.
+    let n = florn_control::Notification::new(
+        "replay.needs-payloads",
+        florn_control::Severity::Error,
+        florn_control::Scope::run(),
+        florn_control::Ends::Nothing,
+    )
+    .with("side", florn_control::Value::Enum("recorded".into()));
+    let text = render(&n);
+    assert!(text.contains("the trace or the payload bytes of"), "{text}");
+    assert!(!text.contains("trace and the payloads"), "{text}");
+}

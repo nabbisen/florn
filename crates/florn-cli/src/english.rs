@@ -318,7 +318,7 @@ pub const TABLE: &[(&str, &str)] = &[
     ),
     (
         "replay.needs-payloads",
-        "The replay cannot be compared within a tolerance: the trace and the payloads of {side} are missing.",
+        "The replay cannot be compared within a tolerance: the trace or the payload bytes of {side} are missing.",
     ),
     (
         "checkpoint.taken",
