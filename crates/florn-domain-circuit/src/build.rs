@@ -4,8 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use florn_model::Manifest;
 use florn_model::manifest::{Actor, ActorKind};
+use florn_model::{Manifest, TickLength};
 
 use crate::analyse::Member;
 use crate::plant::{Device, Element, Net, Node, Plant, Signal, Unknown, UnknownKind};
@@ -291,6 +291,11 @@ pub(crate) fn plant(
     }
     let plant = Plant {
         profile,
+        tick: match w.scenario.time.tick {
+            TickLength::Ns => 1e-9,
+            TickLength::Ps => 1e-12,
+            TickLength::Fs => 1e-15,
+        },
         nets: w.nets.iter().filter(|n| !n.ground).cloned().collect(),
         signals,
         devices,

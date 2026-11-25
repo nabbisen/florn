@@ -14,6 +14,11 @@ pub fn ln(x: f64) -> f64 {
     libm::log(x)
 }
 
+/// The cube root.
+pub fn cbrt(x: f64) -> f64 {
+    libm::cbrt(x)
+}
+
 /// The smaller of two numbers, by comparison: `b` when `b < a`, else `a`. Where a NaN is one of
 /// them the result is `a`; the solver never passes one (a NaN is a convergence failure first).
 pub fn fmin(a: f64, b: f64) -> f64 {

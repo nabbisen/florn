@@ -2,15 +2,18 @@
 //! signals between the pins and the signal ports of the plant's built-ins, the units and the
 //! dimensions of RFC 012 rule 5, the solver profile, the codes of rule 28, and the static plant:
 //! modified nodal analysis with a dense LU, Newton iteration with the limiter inside the diode, and
-//! the initial solve in the start hook (RFC 012 rule 30; RFC 013 rule 9).
+//! the initial solve in the start hook (RFC 012 rule 30; RFC 013 rule 9), and the transient solver
+//! that carries the plant on from it.
 //!
 //! The kernel knows nothing of this crate (ARCH-006). The arithmetic is IEEE `f64` with the
 //! `libm` crate for every function IEEE does not round (RFC 013 rule 19): `clippy.toml` lists the
 //! `std` methods the crate may not call, and `ci/check-deps.py` lists its dependencies.
 //!
-//! Implemented by PR-44 of `rfcs/handoffs/012-circuit-domain/task-breakdown-pr-plan.md`; the
-//! transient integration, the advance on demand, the controller and the device model are the units
-//! after it.
+//! The static plant is PR-44's and the transient integration PR-45's (`transient`: the
+//! trapezoidal rule, variable-step Gear 2 and backward Euler for starting, the error estimate and
+//! the step controller, the limits of a step in ticks, the restarts); the advance on demand, the
+//! controller and the device model are the units after it, in
+//! `rfcs/handoffs/012-circuit-domain/task-breakdown-pr-plan.md`.
 #![forbid(unsafe_code)]
 
 use florn_admission::manifest::ModuleManifest;
@@ -25,10 +28,12 @@ use florn_model::manifest::{DomainMap, DomainValue};
 pub mod analyse;
 mod assemble;
 mod build;
+pub mod control;
 pub mod dc;
 pub mod diode;
 pub mod guests;
 mod inspect;
+pub mod integrate;
 pub mod kinds;
 pub mod lu;
 pub mod math;
@@ -38,6 +43,7 @@ pub mod plant;
 pub mod profile;
 mod read;
 mod series;
+pub mod transient;
 pub mod units;
 
 pub use profile::{Limits, Profile};
@@ -71,6 +77,9 @@ pub struct CircuitDomain {
     scenario: String,
     /// The guest actors the start hook read (RFC 012 finding F-18).
     guests: guests::Guests,
+    /// The transient solver from tick 0, built by the start hook once the operating point is
+    /// found; the advance of RFC 012 rule 8 drives it (PR-46).
+    transient: Option<transient::Transient>,
 }
 
 impl CircuitDomain {
@@ -82,6 +91,7 @@ impl CircuitDomain {
             solution: None,
             scenario: String::new(),
             guests: guests::Guests::default(),
+            transient: None,
         }
     }
     /// The plant and its solution, for the inspectors and the kit's tests.
@@ -90,6 +100,13 @@ impl CircuitDomain {
     }
     pub fn solution(&self) -> Option<&dc::Solution> {
         self.solution.as_ref()
+    }
+    /// The transient solver, once the run has started: the plant at `solved`.
+    pub fn transient(&self) -> Option<&transient::Transient> {
+        self.transient.as_ref()
+    }
+    pub fn transient_mut(&mut self) -> Option<&mut transient::Transient> {
+        self.transient.as_mut()
     }
     /// The circuit guests the start hook read: their kinds and declared channels.
     pub fn guests(&self) -> &guests::Guests {
@@ -183,6 +200,7 @@ impl Domain for CircuitDomain {
         self.plant = analyse::analyse(scenario, self.limits).plant;
         self.scenario = scenario.name.clone();
         self.solution = None;
+        self.transient = None;
         self.guests = guests::Guests::default();
     }
 
@@ -289,6 +307,7 @@ impl Domain for CircuitDomain {
         };
         match dc::initial_solve(plant) {
             Ok(solution) => {
+                self.transient = Some(transient::Transient::new(plant, &solution));
                 self.solution = Some(solution);
                 Ok(Vec::new())
             }

@@ -166,6 +166,9 @@ pub struct Unknown {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Plant {
     pub profile: Profile,
+    /// The tick's length in seconds, the scenario's exact decimal rounded once to the nearest
+    /// `f64` at composition (RFC 013 rule 14): a step of `n` ticks is `n × tick` seconds.
+    pub tick: f64,
     /// The non-ground nets in ascending connection identity: net `k` is unknown `k`.
     pub nets: Vec<Net>,
     pub signals: Vec<Signal>,

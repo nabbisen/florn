@@ -94,3 +94,43 @@ fn the_tolerances_of_the_profile_decide_when_it_stops() {
         t.iterations
     );
 }
+
+/// A system with the solution `target` that is linear in the trial: `f = x − target`, `J = I`.
+fn linear<'a>(
+    n: usize,
+    target: &'a [f64],
+    mut limited: impl FnMut(u32) -> bool + 'a,
+) -> impl FnMut(&[f64]) -> crate::assemble::System + 'a {
+    let mut call = 0;
+    move |x: &[f64]| {
+        call += 1;
+        let mut j = crate::lu::Matrix::new(n);
+        for i in 0..n {
+            j.set(i, i, 1.0);
+        }
+        crate::assemble::System {
+            j,
+            f: x.iter().zip(target).map(|(x, t)| x - t).collect(),
+            scale: vec![0.0; n],
+            limited: limited(call),
+        }
+    }
+}
+
+#[test]
+fn a_device_that_limited_in_an_iteration_does_not_converge_in_it() {
+    // RFC 013 rule 8: converged only when no device reported limiting in the last iteration. The
+    // trial is already the solution, so the update and residual criteria hold at once; the device
+    // limited in the first iteration, so the solve takes a second, in which it did not.
+    let plant = divider().plant();
+    let n = plant.size();
+    let target: Vec<f64> = (0..n).map(|i| 0.5 + i as f64).collect();
+    let c = iterate(&plant, target.clone(), linear(n, &target, |call| call == 1)).unwrap();
+    assert_eq!(c.iterations, 2);
+    // The same without the report converges at once.
+    let c = iterate(&plant, target.clone(), linear(n, &target, |_| false)).unwrap();
+    assert_eq!(c.iterations, 1);
+    // A device that limits in every iteration never converges: the bound is the failure.
+    let failed = iterate(&plant, target.clone(), linear(n, &target, |_| true));
+    assert_eq!(failed.unwrap_err().iterations, plant.profile.max_iterations);
+}

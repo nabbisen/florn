@@ -20,6 +20,24 @@ pub struct System {
     pub limited: bool,
 }
 
+/// The coefficients of one step (RFC 013 rule 6): `x' = α·x − history[k]` for the `k`-th dynamic
+/// state variable, in the order of [`crate::integrate::dynamics`] (the devices in ascending
+/// identity: a capacitor's voltage, an inductor's current, a motor's current and then its speed).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Companion {
+    pub alpha: f64,
+    pub history: Vec<f64>,
+}
+
+/// Which system is assembled.
+#[derive(Clone, Copy, Debug)]
+pub enum Form<'a> {
+    /// The initial solve, with the independent sources scaled by `lambda` (source stepping).
+    Dc { lambda: f64 },
+    /// A step of the transient, over the unknowns of rule 3 only.
+    Step(&'a Companion),
+}
+
 /// The junction voltage each diode used at the previous iteration of the solve, by device index
 /// (rule 8); zero at the start of a chain of solves.
 pub type Memory = Vec<f64>;
@@ -96,10 +114,24 @@ fn held_raw(plant: &Plant, s: Option<usize>) -> f64 {
     s.map_or(0.0, |i| plant.signals[i].held)
 }
 
-/// Assemble the system at `x` with the conductance `gmin` to ground at every net and the
-/// independent sources scaled by `lambda` (source stepping, rule 9).
-pub fn assemble(plant: &Plant, x: &[f64], gmin: f64, lambda: f64, memory: &mut Memory) -> System {
-    let mut s = System::new(plant.size());
+/// Assemble a system of either form at `x`.
+pub fn assemble_form(
+    plant: &Plant,
+    x: &[f64],
+    gmin: f64,
+    form: Form<'_>,
+    memory: &mut Memory,
+) -> System {
+    let (lambda, step) = match form {
+        Form::Dc { lambda } => (lambda, None),
+        Form::Step(c) => (1.0, Some(c)),
+    };
+    let mut s = System::new(match step {
+        Some(_) => plant.transient_unknowns,
+        None => plant.size(),
+    });
+    // The index of the next dynamic state variable of a step.
+    let mut slot = 0usize;
     for (k, _) in plant.nets.iter().enumerate() {
         s.f[k] += gmin * x[k];
         s.j.add(k, k, gmin);
@@ -110,22 +142,42 @@ pub fn assemble(plant: &Plant, x: &[f64], gmin: f64, lambda: f64, memory: &mut M
                 let i = g * (volt(x, *a) - volt(x, *b));
                 s.between(*a, *b, i, *g);
             }
-            Element::Capacitor { a, b, ic, dc, .. } => {
-                if let (Some(ic), Some(m)) = (ic, dc) {
-                    s.branch(*a, *b, *m, x[*m]);
-                    s.constrain(*m, *a, *b, x, *ic);
+            Element::Capacitor { a, b, c, ic, dc } => match step {
+                Some(co) => {
+                    // i = c·x', x the voltage across it.
+                    let v = volt(x, *a) - volt(x, *b);
+                    let i = c * (co.alpha * v - co.history[slot]);
+                    slot += 1;
+                    s.between(*a, *b, i, c * co.alpha);
                 }
-            }
+                None => {
+                    if let (Some(ic), Some(m)) = (ic, dc) {
+                        s.branch(*a, *b, *m, x[*m]);
+                        s.constrain(*m, *a, *b, x, *ic);
+                    }
+                }
+            },
             Element::Inductor {
-                a, b, ic, branch, ..
+                a,
+                b,
+                l,
+                ic,
+                branch,
             } => {
                 s.branch(*a, *b, *branch, x[*branch]);
-                match ic {
-                    Some(ic) => {
+                match (step, ic) {
+                    (Some(co), _) => {
+                        // v = l·x', x the current through it.
+                        let rhs = l * (co.alpha * x[*branch] - co.history[slot]);
+                        slot += 1;
+                        s.constrain(*branch, *a, *b, x, rhs);
+                        s.j.add(*branch, *branch, -(l * co.alpha));
+                    }
+                    (None, Some(ic)) => {
                         s.f[*branch] += x[*branch] - ic;
                         s.j.add(*branch, *branch, 1.0);
                     }
-                    None => s.constrain(*branch, *a, *b, x, 0.0),
+                    (None, None) => s.constrain(*branch, *a, *b, x, 0.0),
                 }
             }
             Element::VoltageSource {
@@ -179,8 +231,10 @@ pub fn assemble(plant: &Plant, x: &[f64], gmin: f64, lambda: f64, memory: &mut M
                 p,
                 n,
                 r,
+                l,
                 kt,
                 ke,
+                j,
                 b,
                 load,
                 branch,
@@ -189,14 +243,30 @@ pub fn assemble(plant: &Plant, x: &[f64], gmin: f64, lambda: f64, memory: &mut M
             } => {
                 let (i, w) = (x[*branch], x[*state]);
                 s.branch(*p, *n, *branch, i);
-                // Armature at steady state: v = r·i + ke·ω (di/dt = 0).
-                s.constrain(*branch, *p, *n, x, r * i + ke * w);
-                s.j.add(*branch, *branch, -r);
-                s.j.add(*branch, *state, -ke);
-                // Shaft at steady state: 0 = kt·i − b·ω − load (dω/dt = 0).
-                s.f[*state] += kt * i - b * w - held_si(plant, *load);
-                s.j.add(*state, *branch, *kt);
-                s.j.add(*state, *state, -b);
+                match step {
+                    None => {
+                        // Armature at steady state: v = r·i + ke·ω (di/dt = 0).
+                        s.constrain(*branch, *p, *n, x, r * i + ke * w);
+                        s.j.add(*branch, *branch, -r);
+                        s.j.add(*branch, *state, -ke);
+                        // Shaft at steady state: 0 = kt·i − b·ω − load (dω/dt = 0).
+                        s.f[*state] += kt * i - b * w - held_si(plant, *load);
+                        s.j.add(*state, *branch, *kt);
+                        s.j.add(*state, *state, -b);
+                    }
+                    Some(co) => {
+                        // Armature v = r·i + l·i' + ke·ω; shaft j·ω' = kt·i − b·ω − load.
+                        let di = co.alpha * i - co.history[slot];
+                        let dw = co.alpha * w - co.history[slot + 1];
+                        slot += 2;
+                        s.constrain(*branch, *p, *n, x, r * i + l * di + ke * w);
+                        s.j.add(*branch, *branch, -(r + l * co.alpha));
+                        s.j.add(*branch, *state, -ke);
+                        s.f[*state] += kt * i - b * w - held_si(plant, *load) - j * dw;
+                        s.j.add(*state, *branch, *kt);
+                        s.j.add(*state, *state, -(b + j * co.alpha));
+                    }
+                }
             }
         }
     }

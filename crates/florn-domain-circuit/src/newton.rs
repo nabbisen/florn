@@ -5,7 +5,7 @@
 //! residual within `abstol + reltol·s_i`, and no device limited in the last iteration. More than
 //! `newton.max-iterations` iterations is a convergence failure (rule 16).
 
-use crate::assemble::{Memory, assemble};
+use crate::assemble::{Form, Memory, System, assemble_form};
 use crate::math::fmax;
 use crate::plant::{Plant, UnknownKind};
 
@@ -36,7 +36,8 @@ fn tolerance(plant: &Plant, i: usize) -> f64 {
     }
 }
 
-/// Run Newton from `x0` with the conductance `gmin` and the sources at `lambda`.
+/// Run Newton from `x0` on the system of the initial solve, with the conductance `gmin` and the
+/// sources at `lambda`.
 pub fn solve(
     plant: &Plant,
     x0: Vec<f64>,
@@ -44,13 +45,35 @@ pub fn solve(
     lambda: f64,
     memory: &mut Memory,
 ) -> Result<Converged, Failure> {
+    solve_form(plant, Form::Dc { lambda }, x0, gmin, memory)
+}
+
+/// Run Newton from `x0` on the system of either form (rule 8).
+pub fn solve_form(
+    plant: &Plant,
+    form: Form<'_>,
+    x0: Vec<f64>,
+    gmin: f64,
+    memory: &mut Memory,
+) -> Result<Converged, Failure> {
+    iterate(plant, x0, |x| assemble_form(plant, x, gmin, form, memory))
+}
+
+/// The iteration itself over a system the caller assembles at each trial point: the criteria of
+/// rule 8 and the bound on the iterations. The unknowns past the nets are branch currents and
+/// states, whose tolerances are the plant's.
+pub(crate) fn iterate(
+    plant: &Plant,
+    x0: Vec<f64>,
+    mut system: impl FnMut(&[f64]) -> System,
+) -> Result<Converged, Failure> {
     let p = &plant.profile;
-    let n = plant.size();
     let nets = plant.nets.len();
     let mut x = x0;
     let mut worst = 0;
     for iteration in 1..=p.max_iterations {
-        let mut s = assemble(plant, &x, gmin, lambda, memory);
+        let mut s = system(&x);
+        let n = s.f.len();
         let mut dx: Vec<f64> = s.f.iter().map(|f| -f).collect();
         let finite = s.f.iter().all(|f| f.is_finite());
         if finite && let Err(column) = s.j.solve(&mut dx) {
