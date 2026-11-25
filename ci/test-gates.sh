@@ -12,6 +12,9 @@
 #   - ci/check-test-layout.sh: an inline test module (also on one line, behind cfg(all(test, ..)),
 #     nested, under fuzz/), a loose #[test], test-only code that is not a module, a test module
 #     under another name than tests; and the layout that is right passes
+#   - ci/check-deps.py (on a `cargo metadata` file with one dependency planted): a second external
+#     dependency of the circuit domain, normal or build, and an external dependency required as a
+#     range fail; a development dependency passes (RFC 013 rule 19, control 2)
 #   - the browser kit's page opener: a mutated copy that never retries fails its test
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -227,6 +230,45 @@ expect fail "the test-layout check fails a test module declared under another na
 layout
 plant fuzz/fuzz_targets/t.rs '\n#[cfg(test)]\nmod tests {\n}\n'
 expect fail "the test-layout check fails an inline test module under fuzz/" layout_check
+
+# --- ci/check-deps.py: the circuit domain's direct external dependencies (RFC 013 rule 19) --------
+if command -v cargo >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+  cargo metadata --format-version 1 --locked >"$scratch/meta.json" 2>/dev/null
+  # Plant a change in one package's direct dependencies: `add NAME REQ KIND PACKAGE` adds one,
+  # `loosen NAME PACKAGE` rewrites an exact requirement into a range.
+  plant_dep() {
+    python3 - "$scratch/meta.json" "$scratch/planted.json" "$@" <<'PY'
+import json, sys
+src, dst, op = sys.argv[1:4]
+meta = json.load(open(src))
+if op == "add":
+    name, req, kind, package = sys.argv[4:8]
+    pkg = next(p for p in meta["packages"] if p["name"] == package)
+    pkg["dependencies"].append({"name": name, "req": req, "kind": None if kind == "normal" else kind})
+else:
+    name, package = sys.argv[4:6]
+    pkg = next(p for p in meta["packages"] if p["name"] == package)
+    for d in pkg["dependencies"]:
+        if d["name"] == name:
+            d["req"] = "^" + d["req"].lstrip("=")
+json.dump(meta, open(dst, "w"))
+PY
+  }
+  deps_check() { python3 ci/check-deps.py --metadata "$1"; }
+  expect pass "check-deps.py passes the workspace as it is" deps_check "$scratch/meta.json"
+  plant_dep add toml "=1.1.8" normal florn-domain-circuit
+  expect fail "check-deps.py fails a second external dependency of the circuit domain" deps_check "$scratch/planted.json"
+  plant_dep add toml "=1.1.8" build florn-domain-circuit
+  expect fail "check-deps.py fails a second external dependency of the circuit domain (build)" deps_check "$scratch/planted.json"
+  plant_dep add toml "^1" dev florn-domain-circuit
+  expect pass "check-deps.py allows a development dependency in the circuit domain" deps_check "$scratch/planted.json"
+  plant_dep loosen libm florn-domain-circuit
+  expect fail "check-deps.py fails libm required as a range" deps_check "$scratch/planted.json"
+  plant_dep loosen blake3 florn-kernel
+  expect fail "check-deps.py fails an external dependency of another crate required as a range" deps_check "$scratch/planted.json"
+else
+  echo "skip  the dependency check's controls: cargo and python3 are needed"
+fi
 
 # --- the browser kit's page opener ----------------------------------------------------------------
 if command -v node >/dev/null 2>&1; then

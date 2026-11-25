@@ -544,6 +544,8 @@ fn the_catalogue_is_the_rfc() {
             ScopeKind::Run => "run",
             ScopeKind::Actor => "actor",
             ScopeKind::Command => "command",
+            ScopeKind::Connection => "connection",
+            ScopeKind::Port => "port",
             ScopeKind::None => "—",
         };
         assert_eq!(scope, cells[3], "{code}");

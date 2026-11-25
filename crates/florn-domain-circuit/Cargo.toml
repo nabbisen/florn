@@ -1,0 +1,22 @@
+[package]
+name = "florn-domain-circuit"
+description = "The circuit domain of RFC 012 and RFC 013: nets, signals and the passive plant built-ins, modified nodal analysis with a dense LU, Newton iteration with the limiter inside the diode, the initial solve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = true
+
+[dependencies]
+florn-host = { workspace = true }
+florn-kernel = { workspace = true }
+florn-model = { workspace = true }
+florn-control = { workspace = true }
+florn-abi = { workspace = true }
+florn-admission = { workspace = true }
+libm = { workspace = true }
+
+[dev-dependencies]
+toml = { workspace = true }

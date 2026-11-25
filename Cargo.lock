@@ -816,6 +816,7 @@ dependencies = [
  "florn-abi",
  "florn-admission",
  "florn-control",
+ "florn-domain-circuit",
  "florn-domain-network",
  "florn-engine",
  "florn-engine-wasmtime",
@@ -840,6 +841,20 @@ name = "florn-control"
 version = "0.3.1"
 dependencies = [
  "florn-model",
+]
+
+[[package]]
+name = "florn-domain-circuit"
+version = "0.3.1"
+dependencies = [
+ "florn-abi",
+ "florn-admission",
+ "florn-control",
+ "florn-host",
+ "florn-kernel",
+ "florn-model",
+ "libm",
+ "toml",
 ]
 
 [[package]]

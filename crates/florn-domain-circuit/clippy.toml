@@ -1,0 +1,31 @@
+# RFC 013 rule 19, control 1: the solver's float arithmetic is IEEE `+ - * /`, negation, `sqrt`,
+# `abs`, `floor`, `ceil`, `trunc`, `copysign`, comparisons and casts, and nothing else from `std`.
+# Every other function comes from `libm` (one pure-Rust implementation in both Hosts), and the
+# crate has its own `fmin` and `fmax` (`math.rs`). `cargo clippy -D warnings` fails on a use.
+disallowed-methods = [
+    { path = "f64::exp", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::exp2", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::exp_m1", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::ln", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::ln_1p", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::log", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::log2", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::log10", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::powf", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::powi", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::cbrt", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::hypot", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::sin", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::cos", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::tan", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::asin", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::acos", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::atan", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::atan2", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::sinh", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::cosh", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::tanh", reason = "RFC 013 rule 19: use libm through crate::math" },
+    { path = "f64::mul_add", reason = "RFC 013 rule 19: no fused multiply-add" },
+    { path = "f64::min", reason = "RFC 013 rule 19: use crate::math::fmin (signed zeros)" },
+    { path = "f64::max", reason = "RFC 013 rule 19: use crate::math::fmax (signed zeros)" },
+]

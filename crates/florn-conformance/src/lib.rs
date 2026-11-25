@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 
 pub mod bench;
+pub mod circuit;
 pub mod guests;
 pub mod host;
 pub mod results;

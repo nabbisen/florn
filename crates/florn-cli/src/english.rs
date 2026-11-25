@@ -261,6 +261,118 @@ pub const TABLE: &[(&str, &str)] = &[
         "The module {module} declares the channel {channel} with a layout the network view does not read.",
     ),
     (
+        "circuit.no-ground",
+        "The circuit has nets and none of them is the ground; set ground = true on one.",
+    ),
+    (
+        "circuit.two-grounds",
+        "The net {connection} is a second ground; a scenario has exactly one.",
+    ),
+    (
+        "circuit.pin-open",
+        "The pin {port} of {actor} is on no net.",
+    ),
+    (
+        "circuit.port-type",
+        "Port {port} of connection {connection} has the type {type}, which the connection does not take.",
+    ),
+    (
+        "circuit.signal-ports",
+        "The signal {connection} has {outs} outputs; it needs exactly one.",
+    ),
+    (
+        "circuit.signal-dimension",
+        "The port {port} of the signal {connection} does not hold a quantity of {expected}.",
+    ),
+    (
+        "circuit.signal-unconnected",
+        "The input {port} of {actor} is on no signal and reads 0.",
+    ),
+    (
+        "circuit.attr-unknown",
+        "Connection {connection} sets {key}, which the circuit domain does not know; it knows {expected}.",
+    ),
+    (
+        "circuit.attr-type",
+        "Connection {connection} sets {key}, which must be {expected}.",
+    ),
+    (
+        "circuit.param-unknown",
+        "Actor {actor} sets {key}, which its kind does not take; it takes {expected}.",
+    ),
+    (
+        "circuit.param-type",
+        "Actor {actor} sets {key}, which must be {expected}.",
+    ),
+    (
+        "circuit.param-missing",
+        "Actor {actor} needs the parameter {key}, {expected}.",
+    ),
+    (
+        "circuit.profile-unknown",
+        "The [circuit] table has the key {key}, which is no solver setting; the settings are {expected}.",
+    ),
+    (
+        "circuit.profile-value",
+        "The solver setting {key} must be {expected}.",
+    ),
+    (
+        "circuit.no-period",
+        "Actor {actor} samples and needs a period.",
+    ),
+    (
+        "circuit.period-zero",
+        "Actor {actor} has a period of zero ticks; it must be at least 1.",
+    ),
+    (
+        "circuit.kind-unknown",
+        "The module {module} declares the circuit kind {kind}, which the domain does not have.",
+    ),
+    (
+        "circuit.device-limit",
+        "The scenario has {found} guest device models; this release admits at most {maximum}.",
+    ),
+    (
+        "circuit.device-ports",
+        "The device module {module} declares {found} pin port kinds; it needs exactly one, of two to sixteen pins.",
+    ),
+    (
+        "circuit.plant-unobserved",
+        "The scenario has a controller or a settable value and no sensor or detector to observe the plant.",
+    ),
+    (
+        "circuit.floating-node",
+        "The net {connection} has no direct-current path to ground, so its voltage is set by gmin and means nothing; give a capacitor an ic or add a resistor.",
+    ),
+    (
+        "circuit.too-large",
+        "The plant has {unknowns} unknowns, above the bound {maximum}; it would need {bytes}.",
+    ),
+    (
+        "circuit.no-operating-point",
+        "The initial solve found no operating point: the unknown {unknown}, a {kind}, after {iterations} iterations; give a capacitor or an inductor an ic, or change the sources.",
+    ),
+    (
+        "circuit.stamp-invalid",
+        "The device {actor} returned an invalid stamp: {reason}.",
+    ),
+    (
+        "circuit.device-faulted",
+        "The device {actor} faulted and is absent from the plant from now on.",
+    ),
+    (
+        "circuit.non-convergence",
+        "The plant did not converge at {tick}: the largest residual is at {actor}, after {iterations} iterations.",
+    ),
+    (
+        "circuit.step-rejected",
+        "At {tick} {attempts} attempts were rejected, the first because of {cause}.",
+    ),
+    (
+        "circuit.step-minimum",
+        "At {tick} the error test failed at the smallest step, {step} ticks.",
+    ),
+    (
         "control.version",
         "The front end speaks interface version {front-end}; this Host speaks {host}.",
     ),

@@ -78,6 +78,23 @@ impl Scope {
             ..Default::default()
         }
     }
+    /// A connection, by identity (RFC 007 rule 3; a code of scope `connection`).
+    pub fn connection(id: u32) -> Self {
+        Self {
+            run: true,
+            connection: Some(id),
+            ..Default::default()
+        }
+    }
+    /// A port of an actor (a code of scope `port`).
+    pub fn port(actor: u32, port: u32) -> Self {
+        Self {
+            run: true,
+            actor: Some(actor),
+            port: Some(port),
+            ..Default::default()
+        }
+    }
     pub fn field(path: impl Into<String>) -> Self {
         Self {
             field: Some(path.into()),

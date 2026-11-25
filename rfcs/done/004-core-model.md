@@ -177,13 +177,18 @@ kind = "builtin"
 builtin = "circuit/dc-motor"       # when kind = "builtin": "<domain>/<name>"
 ports = [
   { id = 0, name = "a+", type = "circuit/pin" },
-  { id = 1, name = "a-", type = "circuit/pin" },
-  { id = 2, name = "shaft", type = "circuit/shaft" },
+  { id = 1, name = "a−", type = "circuit/pin" },        # U+2212, as RFC 012 rule 23 spells it
+  { id = 2, name = "speed", type = "circuit/signal-out" },
 ]
 
 [actors.config]
-R = "1.2ohm"
-L = "0.5mH"
+r = "1.2ohm"
+l = "0.5mH"
+kt = "0.05Nm/A"
+ke = "0.05Vs/rad"
+j = "0.0001kgm2"
+b = "0.00001Nms"
+period = "1ms"
 ```
 
 **Rule 17.** The core reads `id`, `name`, `kind`, `module` or `builtin`, `class`, and the `id`, `name`, and `type` of each port. `config` is a domain field. The domain validates it against the module's manifest or the built-in's definition.

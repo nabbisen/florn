@@ -203,7 +203,7 @@ The codes of RFC 001 to 006 and the external design, with their parameters, seve
 
 ### 4.5 Enumerations
 
-Each `enum(set)` above is a closed set with catalogue texts `enum.<set>.<value>`: `element` (actor, connection, port, module, domain), `dimension` (time, bytes, and the domains' registered dimensions: bandwidth, the network domain's, and voltage, current, resistance, conductance, capacitance, inductance, power, frequency, torque, angular-speed, inertia, friction, torque-per-current, voltage-per-speed, the circuit domain's, RFC 012 rule 5), `parameter-type` (the types of RFC 002 rule 13), `module-count` (functions, globals, tables, segments, imports, exports, custom-sections, bytes), `memory-rule` (count, imported, shared, 64-bit, not-exported), `manifest-section` (contract-identity, florn-manifest), `trust-state` (validated, rejected), `capacity-kind` (instances, memory), `machine-condition` (memory-refused, engine-stack, watchdog, engine-failure, host-defect: the engine's watchdog stopped a call; the engine could not do what the Host asked of it; a defect of the Host or of a domain, such as a compound activation left open), `limiting-factor` (actors, solver, telemetry, display, memory, swapping), `faulted-policy` (drop, stop-run, and the domains' policies), `end-reason` (end-reached, user, host-fault, non-convergence, actor-fault: a domain's solver gave up; a guest faulted under the policy `stop-run`), `run-limit` (microsteps-per-tick, events-per-instant), `display-path` (ring, messages), `transport` (shared, messages), `invalid-reason` (unknown-command, missing-field, wrong-type, out-of-range, unknown-field), `run-state` (no-scenario, invalid, ready, running, paused, ended), `file-kind` (manifest, package, module, run-record, checkpoint, diagnostic-log), `checkpoint-field` (module-hash, admission-version, cost-model, scenario-hash), `yes-no`, `manifest-count` (bytes, text-bytes, domains, modules, actors, ports, connections, changes, limit-classes, package-bytes, package-entries), `field-type` (table, text, unsigned-integer, identity, quantity, list, tick-length, tie-policy, actor-kind, domain/name, sha256-hex, boolean), `drop-reason` (down, too-large, loss, faulted), `link-state` (up, down), `record-difference` (key, structure, payload, length), `replay-side` (recorded, replayed, both).
+Each `enum(set)` above is a closed set with catalogue texts `enum.<set>.<value>`: `element` (actor, connection, port, module, domain), `dimension` (time, bytes, and the domains' registered dimensions: bandwidth, the network domain's, and voltage, current, resistance, conductance, capacitance, inductance, power, frequency, torque, angular-speed, inertia, friction, torque-per-current, voltage-per-speed, the circuit domain's, RFC 012 rule 5), `parameter-type` (the types of RFC 002 rule 13), `module-count` (functions, globals, tables, segments, imports, exports, custom-sections, bytes), `memory-rule` (count, imported, shared, 64-bit, not-exported), `manifest-section` (contract-identity, florn-manifest), `trust-state` (validated, rejected), `capacity-kind` (instances, memory), `machine-condition` (memory-refused, engine-stack, watchdog, engine-failure, host-defect: the engine's watchdog stopped a call; the engine could not do what the Host asked of it; a defect of the Host or of a domain, such as a compound activation left open), `limiting-factor` (actors, solver, telemetry, display, memory, swapping), `faulted-policy` (drop, stop-run, and the domains' policies), `end-reason` (end-reached, user, host-fault, non-convergence, actor-fault: a domain's solver gave up; a guest faulted under the policy `stop-run`), `run-limit` (microsteps-per-tick, events-per-instant), `display-path` (ring, messages), `transport` (shared, messages), `invalid-reason` (unknown-command, missing-field, wrong-type, out-of-range, unknown-field), `run-state` (no-scenario, invalid, ready, running, paused, ended), `file-kind` (manifest, package, module, run-record, checkpoint, diagnostic-log), `checkpoint-field` (module-hash, admission-version, cost-model, scenario-hash), `yes-no`, `manifest-count` (bytes, text-bytes, domains, modules, actors, ports, connections, changes, limit-classes, package-bytes, package-entries), `field-type` (table, text, unsigned-integer, identity, quantity, list, tick-length, tie-policy, actor-kind, domain/name, sha256-hex, boolean), `drop-reason` (down, too-large, loss, faulted), `link-state` (up, down), `record-difference` (key, structure, payload, length), `replay-side` (recorded, replayed, both), `rejection-cause` (error, convergence: why the circuit solver rejected a step), `unknown-kind` (voltage, current, state: what kind of unknown the circuit's initial solve names).
 
 ### 4.6 Network domain (RFC 008 rule 18)
 
@@ -215,6 +215,39 @@ Each `enum(set)` above is a closed set with catalogue texts `enum.<set>.<value>`
 | `network.attr-type` | `connection: name`, `key: name`, `expected: text` | error | field | command |
 | `network.protocol-unknown` | `module: name`, `protocol: text` | warning | file | nothing |
 | `network.telemetry-layout` | `module: name`, `channel: name` | warning | file | nothing |
+
+### 4.7 Circuit domain (RFC 012 rule 28)
+
+| Code | Parameters | Severity | Scope | Ends |
+|---|---|---|---|---|
+| `circuit.no-ground` | — | error | file | command |
+| `circuit.two-grounds` | `connection: name` | error | connection | command |
+| `circuit.pin-open` | `actor: name`, `port: name` | error | port | command |
+| `circuit.port-type` | `connection: name`, `port: name`, `type: text` | error | field | command |
+| `circuit.signal-ports` | `connection: name`, `outs: count` | error | connection | command |
+| `circuit.signal-dimension` | `connection: name`, `port: name`, `expected: enum(dimension)` | error | port | command |
+| `circuit.signal-unconnected` | `actor: name`, `port: name` | warning | port | nothing |
+| `circuit.attr-unknown` | `connection: name`, `key: name`, `expected: text` | error | field | command |
+| `circuit.attr-type` | `connection: name`, `key: name`, `expected: text` | error | field | command |
+| `circuit.param-unknown` | `actor: name`, `key: name`, `expected: text` | error | field | command |
+| `circuit.param-type` | `actor: name`, `key: name`, `expected: text` | error | field | command |
+| `circuit.param-missing` | `actor: name`, `key: name`, `expected: text` | error | field | command |
+| `circuit.profile-unknown` | `key: name`, `expected: text` | error | field | command |
+| `circuit.profile-value` | `key: name`, `expected: text` | error | field | command |
+| `circuit.no-period` | `actor: name` | error | actor | command |
+| `circuit.period-zero` | `actor: name` | error | actor | command |
+| `circuit.kind-unknown` | `module: name`, `kind: text` | error | file | command |
+| `circuit.device-limit` | `found: count`, `maximum: count` | error | file | command |
+| `circuit.device-ports` | `module: name`, `found: count` | error | file | command |
+| `circuit.plant-unobserved` | — | error | file | command |
+| `circuit.floating-node` | `connection: name` | warning | connection | nothing |
+| `circuit.too-large` | `unknowns: count`, `maximum: count`, `bytes: bytes` | error | file | command |
+| `circuit.no-operating-point` | `unknown: name`, `kind: enum(unknown-kind)`, `iterations: count` | error | run | run |
+| `circuit.stamp-invalid` | `actor: name`, `reason: text` | error | actor | activation |
+| `circuit.device-faulted` | `actor: name` | warning | actor | nothing |
+| `circuit.non-convergence` | `actor: name`, `tick: tick`, `iterations: count` | error | run | nothing |
+| `circuit.step-rejected` | `tick: tick`, `attempts: count`, `cause: enum(rejection-cause)` | info | run | nothing |
+| `circuit.step-minimum` | `tick: tick`, `step: count` | warning | run | nothing |
 
 ## 5. The diagnostic log
 

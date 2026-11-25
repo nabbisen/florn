@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """RFC 005 rules 1 and 43: the dependency direction of the workspace, and the absence of platform
-and engine crates from the core. Reads `cargo metadata`; fails on the first violation."""
+and engine crates from the core. RFC 013 rule 19 (control 2): the circuit domain's direct external
+dependencies are `libm` and nothing else, and every direct external dependency of a normal or
+build kind is pinned exactly (`=x.y.z`). Reads `cargo metadata`, or the file given with
+`--metadata FILE` (what the gate tests of `ci/test-gates.sh` plant a violation in); fails on the
+first violation."""
 import json, subprocess, sys
 
-meta = json.loads(subprocess.check_output(["cargo", "metadata", "--format-version", "1", "--locked"]))
+if len(sys.argv) == 3 and sys.argv[1] == "--metadata":
+    with open(sys.argv[2], "rb") as f:
+        meta = json.load(f)
+else:
+    meta = json.loads(subprocess.check_output(["cargo", "metadata", "--format-version", "1", "--locked"]))
 by_id = {p["id"]: p for p in meta["packages"]}
 name_of = {p["id"]: p["name"] for p in meta["packages"]}
 resolve = {n["id"]: n for n in meta["resolve"]["nodes"]}
@@ -45,15 +53,34 @@ ALLOWED = {
     "florn-ui-web": {"florn-control", "florn-ui-model", "florn-ui-scene", "florn-host", "florn-engine", "florn-engine-web", "florn-platform-web", "florn-domain-network"},
     "florn-cli": {"florn-control", "florn-host", "florn-engine-wasmtime", "florn-platform-native", "florn-model", "florn-domain-network"},
     "florn-domain-network": {"florn-host", "florn-kernel", "florn-model", "florn-control", "florn-abi", "florn-admission"},
+    "florn-domain-circuit": {"florn-host", "florn-kernel", "florn-model", "florn-control", "florn-abi", "florn-admission"},
     "florn-guest-network": {"florn-guest"},
-    "florn-conformance": {"florn-host", "florn-model", "florn-control", "florn-engine", "florn-engine-wasmtime", "florn-platform", "florn-platform-native", "florn-guest", "florn-kernel", "florn-admission", "florn-abi", "florn-test-guests", "florn-domain-network"},
+    "florn-conformance": {"florn-host", "florn-domain-circuit", "florn-model", "florn-control", "florn-engine", "florn-engine-wasmtime", "florn-platform", "florn-platform-native", "florn-guest", "florn-kernel", "florn-admission", "florn-abi", "florn-test-guests", "florn-domain-network"},
     "florn-test-guests": {"florn-model", "florn-admission"},
     "florn-guest": set(),
     "florn-kernel": set(),
     "florn-abi": set(),
     "florn": {"florn-cli"},
 }
+# The direct external dependencies (normal and build kinds) a crate is limited to. A crate that is
+# not listed is limited by `cargo deny` alone; every external dependency is pinned exactly.
+EXTERNAL = {
+    "florn-domain-circuit": {"libm"},
+}
 bad = 0
+for p in meta["packages"]:
+    if p["name"] not in workspace:
+        continue
+    for d in p["dependencies"]:
+        if d["name"] in workspace or d["kind"] == "dev":
+            continue
+        if not d["req"].startswith("="):
+            print(f"{p['name']}: {d['name']} is required as {d['req']}, not pinned exactly (=x.y.z)"); bad += 1
+    if p["name"] in EXTERNAL:
+        external = {d["name"] for d in p["dependencies"] if d["name"] not in workspace and d["kind"] != "dev"}
+        extra = external - EXTERNAL[p["name"]]
+        if extra:
+            print(f"{p['name']}: external dependencies {sorted(extra)}, only {sorted(EXTERNAL[p['name']])} allowed (RFC 013 rule 19)"); bad += 1
 for crate in sorted(workspace):
     florn_direct = {d for d in direct(crate) if d.startswith("florn")}
     extra = florn_direct - ALLOWED.get(crate, set())
