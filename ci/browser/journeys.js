@@ -98,6 +98,19 @@ async function endedWithChain(page, expected, timeout = 15000) {
   }
   return { s, first, waited_ms: Date.now() - t0, pending: first.chain === null };
 }
+// The state of a run that may have ended, once its digest is there: the model shows the chain as
+// pending (null) from the moment it sets `ended` until the run-state answer arrives (RFC 005 rule
+// 37; the PR-38 follow-up), so a journey that compares a digest waits while it is. A digest that is
+// present and differs is compared at once and fails at once.
+async function settledState(page, timeout = 15000) {
+  const t0 = Date.now();
+  let s = await state(page);
+  while (s.chain === null && s.state === "ended" && Date.now() - t0 < timeout) {
+    await sleep(50);
+    s = await state(page);
+  }
+  return s;
+}
 // Keep what a run that ended with another digest than the recorded one leaves: its state, and its
 // record exported as a person would, in `j1-records/` for a native replay to its first differing
 // record (`florn replay <record> scenarios/ospf-lab.toml --modules scenarios/modules`).
@@ -339,7 +352,7 @@ for (const name of browsers) {
     // The verdict arrives with the end; the chain the state shows settles a message later.
     s = await until(page, (x) => x.state === "ended" && x.replay, 120000, "replay ended");
     await sleep(500);
-    s = await state(page);
+    s = await settledState(page);
     check(s.replay === "replay.matched" && s.applied === 1, `${name}: J3 the replay matches at every stored point and applies the intervention`, { replay: s.replay, applied: s.applied });
     // J4 (AC-010): save the scenario; reload it; replay the saved run: the same digest.
     const [save] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click("#save-scenario")]);
@@ -355,7 +368,7 @@ for (const name of browsers) {
     await page.click("#run");
     s = await until(page, (x) => x.state === "ended" && x.replay, 120000, "replay ended");
     await sleep(500);
-    s = await state(page);
+    s = await settledState(page);
     check(s.replay === "replay.matched" && s.chain === j3chain, `${name}: J4 the saved scenario reloads and replays the saved run with its intervention to the same digest`, { chain: s.chain, replay: s.replay, expected: j3chain });
     check(addressClean(page.url()), `${name}: J3/J4 the address holds nothing but the origin and the path (RFC 009 rule 22)`, { url: page.url() });
     await consoleCheck(page, errors, `${name}: J3/J4 no error of the application in the console`);
@@ -452,7 +465,7 @@ for (const name of browsers) {
     await page.click("#apply-draft");
     s = await until(page, (x) => x.state === "ready" && x.nodes === 3, 20000, "the draft loaded");
     await runToEnd(page);
-    s = await state(page);
+    s = await settledState(page);
     check(s.chain === triangle.chain, `${name}: J2 the authored scenario runs to the digest the runner recorded`, { chain: s.chain, expected: triangle.chain });
     check(addressClean(page.url()), `${name}: J2 the address holds nothing but the origin and the path (RFC 009 rule 22)`, { url: page.url() });
     await consoleCheck(page, errors, `${name}: J2 no error of the application in the console`);
@@ -522,7 +535,7 @@ for (const name of browsers) {
     await page.click("#apply-draft");
     await until(page, (x) => x.state === "ready" && x.nodes === 3, 20000, "the draft loaded");
     await runToEnd(page);
-    s = await state(page);
+    s = await settledState(page);
     check(s.chain === triangle.chain, `${name}: J5 the scenario with the imported module runs to the recorded digest`, { chain: s.chain, expected: triangle.chain });
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 20000 }),
@@ -540,7 +553,7 @@ for (const name of browsers) {
     await page.click("#run");
     s = await until(page, (x) => x.state === "ended" && x.replay, 120000, "replay ended");
     await sleep(500);
-    s = await state(page);
+    s = await settledState(page);
     check(s.replay === "replay.matched", `${name}: J5 the replay matches`, { replay: s.replay });
     // The kept module exports byte for byte; the record exported is kept too.
     const [back] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click('#files li[data-kind="module"] .export-stored')]);
@@ -589,7 +602,7 @@ for (const name of browsers) {
     check(s.now <= target && s.undone === 1, `${name}: P1 "Step to here" moves back to the row's instant`, { now: s.now, row_tick: firstTick });
     // Nothing re-applied: the lab's digest.
     await runToEnd(page);
-    s = await state(page);
+    s = await settledState(page);
     check(s.chain === lab.chain && s.undone === 1, `${name}: P1 the run continued to the end gives the lab's digest when nothing is re-applied`, { chain: s.chain, expected: lab.chain });
     // Back again and re-applied: a different digest, the intervention applied.
     await page.fill("#goto-tick", "1000");
@@ -598,7 +611,7 @@ for (const name of browsers) {
     await page.click("#undone .reapply");
     await until(page, (x) => x.undone === 0 && x.interventions === 1, 10000, "re-applied");
     await runToEnd(page);
-    s = await state(page);
+    s = await settledState(page);
     check(s.chain !== lab.chain && s.applied === 1, `${name}: P1 the re-applied intervention applies at its instant and changes the digest`, { chain: s.chain, applied: s.applied });
     check(addressClean(page.url()), `${name}: P1 the address holds the origin, the path and the lab's name only`, { url: page.url() });
     await consoleCheck(page, errors, `${name}: P1 no error of the application in the console`);
@@ -629,7 +642,7 @@ for (const name of browsers) {
     check(await selectLink(page, 1, 3), `${name}: P2 the chord r1-r3 is selected`);
     await page.click("#link-down");
     await runToEnd(page);
-    s = await state(page);
+    s = await settledState(page);
     check(s.chain !== lab.chain && s.applied === 1, `${name}: P2 the branch with the chord down ends with another digest`, { chain: s.chain });
     if (existsSync(runner)) {
       const [branchDl] = await Promise.all([
@@ -690,9 +703,13 @@ for (const name of browsers) {
     const [chooser] = await Promise.all([again.page.waitForEvent("filechooser"), again.page.click("#load-checkpoint")]);
     await chooser.setFiles(cpPath);
     s = await until(again.page, (x) => x.state === "paused" && x.now !== null && x.now >= 1500, 30000, "the checkpoint loaded");
-    check(s.now === cpInstant && s.files.some((f) => f.kind === "checkpoint"), `${name}: P3 the checkpoint loads at its instant and is kept under Files`, { now: s.now, instant: cpInstant });
+    // The page stores the file asynchronously: the Files list gets the checkpoint a moment after the
+    // run is at its instant (it failed once in Firefox with `now` and `instant` equal), so wait for it
+    // and say what the list held.
+    s = await until(again.page, (x) => x.files.some((f) => f.kind === "checkpoint"), 15000, "the checkpoint kept under Files").catch(() => state(again.page));
+    check(s.now === cpInstant && s.files.some((f) => f.kind === "checkpoint"), `${name}: P3 the checkpoint loads at its instant and is kept under Files`, { now: s.now, instant: cpInstant, files: s.files.map((f) => `${f.kind}:${f.name}`) });
     await runToEnd(again.page);
-    s = await state(again.page);
+    s = await settledState(again.page);
     check(s.chain === lab.chain, `${name}: P3 the resumed run ends with the lab's digest`, { chain: s.chain, expected: lab.chain });
     // Another scenario: refused with the field named.
     await openLab(again.page, "dv-triangle", 3);
@@ -738,6 +755,7 @@ for (const name of browsers) {
     await page.click("#run");
     s = await until(page, (x) => x.state === "ended", 300000, "the swapping run ended");
     await sleep(600);
+    s = await settledState(page);
     const statusSwapping = await page.textContent("#status-swapping");
     check(s.swapping && s.swapping[1] === count && s.swapping[0] < count && /swapping|スワップ/.test(statusSwapping), `${name}: P4 the run swaps and the status line says so with the counts`, { swapping: s.swapping, status: statusSwapping });
     if (existsSync(runner)) {
@@ -829,7 +847,7 @@ for (const name of browsers) {
     }
     check(/type=(keepalive|update|open)/.test(decoded) && /sender-as=/.test(decoded), `${name}: a BGP frame decodes in the inspector`, { decoded: decoded.slice(0, 120) });
     await runToEnd(page);
-    s = await state(page);
+    s = await settledState(page);
     check(bgp && s.chain === bgp.chain, `${name}: the BGP lab's run has the recorded digest`, { chain: s.chain, expected: bgp && bgp.chain });
     await consoleCheck(page, errors, `${name}: BGP lab no error of the application in the console`);
     await page.close();
