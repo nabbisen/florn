@@ -127,7 +127,7 @@ fn a_motor_starts_in_its_dc_steady_state_through_the_host() {
             "r = \"1ohm\"\nl = \"1mH\"\nkt = \"0.1Nm/A\"\nke = \"0.1Vs/rad\"\nj = \"0.01kgm2\"\nb = \"0.001Nms\"\nperiod = \"1ms\"",
         )
         .net("top", &["v1.p", "m1.a+"])
-        .ground("gnd", &["v1.n", "m1.a\u{2212}"]);
+        .ground("gnd", &["v1.n", "m1.a-"]);
     let run = start(&deck);
     assert!((real(&run, 2, "speed") - 12.0 / 0.11).abs() < 1e-5);
     assert!((real(&run, 2, "current") - 0.001 * (12.0 / 0.11) / 0.1).abs() < 1e-8);
@@ -364,6 +364,39 @@ fn a_current_source_into_a_capacitor_without_an_ic_warns_and_starts() {
     assert_eq!(entry.notification.params[0].1, Value::Name("a".into()));
     // A warning refuses nothing.
     assert!(run.ended().is_none());
+}
+
+#[test]
+fn a_front_end_loading_a_scenario_with_a_plant_warning_is_told_it_and_the_scenario_loads() {
+    // RFC 012 finding F-18 (a): the validation a front end asks for returns the warning, and
+    // only an error refuses.
+    use florn_control::{Answer, Command, Envelope, Message};
+    let deck = Deck::new("floating", "1ms")
+        .part(1, "i1", "current-source", &[], "i = \"1mA\"")
+        .part(2, "c1", "capacitor", &[], "c = \"1uF\"")
+        .part(3, "vm", "voltmeter", &[], "period = \"1ms\"")
+        .net("a", &["i1.n", "c1.a", "vm.p"])
+        .ground("g", &["i1.p", "c1.b", "vm.n"]);
+    let mut c = florn_host::Controller::new(
+        florn_conformance::host::engine(),
+        florn_admission::Admission::default(),
+        Box::new(florn_platform::FixedPlatform::default()),
+        circuit::domains(),
+        florn_conformance::host::options(),
+    );
+    let out = c.handle(Envelope::new(Message::Command(Command::LoadScenario {
+        bytes: deck.text().into_bytes(),
+    })));
+    let warned = out.iter().any(|m| {
+        matches!(m, Message::Notification(n)
+            if n.code == "circuit.floating-node" && n.severity == Severity::Warning)
+    });
+    assert!(warned, "{out:?}");
+    assert!(
+        out.iter()
+            .any(|m| matches!(m, Message::Answer(Answer::Done))),
+        "{out:?}"
+    );
 }
 
 #[test]

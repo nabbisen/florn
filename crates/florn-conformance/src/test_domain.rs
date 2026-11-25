@@ -19,7 +19,7 @@ use florn_control::{Ends, Notification, Scope, Severity, Value};
 use florn_engine_wasmtime::WasmtimeEngine;
 use florn_host::compound::CallIn;
 use florn_host::domain::{
-    Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, EndRequest, quantity_si, refusal,
+    Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, EndRequest, Guest, quantity_si, refusal,
 };
 use florn_host::{
     Domains, FaultPolicy, HostError, Numeric, NumericField, Options, Run, Seed, Site, Tolerance,
@@ -92,6 +92,10 @@ pub struct TestDomain {
     /// `[test] inspect-guests`: the domain answers `inspect` for any identity, a guest's too, to
     /// show that the Host does not ask it (a guest is the `actor` query's).
     inspect_guests: bool,
+    /// `[test] list-guests`: the start hook says what it was given of each guest (RFC 012 finding
+    /// F-18). `[test] warn-validate`: the validation returns a warning, which must not refuse the
+    /// run.
+    list_guests: bool,
 }
 
 fn decimal_f64(v: &DomainValue) -> Option<f64> {
@@ -431,8 +435,13 @@ impl Domain for TestDomain {
                     ("end-at-start" | "end-reason", _) => out.push(wrong(field, "text")),
                     ("end-from-tick", DomainValue::Integer(n)) if *n >= 0 => {}
                     ("end-from-tick", _) => out.push(wrong(field, "unsigned-integer")),
-                    ("inspect-guests", DomainValue::Boolean(_)) => {}
-                    ("inspect-guests", _) => out.push(wrong(field, "boolean")),
+                    (
+                        "inspect-guests" | "list-guests" | "warn-validate",
+                        DomainValue::Boolean(_),
+                    ) => {}
+                    ("inspect-guests" | "list-guests" | "warn-validate", _) => {
+                        out.push(wrong(field, "boolean"));
+                    }
                     ("atol" | "rtol", v) if decimal_f64(v).is_some_and(|x| x >= 0.0) => {}
                     ("atol" | "rtol", _) => out.push(wrong(field, "quantity")),
                     ("continuous-actors", DomainValue::List(l))
@@ -445,6 +454,19 @@ impl Domain for TestDomain {
                         vec![("key", Param::Text(k.clone()))],
                     )),
                 }
+            }
+            if matches!(table.get("warn-validate"), Some(DomainValue::Boolean(true))) {
+                out.push(
+                    Notification::new(
+                        "host.capacity-warning",
+                        Severity::Warning,
+                        Scope::run(),
+                        Ends::Nothing,
+                    )
+                    .with("used", Value::Count(1))
+                    .with("capacity", Value::Count(1))
+                    .with("what", Value::Enum("instances".into())),
+                );
             }
         }
         out
@@ -469,6 +491,7 @@ impl Domain for TestDomain {
                 table.get("inspect-guests"),
                 Some(DomainValue::Boolean(true))
             );
+            self.list_guests = matches!(table.get("list-guests"), Some(DomainValue::Boolean(true)));
             self.tolerance = match (table.get("atol"), table.get("rtol")) {
                 (Some(a), Some(r)) => decimal_f64(a)
                     .zip(decimal_f64(r))
@@ -675,7 +698,11 @@ impl Domain for TestDomain {
 
     /// The start hook (RFC 012 finding F-15): refuse the run when the `[test]` table says so, else
     /// play its `start-script` on its `start-actor` through the call-in handle.
-    fn start_calling(&mut self, calls: &mut dyn CallIn) -> Result<Vec<Action>, Box<Notification>> {
+    fn start_calling(
+        &mut self,
+        calls: &mut dyn CallIn,
+        guests: &[Guest],
+    ) -> Result<Vec<Action>, Box<Notification>> {
         if self.refuse_start {
             return Err(Box::new(refusal(
                 "manifest.invalid",
@@ -687,6 +714,14 @@ impl Domain for TestDomain {
             )));
         }
         let mut actions = Vec::new();
+        if self.list_guests {
+            let detail = guests
+                .iter()
+                .map(|g| format!("{}={}@{}", g.actor, g.module, g.world()))
+                .collect::<Vec<_>>()
+                .join(" ");
+            actions.push(observed("guests", 0, detail));
+        }
         if let Some((actor, script)) = self.start.clone() {
             let report = steps::play(&script, actor, 0, calls);
             actions.push(observed("start", actor, report));

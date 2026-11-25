@@ -1418,6 +1418,7 @@ pub const ENUMERATIONS: &[(&str, &[&str])] = &[
         &[
             "time",
             "bytes",
+            "dimensionless",
             "bandwidth",
             "voltage",
             "current",

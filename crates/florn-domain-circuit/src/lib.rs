@@ -15,8 +15,8 @@
 
 use florn_admission::manifest::ModuleManifest;
 use florn_control::message::InspectField;
-use florn_control::{Code, Notification, Scope, Severity, Value};
-use florn_host::domain::{Action, BuiltinEvent, Domain, DomainEvent, Site, Tolerance};
+use florn_control::{Code, Notification, Scope, Value};
+use florn_host::domain::{Action, BuiltinEvent, Domain, DomainEvent, Guest, Site, Tolerance};
 use florn_host::{CallIn, FaultPolicy, UnitDef};
 use florn_kernel::{Delivery, Identity, Instant, Sink};
 use florn_model::Manifest;
@@ -27,6 +27,7 @@ mod assemble;
 mod build;
 pub mod dc;
 pub mod diode;
+pub mod guests;
 mod inspect;
 pub mod kinds;
 pub mod lu;
@@ -56,6 +57,8 @@ pub const CHANNEL_CONDITION: u32 = 2;
 pub const CLASS_ADVANCE: u8 = 6;
 pub const CLASS_SAMPLE: u8 = 7;
 pub const CLASS_CONDITION: u8 = 8;
+/// The most guest device models in a scenario (RFC 012 rule 19, finding F-8 deferred).
+pub const MAX_DEVICES: usize = 1;
 
 /// The circuit domain's state for one run.
 #[derive(Clone, Debug)]
@@ -64,10 +67,10 @@ pub struct CircuitDomain {
     plant: Option<plant::Plant>,
     /// The operating point at tick 0, from the start hook.
     solution: Option<dc::Solution>,
-    /// The warnings and notes of the reading (`circuit.floating-node`, `circuit.signal-unconnected`).
-    /// The Host refuses a run for any notification `validate` returns, so a warning cannot come
-    /// that way: it reaches the log from the start hook as a notification of the domain.
-    warnings: Vec<Notification>,
+    /// The scenario's name, for the notes the start hook makes at file scope.
+    scenario: String,
+    /// The guest actors the start hook read (RFC 012 finding F-18).
+    guests: guests::Guests,
 }
 
 impl CircuitDomain {
@@ -77,7 +80,8 @@ impl CircuitDomain {
             limits,
             plant: None,
             solution: None,
-            warnings: Vec::new(),
+            scenario: String::new(),
+            guests: guests::Guests::default(),
         }
     }
     /// The plant and its solution, for the inspectors and the kit's tests.
@@ -86,6 +90,10 @@ impl CircuitDomain {
     }
     pub fn solution(&self) -> Option<&dc::Solution> {
         self.solution.as_ref()
+    }
+    /// The circuit guests the start hook read: their kinds and declared channels.
+    pub fn guests(&self) -> &guests::Guests {
+        &self.guests
     }
 }
 
@@ -128,13 +136,10 @@ impl Domain for CircuitDomain {
         units::all()
     }
 
-    /// The errors of the reading, every one in one pass; its warnings are the start hook's.
+    /// Every note of the reading, in one pass: the errors refuse the run and the warnings are
+    /// kept (RFC 012 finding F-18).
     fn validate(&self, scenario: &Manifest) -> Vec<Notification> {
-        analyse::analyse(scenario, self.limits)
-            .notes
-            .into_iter()
-            .filter(|n| n.severity == Severity::Error)
-            .collect()
+        analyse::analyse(scenario, self.limits).notes
     }
 
     fn validate_module(&self, module: &str, manifest: &ModuleManifest) -> Vec<Notification> {
@@ -175,14 +180,10 @@ impl Domain for CircuitDomain {
     }
 
     fn compose(&mut self, scenario: &Manifest, _root_seed: u64) {
-        let analysis = analyse::analyse(scenario, self.limits);
-        self.plant = analysis.plant;
-        self.warnings = analysis
-            .notes
-            .into_iter()
-            .filter(|n| n.severity != Severity::Error)
-            .collect();
+        self.plant = analyse::analyse(scenario, self.limits).plant;
+        self.scenario = scenario.name.clone();
         self.solution = None;
+        self.guests = guests::Guests::default();
     }
 
     fn deliver(
@@ -263,16 +264,33 @@ impl Domain for CircuitDomain {
     }
 
     /// The start hook (RFC 012 rule 30): the held values are set when the plant is built (a
-    /// `constant`'s value, a comparator's 0, the signals' `initial`), and the initial solve of
-    /// RFC 013 rule 9 refuses the run when it finds no operating point.
-    fn start_calling(&mut self, _calls: &mut dyn CallIn) -> Result<Vec<Action>, Box<Notification>> {
+    /// `constant`'s value, a comparator's 0, the signals' `initial`); the guests the Host reads
+    /// to it are kept and a second device model is refused (rule 19, finding F-18); the initial
+    /// solve of RFC 013 rule 9 refuses the run when it finds no operating point.
+    fn start_calling(
+        &mut self,
+        _calls: &mut dyn CallIn,
+        guests: &[Guest],
+    ) -> Result<Vec<Action>, Box<Notification>> {
+        self.guests = guests::Guests::read(guests);
+        if self.guests.devices() > MAX_DEVICES {
+            return Err(Box::new(read::note(
+                Code::CircuitDeviceLimit,
+                Scope::file(&self.scenario),
+                None,
+                vec![
+                    Value::Count(self.guests.devices() as u64),
+                    Value::Count(MAX_DEVICES as u64),
+                ],
+            )));
+        }
         let Some(plant) = &self.plant else {
             return Ok(Vec::new());
         };
         match dc::initial_solve(plant) {
             Ok(solution) => {
                 self.solution = Some(solution);
-                Ok(self.warnings.iter().cloned().map(Action::Notify).collect())
+                Ok(Vec::new())
             }
             Err(e) => Err(Box::new(read::note(
                 Code::CircuitNoOperatingPoint,

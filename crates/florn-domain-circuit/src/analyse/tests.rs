@@ -164,6 +164,20 @@ fn circuit_signal_ports() {
     );
 }
 
+/// A sensor's voltage on a guest's `signal-in`, which declares no unit and is not checked
+/// (RFC 012 rule 4).
+fn volts_into_a_guest(attrs: &str) -> Deck {
+    Deck::new()
+        .builtin(1, "v1", "voltage-source", "v = \"1V\"")
+        .builtin(2, "vm", "voltmeter", "period = \"1ms\"")
+        .builtin(3, "r1", "resistor", "r = \"1kohm\"")
+        .guest(10, "ctl", &[("in", "circuit/signal-in")])
+        .net("top", &["v1.p", "vm.p", "r1.a"])
+        .ground("g", &["v1.n", "vm.n", "r1.b"])
+        .signal("volts", &["vm.v", "ctl.in"], attrs)
+}
+
+/// A sensor's voltage on a switch's `ctl`, which has no unit: refused (rule 4).
 fn volts_into_a_switch(attrs: &str) -> Deck {
     Deck::new()
         .builtin(1, "v1", "voltage-source", "v = \"1V\"")
@@ -177,7 +191,7 @@ fn volts_into_a_switch(attrs: &str) -> Deck {
 #[test]
 fn circuit_signal_dimension() {
     // The voltmeter's `v` is a voltage: a signal declared in amperes is refused, naming it.
-    let deck = volts_into_a_switch("unit = \"A\"");
+    let deck = volts_into_a_guest("unit = \"A\"");
     assert!(has(&deck, "circuit.signal-dimension"));
     assert_eq!(
         param(&deck, "circuit.signal-dimension", "expected"),
@@ -188,8 +202,18 @@ fn circuit_signal_dimension() {
         param(&deck, "circuit.signal-dimension", "connection"),
         name("volts")
     );
-    // A unit of the same dimension is converted, not refused.
-    let ok = volts_into_a_switch("unit = \"mV\"");
+    // The switch's `ctl` has no unit: a signal that has one is refused with `dimensionless`.
+    let deck = volts_into_a_switch("");
+    assert_eq!(
+        param(&deck, "circuit.signal-dimension", "expected"),
+        Value::Enum("dimensionless".into())
+    );
+    assert_eq!(
+        param(&deck, "circuit.signal-dimension", "port"),
+        name("ctl")
+    );
+    // A unit of the same dimension is converted, not refused; a guest's port is not checked.
+    let ok = volts_into_a_guest("unit = \"mV\"");
     assert!(!has(&ok, "circuit.signal-dimension"), "{:?}", ok.codes());
     let plant = ok.plant();
     let s = &plant.signals[0];
@@ -198,7 +222,7 @@ fn circuit_signal_dimension() {
         (Some("mV"), Some("voltage"), 1e-3)
     );
     // Undeclared, a sensor's signal is in the sensor's unit.
-    let plant = volts_into_a_switch("").plant();
+    let plant = volts_into_a_guest("").plant();
     assert_eq!(plant.signals[0].unit.as_deref(), Some("V"));
 }
 
@@ -225,6 +249,11 @@ fn a_consumer_with_a_dimension_needs_a_signal_of_it() {
 }
 
 fn motor_deck(constant: &str) -> Deck {
+    motor_signal(constant, "")
+}
+
+/// A motor whose `load` is on a signal from a constant, with the signal's attributes.
+fn motor_signal(constant: &str, attrs: &str) -> Deck {
     Deck::new()
         .builtin(1, "v1", "voltage-source", "v = \"12V\"")
         .builtin_opt(
@@ -235,8 +264,8 @@ fn motor_deck(constant: &str) -> Deck {
         )
         .builtin(3, "tl", "constant", constant)
         .net("top", &["v1.p", "m1.a+"])
-        .ground("g", &["v1.n", "m1.a\u{2212}"])
-        .signal("load", &["tl.y", "m1.load"], "")
+        .ground("g", &["v1.n", "m1.a-"])
+        .signal("load", &["tl.y", "m1.load"], attrs)
 }
 
 #[test]
@@ -259,7 +288,7 @@ fn a_declared_unit_converts_a_constants_value_once() {
         .builtin_opt(2, "m1", "dc-motor", "r = \"1ohm\"\nl = \"1mH\"\nkt = \"0.1Nm/A\"\nke = \"0.1Vs/rad\"\nj = \"0.01kgm2\"\nb = \"0.001Nms\"\nperiod = \"1ms\"")
         .builtin(3, "tl", "constant", "value = \"0.5Nm\"")
         .net("top", &["v1.p", "m1.a+"])
-        .ground("g", &["v1.n", "m1.a\u{2212}"])
+        .ground("g", &["v1.n", "m1.a-"])
         .signal("load", &["tl.y", "m1.load"], "unit = \"mNm\"");
     let plant = deck.plant();
     assert_eq!(plant.signals[0].held, 500.0);
@@ -270,7 +299,7 @@ fn a_declared_unit_converts_a_constants_value_once() {
         .builtin_opt(2, "m1", "dc-motor", "r = \"1ohm\"\nl = \"1mH\"\nkt = \"0.1Nm/A\"\nke = \"0.1Vs/rad\"\nj = \"0.01kgm2\"\nb = \"0.001Nms\"\nperiod = \"1ms\"")
         .builtin(3, "tl", "constant", "value = \"5V\"")
         .net("top", &["v1.p", "m1.a+"])
-        .ground("g", &["v1.n", "m1.a\u{2212}"])
+        .ground("g", &["v1.n", "m1.a-"])
         .signal("load", &["tl.y", "m1.load"], "unit = \"Nm\"");
     assert!(has(&bad, "circuit.signal-dimension"));
 }
@@ -278,14 +307,14 @@ fn a_declared_unit_converts_a_constants_value_once() {
 #[test]
 fn a_signals_initial_is_a_quantity_of_its_dimension_or_a_plain_number() {
     // Held before the sensor's first sample, converted to the signal's unit, rounded once.
-    let plant = volts_into_a_switch("unit = \"mV\"\ninitial = \"2V\"").plant();
+    let plant = volts_into_a_guest("unit = \"mV\"\ninitial = \"2V\"").plant();
     assert_eq!(plant.signals[0].held, 2000.0);
-    let plant = volts_into_a_switch("initial = \"-1.5V\"").plant();
+    let plant = volts_into_a_guest("initial = \"-1.5V\"").plant();
     assert_eq!(plant.signals[0].held, -1.5);
     // A bare number for a signal with a unit, and a quantity of another dimension: the core's.
-    let deck = volts_into_a_switch("initial = 2");
+    let deck = volts_into_a_guest("initial = 2");
     assert!(has(&deck, "quantity.missing-unit"), "{:?}", deck.codes());
-    let deck = volts_into_a_switch("initial = \"2A\"");
+    let deck = volts_into_a_guest("initial = \"2A\"");
     assert!(has(&deck, "quantity.dimension"), "{:?}", deck.codes());
     // A dimensionless signal takes a plain number only.
     let dimensionless = |attrs: &str| {
@@ -486,7 +515,7 @@ fn circuit_floating_node_is_a_warning_for_a_current_source_into_a_capacitor() {
 /// second pin and conducts nothing; `head` is tied to the ground by a resistor.
 fn behind(kind: &str, config: &str) -> Deck {
     let (a, b) = if kind == "dc-motor" {
-        ("a+", "a\u{2212}")
+        ("a+", "a-")
     } else {
         (
             crate::tests::pins_of(kind)[0],
@@ -660,4 +689,36 @@ fn the_unknowns_are_ordered_by_identity_whatever_the_order_written() {
     let names: Vec<&str> = plant.unknowns.iter().map(|u| u.name.as_str()).collect();
     // `zeta` has the lower connection identity (declared first), so it is first.
     assert_eq!(names, ["zeta", "alpha", "v1", "am", "l1"]);
+}
+
+#[test]
+fn the_motors_negative_pin_is_the_ascii_name_and_u2212_is_not_accepted() {
+    let motor = "r = \"1ohm\"\nl = \"1mH\"\nkt = \"0.1Nm/A\"\nke = \"0.1Vs/rad\"\nj = \"0.01kgm2\"\nb = \"0.001Nms\"\nperiod = \"1ms\"";
+    let deck = |negative: &str| {
+        Deck::new()
+            .builtin(1, "v1", "voltage-source", "v = \"12V\"")
+            .builtin_with(
+                2,
+                "m1",
+                "dc-motor",
+                &[
+                    ("a+", "circuit/pin"),
+                    (negative, "circuit/pin"),
+                    ("speed", "circuit/signal-out"),
+                ],
+                motor,
+            )
+            .net("top", &["v1.p", "m1.a+"])
+            .ground("g", &["v1.n", &format!("m1.{negative}")])
+    };
+    // The ASCII name is the motor's pin.
+    let ok = deck("a-");
+    assert!(
+        ok.notes().iter().all(|n| n.severity != Severity::Error),
+        "{:?}",
+        ok.codes()
+    );
+    // The character RFC 012 once wrote is another name, and the pin the motor needs is open.
+    let bad = deck("a\u{2212}");
+    assert!(has(&bad, "circuit.pin-open"), "{:?}", bad.codes());
 }

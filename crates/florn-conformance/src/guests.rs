@@ -96,18 +96,22 @@ pub fn hashes() -> BTreeMap<String, String> {
 }
 
 fn with_sections(wat: &str, kind: &str) -> Vec<u8> {
+    let manifest = format!(
+        "florn-module = 1\nworld = \"florn:core/guest@0.1.0\"\nkind = \"{kind}\"\n\n[[ports]]\nkind = \"p\"\ntype = \"core/port\"\nmin = 0\nmax = 8\n\n[resources]\nmemory = \"256KiB\"\n"
+    );
+    with_manifest(wat, &manifest)
+}
+
+fn with_manifest(wat: &str, manifest: &str) -> Vec<u8> {
     let mut bytes = wat::parse_str(wat).expect("the guest parses");
     CustomSection {
         name: "component-type:florn-core-guest".into(),
         data: florn_test_guests::contract_section().into(),
     }
     .append_to(&mut bytes);
-    let manifest = format!(
-        "florn-module = 1\nworld = \"florn:core/guest@0.1.0\"\nkind = \"{kind}\"\n\n[[ports]]\nkind = \"p\"\ntype = \"core/port\"\nmin = 0\nmax = 8\n\n[resources]\nmemory = \"256KiB\"\n"
-    );
     CustomSection {
         name: "florn.manifest".into(),
-        data: manifest.into_bytes().into(),
+        data: manifest.as_bytes().to_vec().into(),
     }
     .append_to(&mut bytes);
     bytes
@@ -170,5 +174,32 @@ pub fn crossing() -> Vec<u8> {
   (func (export "florn:core/actor@0.1.0#on-timer") (param i64 i32)))
 "#,
         "crossing",
+    )
+}
+
+/// A module of the core world that does nothing and whose manifest also carries the `[circuit]`
+/// table of a guest of the given kind (`controller` or `device`) with the ports and the channel
+/// layout of the circuit worlds: what the circuit domain's start hook reads of a guest
+/// (RFC 012 finding F-18), until the circuit worlds themselves are registered (PR-47 and PR-49).
+/// `channels` are extra `[[telemetry]]` tables in manifest text.
+pub fn circuit_stub(kind: &str, channels: &str) -> Vec<u8> {
+    let ports = if kind == "device" {
+        "[[ports]]\nkind = \"pins\"\ntype = \"circuit/pin\"\nmin = 2\nmax = 2\n"
+    } else {
+        "[[ports]]\nkind = \"in\"\ntype = \"circuit/signal-in\"\nmin = 0\nmax = 4\n\n[[ports]]\nkind = \"out\"\ntype = \"circuit/signal-out\"\nmin = 0\nmax = 4\n"
+    };
+    let manifest = format!(
+        "florn-module = 1\nworld = \"florn:core/guest@0.1.0\"\nkind = \"{kind}\"\n\n{ports}\n[circuit]\nkind = \"{kind}\"\n\n{channels}\n[resources]\nmemory = \"256KiB\"\n"
+    );
+    with_manifest(
+        r#"
+(module
+  (memory (export "memory") 1)
+  (func (export "cabi_realloc") (param i32 i32 i32 i32) (result i32) (i32.const 1024))
+  (func (export "florn:core/actor@0.1.0#init") (param i64 i32 i32 i32 i32 i32))
+  (func (export "florn:core/actor@0.1.0#on-message") (param i64 i32 i32 i32))
+  (func (export "florn:core/actor@0.1.0#on-timer") (param i64 i32)))
+"#,
+        &manifest,
     )
 }

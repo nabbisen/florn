@@ -47,16 +47,20 @@ impl<E: Engine> Controller<E> {
         };
         // The domains' validation (RFC 008 rule 1) follows the core's, at load.
         let loaded = loaded.and_then(|l| {
-            let refusals = match self.domains.instantiate(&l.manifest) {
+            let notes = match self.domains.instantiate(&l.manifest) {
                 Ok(d) => domain::validate(&d, &l.manifest),
                 Err(n) => vec![*n],
             };
-            if refusals.is_empty() {
-                Ok(l)
-            } else {
+            // The validation returns every note; only an error refuses (RFC 012 finding F-18).
+            let refused = notes
+                .iter()
+                .any(|n| n.severity == florn_control::Severity::Error);
+            out.extend(notes.into_iter().map(Message::Notification));
+            if refused {
                 self.state = RunState::Invalid;
-                out.extend(refusals.into_iter().map(Message::Notification));
                 Err(florn_model::Errors::default())
+            } else {
+                Ok(l)
             }
         });
         match loaded {

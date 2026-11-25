@@ -530,9 +530,13 @@ fn resolve_signals(
                 continue;
             };
             of_port.insert((a, p), idx);
-            if let Some(dim) = m.kind.port(&port.name).and_then(|s| s.dimension) {
+            // A consumer with a dimension needs a signal of it, one without (`cmd`, `ctl`) a
+            // signal with no unit: the other way round is the mistake RFC 012 rule 4 names, with
+            // the dimension `dimensionless` when the consumer is the one without.
+            if let Some(spec) = m.kind.port(&port.name) {
+                let expected = spec.dimension.unwrap_or("dimensionless");
                 let have = unit.map(|u| u.dimension);
-                if have != Some(dim) {
+                if have != spec.dimension {
                     notes.push(note(
                         Code::CircuitSignalDimension,
                         Scope::connection(c.id),
@@ -540,7 +544,7 @@ fn resolve_signals(
                         vec![
                             name(&c.name),
                             name(&port.name),
-                            Value::Enum(dim.to_string()),
+                            Value::Enum(expected.to_string()),
                         ],
                     ));
                 }

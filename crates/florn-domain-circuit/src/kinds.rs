@@ -149,8 +149,9 @@ const R: Ty = Ty::Real("resistance", Range::Positive);
 const VOLT: Ty = Ty::Real("voltage", Range::Any);
 const AMP: Ty = Ty::Real("current", Range::Any);
 
-/// The `a−` pin of the motor is spelled with U+2212, as RFC 012 rule 23 writes it.
-pub const MOTOR_NEGATIVE: &str = "a\u{2212}";
+/// The motor's negative pin is the ASCII `a-`, as every name in a scenario is (RFC 012 rule 23;
+/// U+2212 is not accepted).
+pub const MOTOR_NEGATIVE: &str = "a-";
 
 const PERIOD: ParamSpec = ParamSpec {
     name: "period",

@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use florn_abi::core_world::{self, Signature};
 use florn_abi::{Ty, Val};
+use florn_admission::Admitted;
 use florn_admission::config::{UnitDef, Units};
 use florn_admission::manifest::ModuleManifest;
 use florn_admission::world::{FuncSig, ImportInterface, WorldInterfaces, WorldSpec};
@@ -297,6 +298,27 @@ pub struct NumericField {
     pub value: f64,
 }
 
+/// A guest actor as a domain's start hook sees it (RFC 012 finding F-18): read-only, the actor's
+/// identity, the scenario's name for its module and the admitted module, whose manifest holds its
+/// world, its declared ports and channels and the tables a domain reads (RFC 008 rule 16).
+#[derive(Clone, Debug)]
+pub struct Guest {
+    pub actor: Identity,
+    pub module: String,
+    pub admitted: Arc<Admitted>,
+}
+
+impl Guest {
+    /// The world the module was admitted under.
+    pub fn world(&self) -> &str {
+        &self.admitted.world.name
+    }
+    /// The module's manifest.
+    pub fn manifest(&self) -> &ModuleManifest {
+        &self.admitted.manifest
+    }
+}
+
 /// A domain of the Host core (RFC 008 rule 1). Every operation has the default of a domain
 /// without that feature; `name`, the types and `deliver` are the least a domain gives.
 pub trait Domain {
@@ -445,10 +467,15 @@ pub trait Domain {
     /// The start hook (RFC 012 finding F-15; rule 30): called once, after every guest's `init`
     /// has run at tick 0 and before the first event is handled, domains in the scenario's
     /// declaration order, with the call-in handle of finding F-3 (its activations are keyed as
-    /// the actor's own `init` event). The domain may return actions, and **may refuse the run**:
-    /// the run does not start, and the notification is what the Host reports. The default does
-    /// nothing.
-    fn start_calling(&mut self, _calls: &mut dyn CallIn) -> Result<Vec<Action>, Box<Notification>> {
+    /// the actor's own `init` event) and, read-only, every guest actor of the scenario in
+    /// ascending identity (finding F-18): its module, its world and its admitted manifest. The
+    /// domain may return actions, and **may refuse the run**: the run does not start, and the
+    /// notification is what the Host reports. The default does nothing.
+    fn start_calling(
+        &mut self,
+        _calls: &mut dyn CallIn,
+        _guests: &[Guest],
+    ) -> Result<Vec<Action>, Box<Notification>> {
         Ok(Vec::new())
     }
     /// An event of its classes that carried a message to an actor that faulted meanwhile:
@@ -1222,7 +1249,11 @@ impl Domain for Lent {
     fn event_calling(&mut self, _: &DomainEvent, _: bool, _: &mut dyn CallIn) -> Vec<Action> {
         self.reached("event_calling")
     }
-    fn start_calling(&mut self, _: &mut dyn CallIn) -> Result<Vec<Action>, Box<Notification>> {
+    fn start_calling(
+        &mut self,
+        _: &mut dyn CallIn,
+        _: &[Guest],
+    ) -> Result<Vec<Action>, Box<Notification>> {
         self.reached("start_calling")
     }
     fn end_requested(&mut self) -> Option<EndRequest> {

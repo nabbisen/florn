@@ -17,6 +17,7 @@ pub(crate) struct Deck {
     connections: Vec<(String, String, Vec<String>, String)>,
     profile: String,
     observed: bool,
+    guests: bool,
     pub limits: Limits,
 }
 
@@ -27,6 +28,7 @@ impl Deck {
             connections: Vec::new(),
             profile: String::new(),
             observed: false,
+            guests: false,
             limits: Limits::native(),
         }
     }
@@ -71,6 +73,22 @@ impl Deck {
             "\n[[actors]]\nid = {id}\nname = \"{name}\"\nkind = \"builtin\"\nbuiltin = \"circuit/{kind}\"\nports = [{}]\n[actors.config]\n{config}\n",
             list.join(", ")
         ));
+        self
+    }
+
+    /// A guest actor (a module of the scenario) with the ports given: a name and a type each. The
+    /// domain reads its ports and signals only; its module is never admitted in these tests.
+    pub fn guest(mut self, id: u32, name: &str, ports: &[(&str, &str)]) -> Self {
+        let list: Vec<String> = ports
+            .iter()
+            .enumerate()
+            .map(|(i, (n, t))| format!("{{ id = {i}, name = \"{n}\", type = \"{t}\" }}"))
+            .collect();
+        self.actors.push_str(&format!(
+            "\n[[actors]]\nid = {id}\nname = \"{name}\"\nkind = \"module\"\nmodule = \"guest\"\nports = [{}]\n",
+            list.join(", ")
+        ));
+        self.guests = true;
         self
     }
 
@@ -154,8 +172,16 @@ impl Deck {
 
     pub fn text(&self) -> String {
         let (actors, connections) = self.rendered();
+        let modules = if self.guests {
+            format!(
+                "\n[modules.guest]\nsha256 = \"{}\"\ncontract = \"florn:circuit/controller@0.1.0\"\n",
+                "0".repeat(64)
+            )
+        } else {
+            String::new()
+        };
         format!(
-            "florn = 1\nname = \"deck\"\ndomains = [\"core\", \"circuit\"]\n\n[time]\ntick = \"1ns\"\nend = \"10ms\"\n\n[order]\ntie = \"by-identity\"\n\n[seed]\nroot = 1\n\n[limits.default]\nmemory = \"2MiB\"\n\n[circuit]\n{}\n{}{}",
+            "florn = 1\nname = \"deck\"\ndomains = [\"core\", \"circuit\"]\n\n[time]\ntick = \"1ns\"\nend = \"10ms\"\n\n[order]\ntie = \"by-identity\"\n\n[seed]\nroot = 1\n\n[limits.default]\nmemory = \"2MiB\"\n{modules}\n[circuit]\n{}\n{}{}",
             self.profile, actors, connections
         )
     }

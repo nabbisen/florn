@@ -221,7 +221,7 @@ fn motor(load: Option<&str>, b: &str) -> Deck {
             .replace("0.1Vs/rad", "\"0.1Vs/rad\""),
         )
         .net("top", &["v1.p", "m1.a+"])
-        .ground("gnd", &["v1.n", "m1.a\u{2212}"]);
+        .ground("gnd", &["v1.n", "m1.a-"]);
     if let Some(load) = load {
         deck = deck
             .builtin(3, "tl", "constant", &format!("value = \"{load}\""))

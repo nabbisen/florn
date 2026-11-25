@@ -128,6 +128,7 @@
  "enum.element.domain": "ドメイン",
  "enum.dimension.time": "時間",
  "enum.dimension.bytes": "バイト",
+ "enum.dimension.dimensionless": "無次元",
  "enum.dimension.bandwidth": "帯域幅",
  "enum.dimension.voltage": "電圧",
  "enum.dimension.current": "電流",

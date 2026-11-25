@@ -36,6 +36,8 @@ pub struct Deck {
     profile: String,
     actors: String,
     connections: Vec<(String, String, Vec<String>, String)>,
+    /// The guest modules of the scenario, by name: what `Run::new` is given.
+    modules: BTreeMap<String, Vec<u8>>,
 }
 
 impl Deck {
@@ -46,7 +48,31 @@ impl Deck {
             profile: String::new(),
             actors: String::new(),
             connections: Vec::new(),
+            modules: BTreeMap::new(),
         }
+    }
+
+    /// A guest actor of the module `module` (its bytes given) with the ports given: a name and a
+    /// type each.
+    pub fn guest(
+        mut self,
+        id: u32,
+        name: &str,
+        module: &str,
+        bytes: Vec<u8>,
+        ports: &[(&str, &str)],
+    ) -> Self {
+        let list: Vec<String> = ports
+            .iter()
+            .enumerate()
+            .map(|(i, (n, t))| format!("{{ id = {i}, name = \"{n}\", type = \"{t}\" }}"))
+            .collect();
+        self.actors.push_str(&format!(
+            "\n[[actors]]\nid = {id}\nname = \"{name}\"\nkind = \"module\"\nmodule = \"{module}\"\nports = [{}]\n",
+            list.join(", ")
+        ));
+        self.modules.insert(module.to_string(), bytes);
+        self
     }
 
     /// The `[circuit]` table, as TOML lines (dotted keys for the subtables).
@@ -83,7 +109,7 @@ impl Deck {
             "resistor" | "capacitor" | "inductor" | "switch" | "ammeter" => &["a", "b"],
             "voltage-source" | "current-source" | "voltmeter" | "comparator" => &["p", "n"],
             "diode" => &["a", "k"],
-            "dc-motor" => &["a+", "a\u{2212}"],
+            "dc-motor" => &["a+", "a-"],
             _ => &[],
         };
         let mut ports: Vec<(&str, &str)> = pins.iter().map(|p| (*p, "circuit/pin")).collect();
@@ -135,8 +161,18 @@ impl Deck {
     }
 
     pub fn text(&self) -> String {
+        let modules: String = self
+            .modules
+            .iter()
+            .map(|(name, bytes)| {
+                format!(
+                    "\n[modules.{name}]\nsha256 = \"{}\"\ncontract = \"florn:core/guest@0.1.0\"\n",
+                    florn_host::run::sha256_hex(bytes)
+                )
+            })
+            .collect();
         let mut text = format!(
-            "florn = 1\nname = \"{}\"\ndomains = [\"core\", \"circuit\"]\n\n[time]\ntick = \"1ns\"\nend = \"{}\"\n\n[order]\ntie = \"by-identity\"\n\n[seed]\nroot = 1\n\n[limits.default]\nmemory = \"2MiB\"\n\n[circuit]\n{}\n{}",
+            "florn = 1\nname = \"{}\"\ndomains = [\"core\", \"circuit\"]\n\n[time]\ntick = \"1ns\"\nend = \"{}\"\n\n[order]\ntie = \"by-identity\"\n\n[seed]\nroot = 1\n\n[limits.default]\nmemory = \"2MiB\"\n{modules}\n[circuit]\n{}\n{}",
             self.name, self.end, self.profile, self.actors
         );
         for (i, (name, ty, pins, attrs)) in self.connections.iter().enumerate() {
@@ -172,7 +208,7 @@ pub fn try_start_in(domains: &Domains, deck: &Deck, options: Options) -> Result<
         &mut FixedPlatform::default(),
         domains,
         manifest,
-        &BTreeMap::new(),
+        &deck.modules,
         Seed::Given(seed),
         options,
     )

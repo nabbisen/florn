@@ -22,7 +22,9 @@ use florn_model::manifest::ActorKind;
 use florn_platform::Platform;
 
 use crate::compound::NoCalls;
-use crate::domain::{self, Action, BuiltinEvent, Composite, DomainUnits, Domains, WorldSigs};
+use crate::domain::{
+    self, Action, BuiltinEvent, Composite, DomainUnits, Domains, Guest, WorldSigs,
+};
 use crate::identity::{Environment, ModuleInput, RunInputs};
 use crate::log::DiagnosticLog;
 use crate::world::CLASS_TIMER;
@@ -133,11 +135,17 @@ impl<E: Engine> Run<E> {
                 return Err(Box::new((HostError::Domain(vec![*n]), engine, admission)));
             }
         };
-        let refusals = domain::validate(&domain_values, &scenario);
+        // Every note is logged; only an error refuses (RFC 012 finding F-18): a warning ends
+        // nothing (RFC 007), and the run starts with it in its log.
+        let notes = domain::validate(&domain_values, &scenario);
+        for n in &notes {
+            push(n.clone());
+        }
+        let refusals: Vec<Notification> = notes
+            .into_iter()
+            .filter(|n| n.severity == Severity::Error)
+            .collect();
         if !refusals.is_empty() {
-            for n in &refusals {
-                push(n.clone());
-            }
             return Err(Box::new((HostError::Domain(refusals), engine, admission)));
         }
         for d in &domain_values {
@@ -780,6 +788,16 @@ impl<E: Engine> Run<E> {
     /// refuses everything. The actions it returns are applied at tick 0 as the hook's own. A
     /// refusal is returned and nothing after it runs.
     pub(super) fn start_domains(&mut self) -> Result<(), Box<Notification>> {
+        // What every domain may read of the guests, read-only (RFC 012 finding F-18).
+        let guests: Vec<Guest> = self
+            .actors
+            .iter()
+            .map(|(id, slot)| Guest {
+                actor: *id,
+                module: slot.module_name.clone(),
+                admitted: slot.admitted.clone(),
+            })
+            .collect();
         for i in 0..self.world.domains().len() {
             if self.ended.is_some() {
                 break;
@@ -788,14 +806,14 @@ impl<E: Engine> Run<E> {
                 Some(mut d) => {
                     let result = {
                         let mut calls = Calls::for_start(self);
-                        let result = d.start_calling(&mut calls);
+                        let result = d.start_calling(&mut calls, &guests);
                         calls.finish();
                         result
                     };
                     self.world.take_back(i, d);
                     result
                 }
-                None => self.world.domains_mut()[i].start_calling(&mut NoCalls),
+                None => self.world.domains_mut()[i].start_calling(&mut NoCalls, &guests),
             };
             let instant = Instant::new(0, 0);
             for action in result? {
