@@ -50,6 +50,8 @@ pub enum Read {
 pub struct Dynamic {
     pub read: Read,
     pub kind: UnknownKind,
+    /// The index of the device that owns it in [`Plant::devices`].
+    pub device: usize,
 }
 
 impl Dynamic {
@@ -66,24 +68,28 @@ impl Dynamic {
 /// speed.
 pub fn dynamics(plant: &Plant) -> Vec<Dynamic> {
     let mut out = Vec::new();
-    for d in &plant.devices {
+    for (device, d) in plant.devices.iter().enumerate() {
         match &d.element {
             Element::Capacitor { a, b, .. } => out.push(Dynamic {
                 read: Read::Across(*a, *b),
                 kind: UnknownKind::Voltage,
+                device,
             }),
             Element::Inductor { branch, .. } => out.push(Dynamic {
                 read: Read::Unknown(*branch),
                 kind: UnknownKind::Current,
+                device,
             }),
             Element::Motor { branch, state, .. } => {
                 out.push(Dynamic {
                     read: Read::Unknown(*branch),
                     kind: UnknownKind::Current,
+                    device,
                 });
                 out.push(Dynamic {
                     read: Read::Unknown(*state),
                     kind: UnknownKind::State,
+                    device,
                 });
             }
             _ => {}

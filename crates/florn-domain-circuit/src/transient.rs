@@ -51,6 +51,9 @@ pub struct Stuck {
     /// The unknown furthest from its criteria, or of the zero pivot; `None` when the attempts
     /// were rejected by the error test and Newton had no complaint.
     pub unknown: Option<usize>,
+    /// After too many rejections by the error test, the device that owns the state variable with
+    /// the largest error ratio (an index into the plant's devices); otherwise `None`.
+    pub owner: Option<usize>,
 }
 
 /// A step the error test failed at the smallest size, accepted anyway (`circuit.step-minimum`).
@@ -127,6 +130,8 @@ struct Attempt {
     values: Vec<f64>,
     derivative: Vec<f64>,
     ratio: Option<f64>,
+    /// The dynamic state variable that gave the ratio.
+    worst: usize,
 }
 
 enum Tried {
@@ -315,24 +320,31 @@ impl Transient {
             .zip(&companion.history)
             .map(|(v, hist)| alpha * v - hist)
             .collect();
-        let ratio = tested.then(|| self.ratio(n, h, h_prev, formula, &values));
+        let (ratio, worst) = if tested {
+            let (r, w) = self.ratio(n, h, h_prev, formula, &values);
+            (Some(r), w)
+        } else {
+            (None, 0)
+        };
         Tried::Done(Attempt {
             x: c.x,
             iterations: c.iterations,
             values,
             derivative,
             ratio,
+            worst,
         })
     }
 
     /// The error ratio of a candidate (rule 11): the largest over the dynamic state variables of
-    /// the estimate over `ltol·max(|x|, floor) + tol`. A plant with no dynamic element has none.
-    fn ratio(&self, n: u64, h: f64, h_prev: f64, formula: Formula, values: &[f64]) -> f64 {
+    /// the estimate over `ltol·max(|x|, floor) + tol`, with the variable that gave it. A plant with
+    /// no dynamic element has none (the ratio is 0).
+    fn ratio(&self, n: u64, h: f64, h_prev: f64, formula: Formula, values: &[f64]) -> (f64, usize) {
         let p = &self.plant.profile;
         let tick = self.plant.tick;
         let (points, gaps) = (&self.history.points, &self.history.gaps);
         let m = points.len();
-        let mut worst = 0.0;
+        let (mut worst, mut owner) = (0.0, 0);
         for (i, dynamic) in self.dynamics.iter().enumerate() {
             let divided = if formula.order() == 1 {
                 // The last two accepted points and the candidate.
@@ -367,9 +379,12 @@ impl Transient {
                 UnknownKind::Voltage | UnknownKind::State => p.vntol,
             };
             let scale = p.ltol * fmax(values[i].abs(), tol) + tol;
-            worst = fmax(worst, estimate / scale);
+            let share = estimate / scale;
+            if share > worst {
+                (worst, owner) = (share, i);
+            }
         }
-        worst
+        (worst, owner)
     }
 
     /// Advance the plant from `now` to the limit `until` (a breakpoint or the advance's tick) by as
@@ -399,7 +414,13 @@ impl Transient {
         let mut rejections = 0u32;
         let mut attempts = 0u32;
         loop {
-            let n = shape(tried, d, p.min_step);
+            // A fixed step is `min(step, d)` and is never lengthened (rule 13, amended); every
+            // other step is shaped by rule 13.
+            let n = if p.control == Control::Fixed {
+                tried.min(d)
+            } else {
+                shape(tried, d, p.min_step)
+            };
             let at_minimum = n <= p.min_step;
             attempts += 1;
             report.attempts += 1;
@@ -411,6 +432,7 @@ impl Transient {
                         why,
                         iterations: f.iterations,
                         unknown: Some(f.unknown),
+                        owner: None,
                     };
                     if f.singular {
                         return Err(stuck(Why::Singular));
@@ -451,6 +473,7 @@ impl Transient {
                                     why: Why::TooManyRejections,
                                     iterations: a.iterations,
                                     unknown: None,
+                                    owner: Some(self.dynamics[a.worst].device),
                                 });
                             }
                             tried = shrink(n, r, order, p.min_step);

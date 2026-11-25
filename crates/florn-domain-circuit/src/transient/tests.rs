@@ -525,3 +525,52 @@ fn a_diode_starts_a_step_from_the_junction_voltage_it_had_so_a_small_change_is_n
     assert!(out.stuck.is_none());
     assert!(out.report.iterations <= 3, "{:?}", out.report);
 }
+
+#[test]
+fn under_fixed_a_step_is_the_step_or_the_distance_and_is_never_lengthened() {
+    // RFC 013 rule 13, amended: rule 13's remainder clause does not apply to a fixed step. With
+    // `min-step` equal to `step`, a limit at 1.5 steps is a step and then half of one, not one of
+    // 1.5; the start-up steps follow the rule of the method they precede.
+    let mut t =
+        rc("control = \"fixed\"\nstep = \"1000ns\"\nmin-step = \"1000ns\"\nmax-step = \"2000ns\"");
+    t.trace_steps();
+    assert!(t.advance(1_500).stuck.is_none());
+    assert!(t.advance(1_500 + 2_500).stuck.is_none());
+    assert!(t.advance(1_500 + 2_500 + 1_999).stuck.is_none());
+    let ticks: Vec<u64> = t.take_trace().iter().map(|r| r.ticks).collect();
+    assert_eq!(ticks, [1000, 500, 1000, 1000, 500, 1000, 999]);
+    // Under adaptive the same limit is shaped by rule 13: one step of 1.5 (it cannot be split).
+    let mut t = rc("min-step = \"1000ns\"\nmax-step = \"2000ns\"");
+    t.trace_steps();
+    assert!(t.advance(1_500).stuck.is_none());
+    let ticks: Vec<u64> = t.take_trace().iter().map(|r| r.ticks).collect();
+    assert_eq!(ticks, [1500]);
+}
+
+#[test]
+fn too_many_rejections_by_the_error_test_name_the_owner_of_the_state_with_the_largest_ratio() {
+    // A 1 us time constant at the default step: the order-1 test of the third step fails, and with
+    // one rejection allowed it fails again. RFC 012 rule 28's row: the notification names the
+    // owner of the state variable with the largest error ratio, the capacitor `c1` (actor 3).
+    let deck = Deck::new()
+        .builtin(1, "v1", "voltage-source", "v = \"1V\"")
+        .builtin(2, "r1", "resistor", "r = \"1kohm\"")
+        .builtin(3, "c1", "capacitor", "c = \"1nF\"\nic = \"0V\"")
+        .builtin(4, "vm", "voltmeter", "period = \"100us\"")
+        .net("top", &["v1.p", "r1.a"])
+        .net("cap", &["r1.b", "c1.a", "vm.p"])
+        .ground("gnd", &["v1.n", "c1.b", "vm.n"])
+        .profile("max-rejections = 1");
+    let plant = deck.plant();
+    let mut t = Transient::new(&plant, &initial_solve(&plant).unwrap());
+    let out = t.advance(100_000);
+    let stuck = out.stuck.expect("it gives up");
+    assert_eq!(stuck.why, Why::TooManyRejections);
+    assert_eq!(stuck.unknown, None, "Newton had no complaint");
+    let owner = stuck.owner.expect("the owner of the state");
+    assert_eq!(plant.devices[owner].actor, 3);
+    // A convergence failure names an unknown, and no owner.
+    let mut t = hostile("max-rejections = 2");
+    let stuck = t.advance(10_000).stuck.unwrap();
+    assert_eq!((stuck.owner, stuck.unknown.is_some()), (None, true));
+}
