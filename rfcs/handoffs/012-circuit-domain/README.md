@@ -26,19 +26,13 @@ PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17),
 
 **PR-42 is in review** (`b043712`, 2026-11-22): the comparison of Tier 2, the replay codes, the results file. Its design is accepted, including the three `Domain` methods (`tolerance`, `continuous_actor`, `numeric_fields`), which are F-5's change: only the domain knows its payloads.
 
-PR-42 is done and verified (`b043712` to `13f9b4f`, 2026-11-22 to 2026-11-24): the comparison of Tier 2, five replay codes, the results file, Wasmtime 48.0.9. Its verifier's report is ruled in RFC 013 rule 20 (amended 2026-11-25).
+**Milestone M2 is complete** with PR-43 (`2563ab7` to `8c058f9`, 2026-11-25): the display's `sample` records and stream version 2, `inspect`, the reports in `trace-window`, the answers' trailing section, and the splits of `message.rs` and `controller.rs`. Every change the core needed for the circuit is made. From here, M3 adds the circuit domain and changes nothing of the kernel, the ABI, the engine adapters or the control interface: a change the circuit needs there is a new finding to the architect.
 
-**Next: PR-43, what the application reads.** Read its row in `task-breakdown-pr-plan.md`, section 3.5 of `implementation-handoff.md` and B-43 first; it starts from RFC 012 findings F-6 and F-12, RFC 014 rules 2 and 3 and RFC 005 rule 14.
+**Next: PR-44, the domain crate and the static plant** (milestone M3). Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-44 first; it starts from RFC 012 rules 1 to 6, 23, 24, 28 and 30 and RFC 013 rules 1 to 5, 8, 9, 16, 18, 19 and 22. `libm` is added here, pinned exactly (section 2 of the handoff).
 
-**Its first commit, from PR-42's verifier** (RFC 013 rule 20 as amended):
+**Its first commit, from PR-43's review:** every journey that compares a run's digest waits while the digest is pending, as J1 does (`endedWithChain`). Since PR-38 the run view shows the chain as pending (null) until the run-state answer comes, and only J1 waits. J2, J4, J5, P1, P3, P4 and the BGP lab read it at once. Firefox's P4 red on `1bc60d7` (`chain: null`) was that, not a timeout. A present chain that differs still fails at once.
 
-1. **`Comparison::Incomparable` is `replay.diverged` at once** under every tier. Today, under Tier 2, `Run::replayed` goes on to compare rows, so a record whose stored points are at other positions can come out `within-tolerance`.
-2. **A numeric field differs when its bits differ.** `-0` against `+0`, or two NaNs of other bits, differ and agree. A trace that differs only there is `within-tolerance` and names the field; today it is `diverged` with nothing named.
-3. **`record` counts from 1**, as the stored points count records; today it counts from 0.
-4. **The sentence of `replay.needs-payloads`**, in both languages, says "the trace or the payload bytes of {side} are missing": a record can hold its trace and lack some payloads.
-5. **The verifier's checks join the tests**, as PR-38's did: `verifier_pr42.rs` (in the verifier's folder beside PR-42's review request) goes to `crates/florn-conformance/tests/` under a name that says what it checks (for example `replay_tier2_checks.rs`).
-   - Its B5c expects `structure` for a continuous actor's Fault metered work. The ruling is the other way: that work is exempt, as an activation's is, and the RFC text was corrected (V-1). So that one assertion changes to `within-tolerance` with `replay.exempt-only`. Note in the request that this change follows the ruling.
-   - Its B23 and B8d pass after points 1 and 2.
+Also from PR-43: `display_series` gives the index RFC 014 rule 3 defines, and B-44 now checks it against the channel summaries. `panels.rs` is still split by the first RFC 014 unit that touches it (PR-52).
 
 ## What Phase 4 delivers
 
