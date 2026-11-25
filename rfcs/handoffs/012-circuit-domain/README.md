@@ -26,13 +26,20 @@ PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17),
 
 **PR-42 is in review** (`b043712`, 2026-11-22): the comparison of Tier 2, the replay codes, the results file. Its design is accepted, including the three `Domain` methods (`tolerance`, `continuous_actor`, `numeric_fields`), which are F-5's change: only the domain knows its payloads.
 
-**Milestone M2 is complete** with PR-43 (`2563ab7` to `8c058f9`, 2026-11-25): the display's `sample` records and stream version 2, `inspect`, the reports in `trace-window`, the answers' trailing section, and the splits of `message.rs` and `controller.rs`. Every change the core needed for the circuit is made. From here, M3 adds the circuit domain and changes nothing of the kernel, the ABI, the engine adapters or the control interface: a change the circuit needs there is a new finding to the architect.
+Milestone M2 is complete (PR-35 to PR-43). **M3 has begun:** PR-44 is done (`c1ffd81`, `01b2296`, 2026-11-25): `florn-domain-circuit` with validation, the passive built-ins and sources, the DC operating point (MNA, dense LU, Newton with the diode's limiter), the initial solve and its stages.
 
-**Next: PR-44, the domain crate and the static plant** (milestone M3). Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-44 first; it starts from RFC 012 rules 1 to 6, 23, 24, 28 and 30 and RFC 013 rules 1 to 5, 8, 9, 16, 18, 19 and 22. `libm` is added here, pinned exactly (section 2 of the handoff).
+**Next: PR-45, transient integration (V).** Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-45 first; it starts from RFC 013 rules 6, 7 and 10 to 14 and section 11. A verifier session follows its push.
 
-**Its first commit, from PR-43's review:** every journey that compares a run's digest waits while the digest is pending, as J1 does (`endedWithChain`). Since PR-38 the run view shows the chain as pending (null) until the run-state answer comes, and only J1 waits. J2, J4, J5, P1, P3, P4 and the BGP lab read it at once. Firefox's P4 red on `1bc60d7` (`chain: null`) was that, not a timeout. A present chain that differs still fails at once. In the same commit, P3's "the checkpoint loads at its instant and is kept under Files" waits until the Files list holds the checkpoint (the page stores it asynchronously) and prints the list in its output; it failed once in Firefox in M2's dispatched run 45521340138 with `now` and `instant` equal.
+**Its first commit, from PR-44's review: finding F-18 and three corrections.** F-18 is the only change to the core that M3 makes; it is in RFC 012 section 11, written before the code.
 
-Also from PR-43: `display_series` gives the index RFC 014 rule 3 defines, and B-44 now checks it against the channel summaries. `panels.rs` is still split by the first RFC 014 unit that touches it (PR-52).
+1. **F-18 (a): only an error of `Domain::validate` refuses a run.** A warning is kept, logged at start, and returned with the validation a front end asks for. Move `circuit.signal-unconnected` and `circuit.floating-node` back to `validate` from the start hook's `Action::Notify`. Test both: the run starts, and the warning is in the validation and in the log.
+2. **F-18 (b): the start hook reads each guest actor's admitted module manifest**, read-only (its world, its declared channels). The shape is yours. With it:
+   - `circuit.device-limit` is refused from the start hook, before any event, with a test of two device actors (B-49).
+   - The domain keeps the channel layouts for a guest's `display_series` index; PR-47 uses it.
+3. **A dimensionless consumer on a signal with a unit is `circuit.signal-dimension`**, and so is the reverse, with the new dimension `dimensionless` (RFC 012 rule 4, RFC 007 amended). Both catalogues get the text.
+4. **The motor's pin is ASCII `a-`** (RFC 012 rule 23 amended, RFC 004's example corrected); U+2212 is not accepted.
+
+The rest of PR-44's readings stand as they are; the review lists them. The two mutants that survived have checks in B-45 (the limiter's flag in convergence) and B-47 (a guest with two channels).
 
 ## What Phase 4 delivers
 

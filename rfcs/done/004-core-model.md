@@ -177,7 +177,7 @@ kind = "builtin"
 builtin = "circuit/dc-motor"       # when kind = "builtin": "<domain>/<name>"
 ports = [
   { id = 0, name = "a+", type = "circuit/pin" },
-  { id = 1, name = "a−", type = "circuit/pin" },        # U+2212, as RFC 012 rule 23 spells it
+  { id = 1, name = "a-", type = "circuit/pin" },        # ASCII, as RFC 012 rule 23 names it
   { id = 2, name = "speed", type = "circuit/signal-out" },
 ]
 
