@@ -28,18 +28,14 @@ PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17),
 
 Milestone M2 is complete (PR-35 to PR-43). **M3 has begun:** PR-44 is done (`c1ffd81`, `01b2296`, 2026-11-25): `florn-domain-circuit` with validation, the passive built-ins and sources, the DC operating point (MNA, dense LU, Newton with the diode's limiter), the initial solve and its stages.
 
-**Next: PR-45, transient integration (V).** Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-45 first; it starts from RFC 013 rules 6, 7 and 10 to 14 and section 11. A verifier session follows its push.
+**PR-45 is in review** (`ed668fe` F-18 and three corrections; `27a9fc9` transient integration, 2026-11-26; CI run 45712399450 green). Its golden figures match the RFC's model: 0.2621 and 0.8284 `ltol·V`, and order ratios inside 3.89 to 3.97 and 4.01 to 4.11.
 
-**Its first commit, from PR-44's review: finding F-18 and three corrections.** F-18 is the only change to the core that M3 makes; it is in RFC 012 section 11, written before the code.
+**Next: one small commit, then PR-45's verifier.** I review this commit and the verifier's report together.
 
-1. **F-18 (a): only an error of `Domain::validate` refuses a run.** A warning is kept, logged at start, and returned with the validation a front end asks for. Move `circuit.signal-unconnected` and `circuit.floating-node` back to `validate` from the start hook's `Action::Notify`. Test both: the run starts, and the warning is in the validation and in the log.
-2. **F-18 (b): the start hook reads each guest actor's admitted module manifest**, read-only (its world, its declared channels). The shape is yours. With it:
-   - `circuit.device-limit` is refused from the start hook, before any event, with a test of two device actors (B-49).
-   - The domain keeps the channel layouts for a guest's `display_series` index; PR-47 uses it.
-3. **A dimensionless consumer on a signal with a unit is `circuit.signal-dimension`**, and so is the reverse, with the new dimension `dimensionless` (RFC 012 rule 4, RFC 007 amended). Both catalogues get the text.
-4. **The motor's pin is ASCII `a-`** (RFC 012 rule 23 amended, RFC 004's example corrected); U+2212 is not accepted.
+- **Under `fixed`, a step is `min(step, d)`** (RFC 013 rule 13, amended): rule 13's remainder clause does not apply, so a fixed step is never lengthened (today a limit at 1.5 steps gives one step of 1.5). The start-up steps follow the same rule as the method they precede. Add a test.
+- **`circuit.non-convergence` after `max-rejections`** names the owner of the state variable with the largest error ratio (RFC 012 rule 28's row, amended). Keep that in `Stuck` for PR-46 to emit.
 
-The rest of PR-44's readings stand as they are; the review lists them. The two mutants that survived have checks in B-45 (the limiter's flag in convergence) and B-47 (a guest with two channels).
+Then the owner starts a **new** verifier session on PR-45 (`ed668fe`, `27a9fc9` and this commit). The team waits for the review before PR-46.
 
 ## What Phase 4 delivers
 
