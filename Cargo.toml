@@ -34,6 +34,7 @@ florn-platform-native = { path = "crates/florn-platform-native", version = "0.3.
 florn-platform-web = { path = "crates/florn-platform-web", version = "0.3.1" }
 florn-guest = { path = "crates/florn-guest", version = "0.3.1" }
 florn-guest-network = { path = "crates/florn-guest-network", version = "0.3.1" }
+florn-guest-circuit = { path = "crates/florn-guest-circuit", version = "0.3.1" }
 florn-domain-network = { path = "crates/florn-domain-network", version = "0.3.1" }
 florn-domain-circuit = { path = "crates/florn-domain-circuit", version = "0.3.1" }
 florn-conformance = { path = "crates/florn-conformance", version = "0.3.1" }

@@ -30,6 +30,8 @@ pub const SDK: &[&str] = &[
     "distance_vector",
     "ospf",
     "bgp",
+    "pid",
+    "bad_controller",
 ];
 
 /// The workspace root.
@@ -66,6 +68,8 @@ pub fn build(target_dir: &Path) -> PathBuf {
             "florn-guest",
             "-p",
             "florn-guest-network",
+            "-p",
+            "florn-guest-circuit",
             "--examples",
             "--target-dir",
         ])
@@ -188,8 +192,17 @@ pub fn circuit_stub(kind: &str, channels: &str) -> Vec<u8> {
     } else {
         "[[ports]]\nkind = \"in\"\ntype = \"circuit/signal-in\"\nmin = 0\nmax = 4\n\n[[ports]]\nkind = \"out\"\ntype = \"circuit/signal-out\"\nmin = 0\nmax = 4\n"
     };
+    // A controller names its period parameter (RFC 012 rule 18); the stub never runs `on-sample`.
+    let (params, table) = if kind == "controller" {
+        (
+            "[[params]]\nname = \"period\"\ntype = \"ticks\"\nrequired = false\ndefault = \"1s\"\n\n",
+            "period = \"period\"\n",
+        )
+    } else {
+        ("", "")
+    };
     let manifest = format!(
-        "florn-module = 1\nworld = \"florn:core/guest@0.1.0\"\nkind = \"{kind}\"\n\n{ports}\n[circuit]\nkind = \"{kind}\"\n\n{channels}\n[resources]\nmemory = \"256KiB\"\n"
+        "florn-module = 1\nworld = \"florn:core/guest@0.1.0\"\nkind = \"{kind}\"\n\n{ports}\n{params}[circuit]\nkind = \"{kind}\"\n{table}\n{channels}\n[resources]\nmemory = \"256KiB\"\n"
     );
     with_manifest(
         r#"

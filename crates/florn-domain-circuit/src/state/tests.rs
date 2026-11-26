@@ -18,7 +18,7 @@ fn started() -> (crate::plant::Plant, Live, Solution) {
         .plant();
     let solution = initial_solve(&plant).unwrap();
     let mut live = Live::new(&plant);
-    live.start(&plant, &solution);
+    live.start(&plant, &solution, Vec::new());
     (plant, live, solution)
 }
 

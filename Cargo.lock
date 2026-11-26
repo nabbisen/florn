@@ -801,6 +801,7 @@ name = "florn-cli"
 version = "0.3.1"
 dependencies = [
  "florn-control",
+ "florn-domain-circuit",
  "florn-domain-network",
  "florn-engine-wasmtime",
  "florn-host",
@@ -907,6 +908,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "florn-guest-circuit"
+version = "0.3.1"
+dependencies = [
+ "florn-guest",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "florn-guest-network"
 version = "0.3.1"
 dependencies = [
@@ -1003,6 +1012,7 @@ dependencies = [
  "blake3",
  "console_error_panic_hook",
  "florn-control",
+ "florn-domain-circuit",
  "florn-domain-network",
  "florn-engine",
  "florn-engine-web",

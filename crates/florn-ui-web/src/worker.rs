@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 
 use florn_control::display::{DisplayPath, Transport, encode_all};
 use florn_control::{Answer, Command, Envelope, Message, Query, SeedChoice, Subscription, Unit};
+use florn_domain_circuit::{CircuitDomain, Limits as CircuitLimits};
 use florn_domain_network::NetworkDomain;
 use florn_engine::{bench, cases};
 use florn_engine_web::WebEngine;
@@ -78,7 +79,9 @@ pub extern "C" fn florn_start(instances: u32, memory_bytes: f64, transport: u32,
         WebEngine::new(),
         florn_host::run::default_admission(),
         Box::new(platform),
-        Domains::core().with(NetworkDomain::new),
+        Domains::core()
+            .with(NetworkDomain::new)
+            .with(|| CircuitDomain::new(CircuitLimits::browser())),
         Options {
             keep_records: keep != 0,
             keep_payloads: keep != 0,

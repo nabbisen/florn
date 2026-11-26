@@ -68,6 +68,12 @@ pub fn encode(live: &Live, solution: Option<&Solution>) -> Vec<u8> {
     });
     e.u8(u8::from(live.notified));
     e.list(&live.sensors, |e, s| e.u64(s.next_due));
+    e.list(&live.samplers, |e, c| {
+        e.u32(c.actor);
+        e.u64(c.period);
+        e.u64(c.next_due);
+        e.u64(c.index);
+    });
     e.list(&live.held, |e, h| {
         e.u64(crate::math::canonical(h.value).to_bits());
         e.u8(u8::from(h.frozen));
@@ -116,6 +122,14 @@ pub fn decode(plant: &Plant, bytes: &[u8]) -> Option<(Live, Option<Solution>)> {
     for (s, t) in live.sensors.iter_mut().zip(due) {
         s.next_due = t;
     }
+    live.samplers = d.list(|d| {
+        Some(crate::controllers::Sampler {
+            actor: d.u32()?,
+            period: d.u64()?,
+            next_due: d.u64()?,
+            index: d.u64()?,
+        })
+    })?;
     let held = d.list(|d| {
         Some(Held {
             value: f64::from_bits(d.u64()?),

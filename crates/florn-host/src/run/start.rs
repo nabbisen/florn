@@ -841,6 +841,20 @@ impl<E: Engine> Run<E> {
         Ok(())
     }
 
+    /// The start of a run that did not come through [`Self::try_new`]: from the start checkpoint (RFC
+    /// 009 rule 2: the run before `init`) in a fresh Host or in place, and a replay. Every actor's
+    /// `init`, then every domain's start hook (RFC 012 finding F-15), as a fresh run does: a run
+    /// that began again from its start must begin as it began, with the events the hook scheduled.
+    pub(super) fn init_and_start(&mut self) -> Result<(), HostError> {
+        self.init_all();
+        self.poll_end_requests();
+        if let Err(refusal) = self.start_domains() {
+            self.notify((*refusal).clone());
+            return Err(HostError::Domain(vec![*refusal]));
+        }
+        Ok(())
+    }
+
     pub(super) fn init_all(&mut self) {
         let mut ids: Vec<Identity> = self.actors.keys().copied().collect();
         ids.extend(self.builtins.keys().copied());

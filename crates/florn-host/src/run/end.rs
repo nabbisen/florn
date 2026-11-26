@@ -227,7 +227,7 @@ impl<E: Engine> Run<E> {
         run.instantiate_all()?;
         run.say_swapping(platform)?;
         run.keep_start();
-        run.init_all();
+        run.init_and_start()?;
         Ok(run)
     }
 

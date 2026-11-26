@@ -16,4 +16,5 @@ florn-engine-wasmtime = { workspace = true }
 florn-platform-native = { workspace = true }
 florn-model = { workspace = true }
 florn-domain-network = { workspace = true }
+florn-domain-circuit = { workspace = true }
 

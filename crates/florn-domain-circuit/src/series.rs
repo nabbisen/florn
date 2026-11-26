@@ -7,6 +7,7 @@
 
 use florn_kernel::Identity;
 
+use crate::guests::{Guests, f64_offsets};
 use crate::plant::Plant;
 use crate::{CHANNEL_CONDITION, CHANNEL_PROBE, kinds};
 
@@ -21,10 +22,29 @@ fn f64_fields(channel: u32) -> &'static [usize] {
 
 pub fn display_series(
     plant: Option<&Plant>,
+    guests: &Guests,
     actor: Identity,
     channel: u32,
     payload: &[u8],
 ) -> Vec<(u8, f64)> {
+    // A guest controller's `control` channel (RFC 014 rules 2 and 3): each `f64` field of the report,
+    // after the `f64` fields of the channels declared before it. The module's other channels are not
+    // drawn.
+    if let Some(info) = guests.get(actor) {
+        let Some(declared) = info.channel(channel).filter(|c| c.name == "control") else {
+            return Vec::new();
+        };
+        let base = guests.series_base(actor, channel).unwrap_or(0);
+        return f64_offsets(declared)
+            .iter()
+            .enumerate()
+            .filter_map(|(n, (_, offset))| {
+                let bytes = payload.get(*offset..*offset + 8)?;
+                let value = f64::from_le_bytes(bytes.try_into().ok()?);
+                u8::try_from(base + n).ok().map(|i| (i, value))
+            })
+            .collect();
+    }
     let Some(device) = plant.and_then(|p| p.devices.iter().find(|d| d.actor == actor)) else {
         return Vec::new();
     };

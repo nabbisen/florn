@@ -32,6 +32,7 @@ fn a_probe_report_is_the_value_in_the_unit_of_the_sensors_signal() {
     let p = plant();
     let n = numeric_fields(
         &p,
+        &Guests::default(),
         3,
         Site::Report {
             channel: CHANNEL_PROBE,
@@ -53,6 +54,7 @@ fn a_sensor_on_no_signal_reports_in_its_own_si_unit() {
     let p = plant();
     let n = numeric_fields(
         &p,
+        &Guests::default(),
         4,
         Site::Report {
             channel: CHANNEL_PROBE,
@@ -77,6 +79,7 @@ fn a_send_on_a_signal_out_port_is_the_value_in_the_unit_of_its_signal() {
         });
     let n = numeric_fields(
         &p,
+        &Guests::default(),
         3,
         Site::Send {
             port: port.unwrap(),
@@ -94,10 +97,20 @@ fn a_send_on_a_signal_out_port_is_the_value_in_the_unit_of_its_signal() {
 #[test]
 fn what_is_not_a_probe_value_or_eight_bytes_is_not_numeric() {
     let p = plant();
-    assert!(numeric_fields(&p, 3, Site::Report { channel: 2 }, &bits(1.0)).is_none());
     assert!(
         numeric_fields(
             &p,
+            &Guests::default(),
+            3,
+            Site::Report { channel: 2 },
+            &bits(1.0)
+        )
+        .is_none()
+    );
+    assert!(
+        numeric_fields(
+            &p,
+            &Guests::default(),
             3,
             Site::Report {
                 channel: CHANNEL_PROBE
@@ -109,6 +122,7 @@ fn what_is_not_a_probe_value_or_eight_bytes_is_not_numeric() {
     assert!(
         numeric_fields(
             &p,
+            &Guests::default(),
             1,
             Site::Report {
                 channel: CHANNEL_PROBE
@@ -117,5 +131,14 @@ fn what_is_not_a_probe_value_or_eight_bytes_is_not_numeric() {
         )
         .is_none()
     );
-    assert!(numeric_fields(&p, 3, Site::Send { port: 99 }, &bits(1.0)).is_none());
+    assert!(
+        numeric_fields(
+            &p,
+            &Guests::default(),
+            3,
+            Site::Send { port: 99 },
+            &bits(1.0)
+        )
+        .is_none()
+    );
 }

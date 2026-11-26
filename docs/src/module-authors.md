@@ -179,6 +179,45 @@ A frame is `on_message` through the interface's port, its payload the bytes the 
 
 The four network examples under `crates/florn-guest-network/examples/` are the ladder: `net_echo`, `distance_vector`, `ospf` and `bgp`. The last two show the pattern for a protocol that ships a declared subset: everything outside it is refused with a line on channel 0, which the application and the diagnostic log show, and the router keeps running.
 
+## Controller guests
+
+A guest of the circuit domain (RFC 012) is a **sampled controller**: it speaks the controller world, `florn:circuit/controller@0.1.0`, the core world plus two imports, `read-input` and `set-output`, and one export, `on-sample`. The plant it controls is a circuit the Host solves between the samples; the controller sees it only through the signals its ports are on. It depends on `florn-guest` and on `florn-guest-circuit`, declares ports of the types `circuit/signal-in` and `circuit/signal-out`, implements `florn_guest::Actor` and `florn_guest_circuit::Controller`, and exports with `florn_guest_circuit::controller!`:
+
+```toml
+[dependencies]
+florn-guest = "0.3.1"
+florn-guest-circuit = "0.3.1"
+```
+
+```rust
+florn_guest::declare! {
+    world: "florn:circuit/controller@0.1.0",
+    kind: "pid",
+    description: "A PID controller",
+    ports: [("in", "circuit/signal-in", 1, 2), ("out", "circuit/signal-out", 1, 1)],
+    params: [(period, "period", ticks, true), (phase, "phase", ticks, false, default = "0ns")],
+    telemetry: [(1, "control", Control, [(input, "input", f64), (output, "output", f64), (error, "error", f64)])],
+    resources: [("memory", "1MiB")],
+    tables: [("circuit", [("kind", "controller"), ("period", "period"), ("phase", "phase"),
+        ("control-units", { input = "rad/s", error = "rad/s" })])],
+}
+
+impl florn_guest_circuit::Controller for Pid {
+    fn on_sample(&mut self, index: u64) {
+        let measurement = florn_guest_circuit::read_input(self.measurement).unwrap_or(0.0);
+        florn_guest_circuit::set_output(self.output, self.law(measurement));
+    }
+}
+
+florn_guest_circuit::controller!(Pid);
+```
+
+The module's `circuit` table says what the domain reads: `kind = "controller"`, the names of the parameters that hold its `period` (required, whole ticks, at least one) and its `phase` (when the first sample is; default zero), and optionally `control-units`, the units of the `control` series the application draws. The controller is called at its sample instants: `on_sample(index)` with `index` counting its samples from 0 and `host::now()` the instant. `read_input(port)` is the value held on the signal that port is on, **as it was when the activation began**, in the unit of that signal; `None` when the port is on no signal. `set_output(port, value)` is a recorded effect: it is applied at the end of the activation, held until the next `set_output` on that port, and the plant sees it from that instant, never before. A value that is not finite is a contract violation, and the activation faults.
+
+At a tick where a controller and a sensor both sample, the controller reads the **sensor's previous sample**: the plant is made current first and the sensors sample one microstep after the controllers, whatever the identities. A controller that must see the sample of tick *S* samples one tick later (`phase = "1ns"`). A controller that traps keeps its last outputs held and is not sampled again; the scenario's `[circuit]` table may say `faulted-policy = "stop-run"` to end the run instead.
+
+A report on a channel named `control` with `f64` fields is drawn as a series, one per field, numbered across the module's `control` channels in channel order. The ladder's first example is `pid` in `crates/florn-guest-circuit/examples`, a PID controller whose gains are those of the discrete form (the integral gains `ki × error` at every sample, the derivative is `kd` times the change of the error), with output limits and no integration while it is saturated; `bad_controller` is the kit's, for what a good one cannot show. The shipped scenario `motor-loop` is `pid` driving a DC motor, with the set point and the load torque as `constant`s and a load step at one second.
+
 ## Where to look next
 
 The fifteen example guests under `crates/florn-guest/examples/` show every feature in use: `echo` is the reference, `chatter` exercises parameters, telemetry and faults, `timers` the timer rules, `heap` state that grows, and the `hostile_*` guests each one fault kind. The conformance kit's readme maps every rule of RFC 002 and RFC 003 to the test that proves it.

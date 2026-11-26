@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use florn_control::{Answer, Command, Envelope, ExportKind, Message, Query, SeedChoice, Unit};
+use florn_domain_circuit::{CircuitDomain, Limits as CircuitLimits};
 use florn_domain_network::NetworkDomain;
 use florn_engine_wasmtime::{Limits, WasmtimeEngine};
 use florn_host::Domains;
@@ -184,7 +185,9 @@ fn controller(args: &Args) -> Result<Controller<WasmtimeEngine>, String> {
         engine,
         florn_host::run::default_admission(),
         Box::new(platform),
-        Domains::core().with(NetworkDomain::new),
+        Domains::core()
+            .with(NetworkDomain::new)
+            .with(|| CircuitDomain::new(CircuitLimits::native())),
         Options {
             keep_records: args.trace || args.keep_records,
             keep_payloads: args.payloads,

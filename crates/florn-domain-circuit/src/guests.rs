@@ -25,6 +25,9 @@ pub enum GuestKind {
 pub struct GuestInfo {
     pub kind: GuestKind,
     pub channels: Vec<Channel>,
+    /// The units of a controller's `control` series, from the module's `control-units` (RFC 012
+    /// rule 18): a field's name and the unit symbol; a field left out is dimensionless.
+    pub units: BTreeMap<String, String>,
 }
 
 /// The circuit guests of a run, by actor identity.
@@ -51,7 +54,28 @@ impl Guests {
             };
             let mut channels = manifest.telemetry.clone();
             channels.sort_by_key(|c| c.channel);
-            out.insert(actor, GuestInfo { kind, channels });
+            let units = match manifest
+                .domain_tables
+                .get(NAME)
+                .and_then(|t| t.get("control-units"))
+            {
+                Some(DomainValue::Map(m)) => m
+                    .iter()
+                    .filter_map(|(k, v)| match v {
+                        DomainValue::Text(u) => Some((k.clone(), u.clone())),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => BTreeMap::new(),
+            };
+            out.insert(
+                actor,
+                GuestInfo {
+                    kind,
+                    channels,
+                    units,
+                },
+            );
         }
         Self(out)
     }
@@ -62,6 +86,15 @@ impl Guests {
             .values()
             .filter(|g| g.kind == GuestKind::Device)
             .count()
+    }
+
+    /// The guest actors that are controllers, in ascending identity.
+    pub fn controllers(&self) -> Vec<Identity> {
+        self.0
+            .iter()
+            .filter(|(_, g)| g.kind == GuestKind::Controller)
+            .map(|(a, _)| *a)
+            .collect()
     }
 
     pub fn get(&self, actor: Identity) -> Option<&GuestInfo> {
@@ -85,6 +118,34 @@ impl Guests {
                 .count();
         }
         None
+    }
+}
+
+/// The `f64` fields of a declared channel with their byte offsets in a report's payload, in field
+/// order: the layout of RFC 002 rule 16 writes a `bool` in one byte, a `u64`, `s64` or `f64` in
+/// eight; a field of variable size ends the fixed prefix, and the `f64` fields after it have no
+/// offset a reader can know.
+pub fn f64_offsets(channel: &Channel) -> Vec<(String, usize)> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    for (name, ty) in &channel.fields {
+        match ty {
+            ParamType::Bool => at += 1,
+            ParamType::U64 | ParamType::S64 => at += 8,
+            ParamType::F64 => {
+                out.push((name.clone(), at));
+                at += 8;
+            }
+            _ => break,
+        }
+    }
+    out
+}
+
+impl GuestInfo {
+    /// The channel of this number, if the module declares it.
+    pub fn channel(&self, number: u32) -> Option<&Channel> {
+        self.channels.iter().find(|c| c.channel == number)
     }
 }
 

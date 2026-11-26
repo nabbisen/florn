@@ -537,7 +537,7 @@ impl<E: Engine> Run<E> {
         self.reached = checkpoint.kernel.now.tick;
         // The start (rule 2) is the run before `init`: initialised again, as a fresh run is.
         if checkpoint.kernel.handled == 0 && checkpoint.kernel.trace.records == 0 {
-            self.init_all();
+            self.init_and_start()?;
         }
         self.telemetry.clear();
         if let Some(a) = &mut self.activity {
@@ -676,7 +676,7 @@ impl<E: Engine> Run<E> {
         run.say_swapping(platform)?;
         // The start (RFC 009 rule 2) is the run before `init`: initialised, as a fresh run is.
         if checkpoint.kernel.handled == 0 && checkpoint.kernel.trace.records == 0 {
-            run.init_all();
+            run.init_and_start()?;
         }
         // The built-in actors' kernel state is in the kernel's snapshot; the dead ones too.
         for (id, a) in &checkpoint.kernel.actors {

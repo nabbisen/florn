@@ -226,6 +226,8 @@ fn definitions() -> Vec<Shipped> {
     };
     vec![
         normal(echo_pair()),
+        // The closed loop of Phase 4's exit criterion (RFC 012 rule 27): a PID controller, a DC motor.
+        normal(crate::circuit_scenarios::motor_loop()),
         normal(race("by-identity", false)),
         normal(race("by-identity", true)),
         normal(race("by-seed", false)),

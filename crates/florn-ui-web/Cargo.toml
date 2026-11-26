@@ -20,6 +20,7 @@ florn-engine = { workspace = true, features = ["bench", "cases"] }
 florn-engine-web = { workspace = true }
 florn-platform-web = { workspace = true }
 florn-domain-network = { workspace = true }
+florn-domain-circuit = { workspace = true }
 blake3 = { workspace = true }
 sha2 = { workspace = true }
 # The shell (RFC 005 rule 38), behind a feature so that the worker module builds without it.

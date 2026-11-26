@@ -25,9 +25,12 @@ pub fn kit_limits() -> ClassLimits {
     }
 }
 
-/// The Host's domains as the shells compose them: the core and the network domain (RFC 008).
+/// The Host's domains as the shells compose them: the core, the network domain (RFC 008) and the
+/// circuit domain (RFC 012) with the native Host's maxima (RFC 013 rule 18).
 pub fn domains() -> Domains {
-    Domains::core().with(florn_domain_network::NetworkDomain::new)
+    Domains::core()
+        .with(florn_domain_network::NetworkDomain::new)
+        .with(|| florn_domain_circuit::CircuitDomain::new(florn_domain_circuit::Limits::native()))
 }
 
 /// An admission step that admits the domains' worlds beside the core's (RFC 008 rule 6).

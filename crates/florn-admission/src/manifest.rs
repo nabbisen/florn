@@ -435,6 +435,10 @@ fn domain_value(v: &Value) -> Option<DomainValue> {
         Value::Float(f) => DomainValue::Decimal(format!("{f}")),
         Value::String(s) => DomainValue::Text(s.clone()),
         Value::Boolean(b) => DomainValue::Boolean(*b),
+        // A domain's table is carried opaquely (RFC 008 rule 16), nested tables and lists included:
+        // RFC 012 rule 18 writes a controller's `control-units` as a table in its `[circuit]` table.
+        Value::Table(_) => DomainValue::Map(domain_map(v)),
+        Value::Array(a) => DomainValue::List(a.iter().filter_map(domain_value).collect()),
         _ => return None,
     })
 }

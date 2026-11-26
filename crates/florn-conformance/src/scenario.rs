@@ -12,6 +12,7 @@ use crate::guests;
 pub fn contract_of(module: &str) -> &'static str {
     match module {
         "net_echo" | "distance_vector" | "ospf" | "bgp" => "florn:network/router@0.1.0",
+        "pid" | "bad_controller" => "florn:circuit/controller@0.1.0",
         _ => "florn:core/guest@0.1.0",
     }
 }
@@ -105,6 +106,10 @@ pub struct Scenario {
     pub extra: BTreeMap<&'static str, Vec<u8>>,
     /// Whether the modules are the shipped ones of `scenarios/modules` rather than a fresh build.
     pub shipped: bool,
+    /// A scenario written as manifest text rather than assembled from actors on numbered ports (the
+    /// circuit's, whose ports have names and types of their own): the text with `@module@` where a
+    /// module's hash goes, and the modules it uses.
+    pub raw: Option<(String, Vec<&'static str>)>,
 }
 
 impl Scenario {
@@ -122,6 +127,16 @@ impl Scenario {
             changes: Vec::new(),
             extra: BTreeMap::new(),
             shipped: false,
+            raw: None,
+        }
+    }
+
+    /// A scenario of the given manifest text (`@module@` stands for a module's hash) over the given
+    /// modules, for what the numbered ports of the builder cannot say.
+    pub fn raw(name: &str, end: u64, template: String, modules: &[&'static str]) -> Self {
+        Self {
+            raw: Some((template, modules.to_vec())),
+            ..Self::new(name, end)
         }
     }
 
@@ -220,6 +235,9 @@ impl Scenario {
 
     /// The distinct module names, in first-use order.
     pub fn module_names(&self) -> Vec<&'static str> {
+        if let Some((_, modules)) = &self.raw {
+            return modules.clone();
+        }
         let mut names: Vec<&'static str> = Vec::new();
         for a in &self.actors {
             if a.builtin {
@@ -234,6 +252,16 @@ impl Scenario {
 
     /// The manifest text, with the module hashes given.
     pub fn text(&self, hashes: &BTreeMap<String, String>) -> String {
+        if let Some((template, modules)) = &self.raw {
+            let mut t = template.clone();
+            for m in modules {
+                let hash = hashes
+                    .get(*m)
+                    .unwrap_or_else(|| panic!("no hash for module {m}"));
+                t = t.replace(&format!("@{m}@"), hash);
+            }
+            return t;
+        }
         let domains: Vec<String> = self.domains.iter().map(|d| format!("\"{d}\"")).collect();
         let mut t = format!(
             "florn = 1\nname = \"{}\"\ndomains = [{}]\n\n[time]\ntick = \"1ns\"\nend = \"{}ns\"\n\n[order]\ntie = \"{}\"\n",

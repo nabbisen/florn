@@ -1,0 +1,28 @@
+[package]
+name = "florn-guest-circuit"
+description = "The guest SDK for the controller world of RFC 012 (florn:circuit@0.1.0): bindings, the Controller trait, read-input and set-output"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = true
+readme = "README.md"
+
+[dependencies]
+florn-guest = { workspace = true, default-features = false }
+wit-bindgen = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["florn-guest/std"]
+no-std = ["florn-guest/no-std"]
+
+[[example]]
+name = "pid"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "bad_controller"
+crate-type = ["cdylib"]

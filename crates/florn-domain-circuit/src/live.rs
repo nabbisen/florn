@@ -9,6 +9,7 @@ use florn_control::{Code, Scope, Value};
 use florn_host::domain::{Action, EndRequest, Limit};
 use florn_kernel::Identity;
 
+use crate::controllers::Sampler;
 use crate::dc::Solution;
 use crate::inputs::{Breakpoint, Input, Pending};
 use crate::plant::{Element, Plant};
@@ -59,6 +60,8 @@ pub struct Live {
     pub drives: Vec<bool>,
     pub pending: Pending,
     pub sensors: Vec<Sensor>,
+    /// The sampled controllers (rule 10): their period and next due tick and index.
+    pub samplers: Vec<Sampler>,
     pub detector: bool,
     pub advance_at: Option<u64>,
     pub last_advance: u64,
@@ -125,6 +128,7 @@ impl Live {
             drives,
             pending: Pending::default(),
             sensors,
+            samplers: Vec::new(),
             detector,
             advance_at: None,
             last_advance: 0,
@@ -149,12 +153,62 @@ impl Live {
 
     /// The start hook after the initial solve (rule 30): the solver at tick 0, the breakpoints the
     /// `init`s recorded consumed, the first advance scheduled (rule 8).
-    pub fn start(&mut self, plant: &Plant, solution: &Solution) -> Vec<Action> {
+    pub fn start(
+        &mut self,
+        plant: &Plant,
+        solution: &Solution,
+        samplers: Vec<Sampler>,
+    ) -> Vec<Action> {
         self.pending.clear();
+        self.samplers = samplers;
         let in_force = self.plant_in_force(plant);
         self.transient = Some(Transient::new(&in_force, solution));
         self.last_advance = 0;
-        self.schedule(plant, 0)
+        // The first advance (rule 8) and each controller's first sample at its phase (rule 10);
+        // what is scheduled with delay zero lands one microstep later (rule 10).
+        let mut actions = self.schedule(plant, 0);
+        for c in &self.samplers {
+            if c.next_due < plant.end {
+                actions.push(sample_event(c.actor, c.next_due));
+            }
+        }
+        actions
+    }
+
+    /// A controller's sample event at `tick` (rule 10): its `on-sample` activation, then its next
+    /// sample `period` later, unless that is at or after the end. A faulted controller (`alive`
+    /// false) is not sampled again: the event is dropped (rule 17).
+    pub fn controller_sample(
+        &mut self,
+        plant: &Plant,
+        actor: Identity,
+        tick: u64,
+        alive: bool,
+    ) -> Vec<Action> {
+        let Some(c) = self.samplers.iter_mut().find(|c| c.actor == actor) else {
+            return Vec::new();
+        };
+        if !alive {
+            return Vec::new();
+        }
+        let index = c.index;
+        c.index += 1;
+        c.next_due = tick + c.period;
+        let mut actions = vec![Action::Call {
+            actor,
+            export: crate::controllers::ON_SAMPLE.to_string(),
+            values: vec![florn_abi::Val::U64(tick), florn_abi::Val::U64(index)],
+        }];
+        if c.next_due < plant.end {
+            actions.push(Action::Schedule {
+                origin: actor,
+                delay: c.period,
+                class: CLASS_SAMPLE,
+                target: actor,
+                payload: Vec::new(),
+            });
+        }
+        actions
     }
 
     /// The tick of the next advance (rule 8): the earliest tick a sensor is due, or the last
@@ -415,6 +469,17 @@ fn pins_of(e: &Element) -> [Option<usize>; 2] {
         | Element::Motor { p, n, .. } => [*p, *n],
         Element::Diode { a, k, .. } => [*a, *k],
         Element::Constant { .. } => [None, None],
+    }
+}
+
+/// The event of a controller's sample at its phase: addressed to itself, from itself.
+fn sample_event(actor: Identity, delay: u64) -> Action {
+    Action::Schedule {
+        origin: actor,
+        delay,
+        class: CLASS_SAMPLE,
+        target: actor,
+        payload: Vec::new(),
     }
 }
 

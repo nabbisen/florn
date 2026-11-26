@@ -5,7 +5,9 @@
 use florn_host::domain::{Numeric, NumericField, Site};
 use florn_kernel::Identity;
 
+use crate::guests::{GuestInfo, Guests, f64_offsets};
 use crate::plant::{Element, Plant};
+use crate::units::CircuitUnits;
 use crate::{CHANNEL_PROBE, units};
 
 /// The unit symbol and the factor to SI of a signal, or of the sensor's own SI unit when the
@@ -19,10 +21,14 @@ fn unit_of(plant: &Plant, signal: Option<usize>, fallback: &'static str) -> (Str
 
 pub fn numeric_fields(
     plant: &Plant,
+    guests: &Guests,
     actor: Identity,
     site: Site,
     payload: &[u8],
 ) -> Option<Numeric> {
+    if let (Some(info), Site::Report { channel }) = (guests.get(actor), site) {
+        return guest_report(info, channel, payload);
+    }
     let bytes: [u8; 8] = payload.try_into().ok()?;
     let value = f64::from_le_bytes(bytes);
     let (name, unit, factor) = match site {
@@ -54,6 +60,46 @@ pub fn numeric_fields(
         }],
         exact: Vec::new(),
     })
+}
+
+/// A report of a guest controller on a channel its module declares (RFC 013 rule 20, item 2): every
+/// `f64` field is numeric, in the unit its module gives it (`control-units`, for the `control`
+/// channel) and dimensionless otherwise; the rest of the payload is compared exactly. A layout with
+/// a field of variable size before the end of its numbers has no fixed offsets: the payload is then
+/// compared by digest.
+fn guest_report(info: &GuestInfo, channel: u32, payload: &[u8]) -> Option<Numeric> {
+    use florn_admission::config::Units;
+    let declared = info.channel(channel)?;
+    let offsets = f64_offsets(declared);
+    if offsets.is_empty() {
+        return None;
+    }
+    let mut fields = Vec::new();
+    let mut taken = vec![false; payload.len()];
+    for (name, at) in &offsets {
+        let bytes: [u8; 8] = payload.get(*at..*at + 8)?.try_into().ok()?;
+        taken[*at..*at + 8].iter_mut().for_each(|t| *t = true);
+        let (unit, factor) = match info.units.get(name).filter(|_| declared.name == "control") {
+            Some(symbol) => {
+                let u = CircuitUnits.unit(symbol)?;
+                (symbol.clone(), crate::analyse::factor_of(&u))
+            }
+            None => (String::new(), 1.0),
+        };
+        fields.push(NumericField {
+            name: name.clone(),
+            unit,
+            factor,
+            value: f64::from_le_bytes(bytes),
+        });
+    }
+    let exact = payload
+        .iter()
+        .zip(&taken)
+        .filter(|(_, t)| !**t)
+        .map(|(b, _)| *b)
+        .collect();
+    Some(Numeric { fields, exact })
 }
 
 #[cfg(test)]

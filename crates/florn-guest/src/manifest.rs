@@ -209,7 +209,7 @@ macro_rules! declare {
         params: [ $( ( $pn:ident, $pname:literal, $pty:ident, $preq:literal $(, default = $pdef:literal)? $(, unit = $punit:literal)? ) ),* $(,)? ],
         telemetry: [ $( ( $ch:literal, $chname:literal, $chty:ident, [ $( ( $fname:ident, $fieldname:literal, $fty:ident ) ),* $(,)? ] ) ),* $(,)? ],
         resources: [ $( ( $rk:literal, $rv:literal ) ),* $(,)? ]
-        $( , tables: [ $( ( $tn:literal, [ $( ( $tk:literal, $tv:literal ) ),* $(,)? ] ) ),* $(,)? ] )? $(,)?
+        $( , tables: [ $( ( $tn:literal, [ $( ( $tk:literal, $tv:tt ) ),* $(,)? ] ) ),* $(,)? ] )? $(,)?
     ) => {
         /// The manifest, as the `florn.manifest` section carries it.
         pub const MANIFEST: &str = concat!(

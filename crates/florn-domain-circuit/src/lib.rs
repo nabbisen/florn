@@ -30,6 +30,7 @@ mod assemble;
 mod build;
 pub mod changes;
 pub mod control;
+pub mod controllers;
 pub mod dc;
 pub mod diode;
 pub mod guests;
@@ -83,6 +84,10 @@ pub struct CircuitDomain {
     scenario: String,
     /// The guest actors the start hook read (RFC 012 finding F-18).
     guests: guests::Guests,
+    /// The module actors' names and `config` tables as the scenario gives them, and its tick: what
+    /// the start hook reads a controller's period and phase from (rule 10).
+    module_configs: std::collections::BTreeMap<Identity, (String, DomainMap)>,
+    tick: florn_model::TickLength,
     /// What the plant does between events: held values, breakpoints, the sensors' due ticks, the
     /// pending advance, the solver from tick 0 (built by the start hook).
     live: Option<live::Live>,
@@ -97,6 +102,8 @@ impl CircuitDomain {
             solution: None,
             scenario: String::new(),
             guests: guests::Guests::default(),
+            module_configs: std::collections::BTreeMap::new(),
+            tick: florn_model::TickLength::Ns,
             live: None,
         }
     }
@@ -165,6 +172,9 @@ impl Domain for CircuitDomain {
     fn intervention_kinds(&self) -> Vec<&'static str> {
         vec!["source", "signal"]
     }
+    fn worlds(&self) -> Vec<florn_host::domain::DomainWorld> {
+        vec![controllers::world()]
+    }
 
     /// Every note of the reading, in one pass: the errors refuse the run and the warnings are
     /// kept (RFC 012 finding F-18).
@@ -232,6 +242,13 @@ impl Domain for CircuitDomain {
         self.solution = None;
         self.live = self.plant.as_ref().map(live::Live::new);
         self.guests = guests::Guests::default();
+        self.tick = scenario.time.tick;
+        self.module_configs = scenario
+            .actors
+            .iter()
+            .filter(|a| matches!(a.kind, florn_model::manifest::ActorKind::Module(_)))
+            .map(|a| (a.id, (a.name.clone(), a.config.clone())))
+            .collect();
     }
 
     /// A committed send on a `signal-out` port (RFC 012 rule 11): the value the port's signal holds
@@ -318,12 +335,14 @@ impl Domain for CircuitDomain {
     }
 
     /// The `advance` event (rule 8) and nothing else: no other event is the domain's own.
-    fn event(&mut self, event: &DomainEvent, _alive: bool) -> Vec<Action> {
-        if event.key.class != CLASS_ADVANCE {
+    fn event(&mut self, event: &DomainEvent, alive: bool) -> Vec<Action> {
+        let (Some(plant), Some(live)) = (self.plant.as_ref(), self.live.as_mut()) else {
             return Vec::new();
-        }
-        match (self.plant.as_ref(), self.live.as_mut()) {
-            (Some(plant), Some(live)) => live.on_advance(plant, event.key.tick),
+        };
+        match event.key.class {
+            CLASS_ADVANCE => live.on_advance(plant, event.key.tick),
+            // A controller's sample: a built-in sensor's is the Host's `builtin`.
+            CLASS_SAMPLE => live.controller_sample(plant, event.target, event.key.tick, alive),
             _ => Vec::new(),
         }
     }
@@ -355,6 +374,7 @@ impl Domain for CircuitDomain {
             .as_ref()
             .and_then(|p| p.devices.iter().find(|d| d.actor == actor))
             .is_some_and(|d| is_sensor_or_detector(d.kind))
+            || self.guests.controllers().contains(&actor)
     }
 
     fn numeric_fields(
@@ -363,11 +383,11 @@ impl Domain for CircuitDomain {
         site: Site,
         payload: &[u8],
     ) -> Option<florn_host::domain::Numeric> {
-        numeric::numeric_fields(self.plant.as_ref()?, actor, site, payload)
+        numeric::numeric_fields(self.plant.as_ref()?, &self.guests, actor, site, payload)
     }
 
     fn display_series(&self, actor: Identity, channel: u32, payload: &[u8]) -> Vec<(u8, f64)> {
-        series::display_series(self.plant.as_ref(), actor, channel, payload)
+        series::display_series(self.plant.as_ref(), &self.guests, actor, channel, payload)
     }
 
     fn inspect(&self, target: Identity) -> Option<Vec<InspectField>> {
@@ -403,10 +423,17 @@ impl Domain for CircuitDomain {
         let (Some(plant), Some(live)) = (self.plant.as_ref(), self.live.as_mut()) else {
             return Ok(Vec::new());
         };
+        // Each controller's period and phase (rule 10), refused when a period is missing or zero.
+        let samplers = controllers::samplers(
+            guests,
+            &self.guests.controllers(),
+            &self.module_configs,
+            self.tick,
+        )?;
         // The signals hold what the controllers' `init` set (rule 30, step 2).
         match dc::initial_solve(&live.plant_in_force(plant)) {
             Ok(solution) => {
-                let actions = live.start(plant, &solution);
+                let actions = live.start(plant, &solution, samplers);
                 self.solution = Some(solution);
                 Ok(actions)
             }
@@ -453,13 +480,29 @@ impl Domain for CircuitDomain {
         self.guests = guests::Guests::read(guests);
     }
 
+    /// `read-input` (rule 18): the value held on the signal the port is on, in the unit of that
+    /// signal, as it was when the activation began; `none` for a port on no signal.
     fn answer(
         &mut self,
-        _actor: Identity,
-        _function: &str,
-        _args: &[florn_abi::Val],
+        actor: Identity,
+        function: &str,
+        args: &[florn_abi::Val],
     ) -> Option<florn_abi::Val> {
-        None
+        match (function, args) {
+            ("read-input", [florn_abi::Val::U32(port)]) => {
+                let held = self
+                    .plant
+                    .as_ref()
+                    .zip(self.live.as_ref())
+                    .and_then(|(p, l)| {
+                        p.port_signal.get(&(actor, *port)).map(|s| l.held[*s].value)
+                    });
+                Some(florn_abi::Val::Option(
+                    held.map(|v| Box::new(florn_abi::Val::F64(math::canonical(v)))),
+                ))
+            }
+            _ => None,
+        }
     }
 
     /// A sensor's sample (rule 10): the state at `solved`, reported on `probe` and sent on its

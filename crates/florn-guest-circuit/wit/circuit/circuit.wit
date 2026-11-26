@@ -1,0 +1,31 @@
+package florn:circuit@0.1.0;
+
+/// What a controller reads and writes: its signal ports, as sampled values.
+interface signals {
+    use florn:core/types@0.1.0.{port-id};
+
+    /// The value held on the signal connected to this `signal-in` port, as it was when the
+    /// activation began, in the unit of that signal (rule 4). `none` when the port is on no
+    /// signal.
+    read-input: func(port: port-id) -> option<f64>;
+
+    /// Set the value of the signal connected to this `signal-out` port, in the unit of that
+    /// signal. Recorded as a send effect (rule 11), applied at commit, held until the next
+    /// `set-output` on the same port. A non-finite value is a contract violation.
+    set-output: func(port: port-id, value: f64);
+}
+
+/// The controller's events beyond the core's.
+interface controller-events {
+    use florn:core/types@0.1.0.{tick};
+
+    /// A sample instant: `index` counts the samples of this actor from 0.
+    on-sample: func(now: tick, index: u64);
+}
+
+/// A sampled controller: the core world with signals.
+world controller {
+    include florn:core/guest@0.1.0;
+    import signals;
+    export controller-events;
+}

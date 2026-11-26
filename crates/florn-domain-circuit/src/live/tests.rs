@@ -23,7 +23,7 @@ fn started(profile: &str) -> (crate::plant::Plant, Live, Vec<Action>) {
     let plant = deck(profile).plant();
     let mut live = Live::new(&plant);
     let solution = initial_solve(&plant).unwrap();
-    let actions = live.start(&plant, &solution);
+    let actions = live.start(&plant, &solution, Vec::new());
     (plant, live, actions)
 }
 
@@ -175,7 +175,7 @@ fn a_detector_wakes_the_advance_at_detect_interval_when_no_sensor_is_due_sooner(
         .plant();
     let mut live = Live::new(&plant);
     assert!(live.detector);
-    live.start(&plant, &initial_solve(&plant).unwrap());
+    live.start(&plant, &initial_solve(&plant).unwrap(), Vec::new());
     // The voltmeter is due at 900 us, the detector wakes the plant at 200 us.
     assert_eq!(live.advance_at, Some(200_000));
     live.on_advance(&plant, 200_000);
@@ -206,7 +206,7 @@ fn the_held_values_the_signals_have_at_the_start_are_the_inputs_in_force() {
     let sig = plant.port_signal[&(10, 0)];
     live.held[sig].value = 0.5;
     let solution = initial_solve(&live.plant_in_force(&plant)).unwrap();
-    live.start(&plant, &solution);
+    live.start(&plant, &solution, Vec::new());
     assert_eq!(live.transient.as_ref().unwrap().held(sig), 0.5);
     // The source is 1 V + 2 V × 0.5.
     assert!((solution.x[0] - 2.0).abs() < 1e-6, "{:?}", solution.x);

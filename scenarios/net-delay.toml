@@ -19,7 +19,7 @@ root = 1
 memory = "2MiB"
 
 [modules.net_echo]
-sha256 = "991ca1ce180e63b7e868a2747c8eb64e0431df77a8e768cbd139f519cbb4dfca"
+sha256 = "33910fd1d7eefb9fce6544d83e1029053cd2053870bb6e0361ac711d2d91a323"
 contract = "florn:network/router@0.1.0"
 
 [[actors]]

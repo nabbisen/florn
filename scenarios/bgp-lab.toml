@@ -19,7 +19,7 @@ root = 1
 memory = "2MiB"
 
 [modules.bgp]
-sha256 = "149229669aecbef02612d941318e56b93841410a51c7401d512df48279565052"
+sha256 = "01aebf97f0035406e8c6d8f3fa588afc0194105574b38b9a9a880695a660b28e"
 contract = "florn:network/router@0.1.0"
 
 [[actors]]
