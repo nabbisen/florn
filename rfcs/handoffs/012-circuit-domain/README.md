@@ -28,20 +28,18 @@ PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17),
 
 Milestone M2 is complete (PR-35 to PR-43). **M3 has begun:** PR-44 is done (`c1ffd81`, `01b2296`, 2026-11-25): `florn-domain-circuit` with validation, the passive built-ins and sources, the DC operating point (MNA, dense LU, Newton with the diode's limiter), the initial solve and its stages.
 
-PR-45 is done and verified (`ed668fe`, `27a9fc9`, `de03632`, 2026-11-26): transient integration under trapezoidal and Gear 2, adaptive and fixed, with its goldens. Its verifier found three faults in RFC 013's text, not in the code; rules 6, 7, 11 and 12 are amended (2026-11-26).
+PR-46 is done (`98a50b1`, `ad091e9`, 2026-11-27): the plant advances on demand, at sensor ticks and detector wake-ups. Inputs become breakpoints, bounded by `max-breakpoints`. Scheduled changes and interventions act, the solver's state is checkpointed, and rule 17's notifications are emitted.
 
-**Next: PR-46, the on-demand advance** (milestone M3). Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-46 first; it starts from RFC 012 rules 7 to 11, 14, 15 and 29 and RFC 013 rule 17. It also emits `circuit.step-rejected`, `circuit.step-minimum` and `circuit.non-convergence` from the advance, and makes F-7's limit clause (`run.limit-exceeded` with `pending-breakpoints`). Its release evidence includes rule 18's measurement of one factorisation at each Host maximum.
+**Next: PR-47, the controller** (milestone M3). Read its row in `task-breakdown-pr-plan.md`, section 3.7 of `implementation-handoff.md` and B-47 first; it starts from RFC 012 rules 16 to 18, 25 and 26. It brings the first guest of the circuit: the contract `florn:circuit`, `florn-guest-circuit`, the `pid` example and `motor-loop`. It registers the circuit domain in the command line and the shell, and runs the rows PR-46 could not (sample order, the controller running under a frozen signal, a `set-output` of the held value through a guest).
 
-**Its first commit, from PR-45's verifier** (RFC 013 as amended):
+**Its first commit, from PR-46's review** (RFC 012 as amended 2026-11-28):
 
-1. **A retried step is never longer than the attempt it replaces** (rule 12). If rule 13 would shape the retry back to the failed size (`d < 2 × min-step`), the retry takes its own size, and the remainder below `min-step` follows as the whole distance. The verifier's `livelock-*` cases (`step = 10000`, `min-step = 3000`, a limit 5,000 ticks away) must then run to the end. Its `atmin-gear2` case ended in non-convergence at tick 148,128, and the verifier suspected the same cause: show that it ends normally after the fix, or report why not.
-2. **No Gear 2 step with `ω` above 2, under either control** (rule 6). After a step that was the whole distance to a limit and shorter than the next, the next step is backward Euler, without a cut, with the order-1 test under `adaptive`. This also covers `fixed` with Gear 2 and a sensor period that is not a multiple of `step`.
-3. **The verifier's checks join the tests**, as PR-38's and PR-42's did. `circuit_transient_verifier.rs` (in the verifier's folder beside PR-45's review request) goes to `crates/florn-conformance/tests/` under a name that says what it checks.
-   - Its `v13` (ω ≤ 2) passes after point 2.
-   - The livelock cases change to the amended rule. Mark each assertion a ruling changed with `Ruling`.
-   - The case generator, `cases_gen.rs`, comes with it if the test needs it.
+1. **A `signal` frozen or released records no breakpoint and cuts no history** (rule 9): the value in force does not change.
+2. **`circuit.step-minimum` at most once per advance**, for the first step at the minimum (rule 28's row; RFC 013 rule 12); the count stays in the inspection.
+3. **The domain gets its guests at a restore too** (F-18, added). The same `guests` as the start hook, so that a guest's `control` series index survives a checkpoint, with a test that restores and reads it.
+4. **A unit test of `numeric_fields`**: a sensor's `probe` value and a `signal-out` send, with their unit and factor (RFC 013 rule 20 item 2), before PR-48 compares two Hosts with it.
 
-The limiter's flag in Newton's criteria cannot be reached by a circuit of built-ins (the verifier searched the diode's range). B-45 keeps the solver's own test, and B-49 checks it with a guest device.
+The intervention shapes and `non-convergence`'s naming of a net are now RFC 012's text, as PR-46 made them. On scratch copies, the handoff's rule now says: clean only if a scratch build ever used the repository's `target/`.
 
 ## What Phase 4 delivers
 
