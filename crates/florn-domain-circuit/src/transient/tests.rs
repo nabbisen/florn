@@ -574,3 +574,63 @@ fn too_many_rejections_by_the_error_test_name_the_owner_of_the_state_with_the_la
     let stuck = t.advance(10_000).stuck.unwrap();
     assert_eq!((stuck.owner, stuck.unknown.is_some()), (None, true));
 }
+
+#[test]
+fn a_retry_is_never_longer_than_the_attempt_it_replaces() {
+    // RFC 013 rule 12, amended: `step` 10,000, `min-step` 3,000, `ltol` 1e-5 and a limit 5,000
+    // ticks away. The retry of 5,000 shapes back to 5,000 by rule 13's remainder clause (the
+    // remainder 2,000 is below `min-step` and `d` is below twice it); it keeps its own size,
+    // 3,000, which fails at the minimum and is accepted and noted, and the 2,000 that remain are
+    // the whole distance. Before the amendment the run ended in non-convergence after 61 attempts.
+    let mut t =
+        rc("step = \"10000ns\"\nmin-step = \"3000ns\"\nmax-step = \"20000ns\"\nltol = 1e-5");
+    t.trace_steps();
+    assert!(t.advance(20_000).stuck.is_none());
+    let out = t.advance(25_000);
+    assert!(out.stuck.is_none(), "{out:?}");
+    assert!(out.report.attempts < 20, "{:?}", out.report);
+    assert!(!out.report.minimum.is_empty(), "{:?}", out.report);
+    let ticks: Vec<u64> = t
+        .take_trace()
+        .iter()
+        .filter(|r| r.start >= 20_000)
+        .map(|r| r.ticks)
+        .collect();
+    assert_eq!(ticks, [3_000, 2_000]);
+}
+
+#[test]
+fn no_gear2_step_has_omega_above_2_after_a_short_whole_distance_step() {
+    // RFC 013 rule 6, amended: with `min-step` 3,000 a step of 1,200 ticks that was the whole
+    // distance to a limit (no cut there) would be followed by a step of at least 3,000, omega 2.5.
+    // The next step is backward Euler instead, with the order-1 test, and Gear 2 follows when its
+    // own omega is at most 2. Under `fixed` the same.
+    for control in ["adaptive", "fixed"] {
+        let mut t = rc(&format!(
+            "method = \"gear2\"\ncontrol = \"{control}\"\nstep = \"10000ns\"\nmin-step = \"3000ns\"\nmax-step = \"20000ns\""
+        ));
+        assert!(t.advance(100_000).stuck.is_none());
+        t.trace_steps();
+        assert!(t.advance(101_200).stuck.is_none());
+        assert!(t.advance(200_000).stuck.is_none());
+        let trace = t.take_trace();
+        assert_eq!(trace[0].ticks, 1_200);
+        assert_eq!(
+            trace[1].formula,
+            Formula::BackwardEuler,
+            "{control}: {:?}",
+            trace[1]
+        );
+        assert_eq!(trace[1].ratio.is_some(), control == "adaptive");
+        assert!(trace[1].ticks > 2 * trace[0].ticks);
+        for pair in trace.windows(2) {
+            if pair[1].formula == Formula::Gear2 {
+                assert!(pair[1].ticks <= 2 * pair[0].ticks, "{control}: {pair:?}");
+            }
+        }
+        assert!(
+            trace.iter().any(|r| r.formula == Formula::Gear2),
+            "{control}: Gear 2 resumes"
+        );
+    }
+}

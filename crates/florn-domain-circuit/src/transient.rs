@@ -239,12 +239,24 @@ impl Transient {
     /// The formula of the next step and whether it is tested (rules 7 and 10): after a cut two
     /// backward Euler steps without a test, a third with the order-1 test, then the profile's
     /// method with the order-2 test; under `fixed` no test and the method from the third step.
-    fn formula(&self) -> (Formula, bool) {
+    fn base_formula(&self) -> (Formula, bool) {
         let fixed = self.plant.profile.control == Control::Fixed;
         match self.history.since_cut {
             0 | 1 => (Formula::BackwardEuler, false),
             2 if !fixed => (Formula::BackwardEuler, true),
             _ => (Formula::of(self.plant.profile.method), !fixed),
+        }
+    }
+
+    /// The formula of a step of `n` ticks: no Gear 2 step is taken with `ω` above 2, under either
+    /// control (rule 6, amended). After a step that was the whole distance to a limit and shorter
+    /// than this one, this one is backward Euler, with the order-1 test under `adaptive` and with
+    /// no cut; the step after it is Gear 2 again if its own `ω` is at most 2.
+    fn formula(&self, n: u64) -> (Formula, bool) {
+        let (formula, tested) = self.base_formula();
+        match (formula, self.history.gaps.last()) {
+            (Formula::Gear2, Some(last)) if n > 2 * last => (Formula::BackwardEuler, tested),
+            _ => (formula, tested),
         }
     }
 
@@ -408,19 +420,28 @@ impl Transient {
     /// One accepted step: attempts until one is accepted, or the solver gives up.
     fn step(&mut self, until: u64, report: &mut Advance) -> Result<(), Stuck> {
         let p = self.plant.profile.clone();
-        let (formula, tested) = self.formula();
         let d = until - self.now;
-        let mut tried = self.first_try(formula);
+        let mut tried = self.first_try(self.base_formula().0);
+        // The size of the attempt a retry replaces.
+        let mut failed: Option<u64> = None;
         let mut rejections = 0u32;
         let mut attempts = 0u32;
         loop {
             // A fixed step is `min(step, d)` and is never lengthened (rule 13, amended); every
             // other step is shaped by rule 13.
-            let n = if p.control == Control::Fixed {
+            let shaped = if p.control == Control::Fixed {
                 tried.min(d)
             } else {
                 shape(tried, d, p.min_step)
             };
+            // A retried step is never longer than the attempt it replaces (rule 12, amended): if
+            // rule 13's remainder clause would shape it back to the failed size, it keeps its own
+            // size and the remainder below `min-step` follows as the whole distance.
+            let n = match failed {
+                Some(f) if shaped >= f => tried.min(d),
+                _ => shaped,
+            };
+            let (formula, tested) = self.formula(n);
             let at_minimum = n <= p.min_step;
             attempts += 1;
             report.attempts += 1;
@@ -450,6 +471,7 @@ impl Transient {
                         return Err(stuck(Why::TooManyRejections));
                     }
                     tried = quarter(n, p.min_step);
+                    failed = Some(n);
                 }
                 Tried::Done(a) => {
                     report.iterations += a.iterations;
@@ -477,6 +499,7 @@ impl Transient {
                                 });
                             }
                             tried = shrink(n, r, order, p.min_step);
+                            failed = Some(n);
                             continue;
                         }
                     }
