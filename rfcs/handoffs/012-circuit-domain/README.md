@@ -28,14 +28,20 @@ PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17),
 
 Milestone M2 is complete (PR-35 to PR-43). **M3 has begun:** PR-44 is done (`c1ffd81`, `01b2296`, 2026-11-25): `florn-domain-circuit` with validation, the passive built-ins and sources, the DC operating point (MNA, dense LU, Newton with the diode's limiter), the initial solve and its stages.
 
-**PR-45 is in review** (`ed668fe` F-18 and three corrections; `27a9fc9` transient integration, 2026-11-26; CI run 45712399450 green). Its golden figures match the RFC's model: 0.2621 and 0.8284 `ltol·V`, and order ratios inside 3.89 to 3.97 and 4.01 to 4.11.
+PR-45 is done and verified (`ed668fe`, `27a9fc9`, `de03632`, 2026-11-26): transient integration under trapezoidal and Gear 2, adaptive and fixed, with its goldens. Its verifier found three faults in RFC 013's text, not in the code; rules 6, 7, 11 and 12 are amended (2026-11-26).
 
-**Next: one small commit, then PR-45's verifier.** I review this commit and the verifier's report together.
+**Next: PR-46, the on-demand advance** (milestone M3). Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-46 first; it starts from RFC 012 rules 7 to 11, 14, 15 and 29 and RFC 013 rule 17. It also emits `circuit.step-rejected`, `circuit.step-minimum` and `circuit.non-convergence` from the advance, and makes F-7's limit clause (`run.limit-exceeded` with `pending-breakpoints`). Its release evidence includes rule 18's measurement of one factorisation at each Host maximum.
 
-- **Under `fixed`, a step is `min(step, d)`** (RFC 013 rule 13, amended): rule 13's remainder clause does not apply, so a fixed step is never lengthened (today a limit at 1.5 steps gives one step of 1.5). The start-up steps follow the same rule as the method they precede. Add a test.
-- **`circuit.non-convergence` after `max-rejections`** names the owner of the state variable with the largest error ratio (RFC 012 rule 28's row, amended). Keep that in `Stuck` for PR-46 to emit.
+**Its first commit, from PR-45's verifier** (RFC 013 as amended):
 
-Then the owner starts a **new** verifier session on PR-45 (`ed668fe`, `27a9fc9` and this commit). The team waits for the review before PR-46.
+1. **A retried step is never longer than the attempt it replaces** (rule 12). If rule 13 would shape the retry back to the failed size (`d < 2 × min-step`), the retry takes its own size, and the remainder below `min-step` follows as the whole distance. The verifier's `livelock-*` cases (`step = 10000`, `min-step = 3000`, a limit 5,000 ticks away) must then run to the end. Its `atmin-gear2` case ended in non-convergence at tick 148,128, and the verifier suspected the same cause: show that it ends normally after the fix, or report why not.
+2. **No Gear 2 step with `ω` above 2, under either control** (rule 6). After a step that was the whole distance to a limit and shorter than the next, the next step is backward Euler, without a cut, with the order-1 test under `adaptive`. This also covers `fixed` with Gear 2 and a sensor period that is not a multiple of `step`.
+3. **The verifier's checks join the tests**, as PR-38's and PR-42's did. `circuit_transient_verifier.rs` (in the verifier's folder beside PR-45's review request) goes to `crates/florn-conformance/tests/` under a name that says what it checks.
+   - Its `v13` (ω ≤ 2) passes after point 2.
+   - The livelock cases change to the amended rule. Mark each assertion a ruling changed with `Ruling`.
+   - The case generator, `cases_gen.rs`, comes with it if the test needs it.
+
+The limiter's flag in Newton's criteria cannot be reached by a circuit of built-ins (the verifier searched the diode's range). B-45 keeps the solver's own test, and B-49 checks it with a guest device.
 
 ## What Phase 4 delivers
 
