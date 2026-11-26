@@ -433,6 +433,11 @@ fn a_frozen_signal_ignores_its_producer_and_on_release_keeps_the_old_value_until
     until(&mut run, 2_500_050);
     let (frozen_value, frozen) = held_of(&run, signal);
     assert_eq!(frozen, "yes");
+    assert_eq!(
+        world_field(&run, "pending-breakpoints"),
+        0.0,
+        "a freeze records no breakpoint"
+    );
     assert!(
         (frozen_value - analytic(1.4e-3, f64::INFINITY)).abs() <= 4e-3,
         "the 1.4 ms sample, the last before 1.5 ms: {frozen_value}"

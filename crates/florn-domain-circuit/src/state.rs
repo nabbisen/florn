@@ -15,7 +15,7 @@ use crate::plant::Plant;
 use crate::transient::Transient;
 
 /// The version of this encoding.
-pub const VERSION: u8 = 1;
+pub const VERSION: u8 = 2;
 
 fn stage_code(s: Stage) -> u8 {
     match s {
@@ -44,10 +44,6 @@ fn put_input(e: &mut Encoder, i: Input) {
             e.u8(1);
             e.u32(s as u32);
         }
-        Input::Frozen(s) => {
-            e.u8(2);
-            e.u32(s as u32);
-        }
     }
 }
 
@@ -56,7 +52,6 @@ fn get_input(d: &mut Decoder<'_>) -> Option<Input> {
     Some(match kind {
         0 => Input::Source(n),
         1 => Input::Signal(n as usize),
-        2 => Input::Frozen(n as usize),
         _ => return None,
     })
 }
@@ -94,6 +89,7 @@ pub fn encode(live: &Live, solution: Option<&Solution>) -> Vec<u8> {
     e.u32(live.summary.iterations);
     e.u32(live.summary.rejected);
     e.u64(live.summary.rejections);
+    e.u32(live.summary.at_minimum);
     e.finish()
 }
 
@@ -152,6 +148,7 @@ pub fn decode(plant: &Plant, bytes: &[u8]) -> Option<(Live, Option<Solution>)> {
         iterations: d.u32()?,
         rejected: d.u32()?,
         rejections: d.u64()?,
+        at_minimum: d.u32()?,
     };
     d.done().then_some((live, solution))
 }

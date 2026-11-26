@@ -126,15 +126,17 @@ fn a_frozen_signal_ignores_its_producers_output_and_a_repeat_changes_nothing() {
     let sig = plant.port_signal[&(10, 0)];
     live.output(&plant, 5, 10, 0, 2.0);
     assert_eq!(live.held[sig].value, 2.0);
-    live.freeze(&plant, 5, sig, true, 10);
+    live.freeze(sig, true);
     live.output(&plant, 6, 10, 0, 3.0);
     assert_eq!(
         live.held[sig].value, 2.0,
         "frozen: the producer's output is ignored"
     );
-    live.freeze(&plant, 7, sig, false, 10);
+    live.freeze(sig, false);
     live.output(&plant, 8, 10, 0, 3.0);
     assert_eq!(live.held[sig].value, 3.0);
+    // Freezing and releasing recorded no breakpoint (RFC 012 rule 9, amended).
+    assert!(live.pending.is_empty() || live.transient.is_none());
 }
 
 #[test]
@@ -241,4 +243,19 @@ fn a_committed_send_that_is_not_one_finite_f64_changes_nothing() {
         1,
         "a breakpoint where it drives"
     );
+}
+
+#[test]
+fn a_step_at_the_minimum_is_notified_once_per_advance_and_counted_in_the_summary() {
+    // RFC 013 rule 12 and rule 28's row: `min-step` equal to `step` and a tight `ltol` put many
+    // steps of one advance at the minimum; the log hears of the first and the count is kept.
+    let (plant, mut live, _) = started("step = \"1000ns\"\nmin-step = \"1000ns\"\nltol = 1e-9");
+    live.on_advance(&plant, 0);
+    let actions = live.on_advance(&plant, 30_000);
+    let said = actions
+        .iter()
+        .filter(|a| matches!(a, Action::Notify(n) if n.code == "circuit.step-minimum"))
+        .count();
+    assert_eq!(said, 1);
+    assert!(live.summary.at_minimum > 1, "{:?}", live.summary);
 }

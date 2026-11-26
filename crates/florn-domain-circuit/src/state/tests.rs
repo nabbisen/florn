@@ -29,7 +29,7 @@ fn the_state_reads_back_to_the_bytes_it_was_written_as() {
         live.on_advance(&plant, t);
     }
     live.record(&plant, 300_000, Input::Source(1), 0.25, 1);
-    live.freeze(&plant, 310_000, 0, true, 4);
+    live.freeze(0, true);
     let bytes = encode(&live, Some(&solution));
     assert_eq!(bytes[0], VERSION);
     let (back, sol) = decode(&plant, &bytes).expect("it fits the plant");

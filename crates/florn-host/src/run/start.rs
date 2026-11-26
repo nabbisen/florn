@@ -787,17 +787,29 @@ impl<E: Engine> Run<E> {
     /// lent out and given the call-in handle, any other is called in place with a handle that
     /// refuses everything. The actions it returns are applied at tick 0 as the hook's own. A
     /// refusal is returned and nothing after it runs.
-    pub(super) fn start_domains(&mut self) -> Result<(), Box<Notification>> {
-        // What every domain may read of the guests, read-only (RFC 012 finding F-18).
-        let guests: Vec<Guest> = self
-            .actors
+    /// Every guest actor in ascending identity, as the domains read them (RFC 012 finding F-18).
+    pub(super) fn guest_list(&self) -> Vec<Guest> {
+        self.actors
             .iter()
             .map(|(id, slot)| Guest {
                 actor: *id,
                 module: slot.module_name.clone(),
                 admitted: slot.admitted.clone(),
             })
-            .collect();
+            .collect()
+    }
+
+    /// Tell every domain the guests after its state was restored from a checkpoint.
+    pub(super) fn restored_domains(&mut self) {
+        let guests = self.guest_list();
+        for d in self.world.domains_mut() {
+            d.restored(&guests);
+        }
+    }
+
+    pub(super) fn start_domains(&mut self) -> Result<(), Box<Notification>> {
+        // What every domain may read of the guests, read-only (RFC 012 finding F-18).
+        let guests = self.guest_list();
         for i in 0..self.world.domains().len() {
             if self.ended.is_some() {
                 break;

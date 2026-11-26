@@ -309,7 +309,7 @@ impl Domain for CircuitDomain {
             }
             "signal" => {
                 if let Ok((signal, frozen)) = changes::signal(plant, target, content) {
-                    live.freeze(plant, now.tick, signal, frozen, target);
+                    live.freeze(signal, frozen);
                 }
             }
             _ => {}
@@ -446,6 +446,11 @@ impl Domain for CircuitDomain {
             }
             None => false,
         }
+    }
+
+    /// The guests after a restore, as the start hook has them (RFC 012 finding F-18).
+    fn restored(&mut self, guests: &[Guest]) {
+        self.guests = guests::Guests::read(guests);
     }
 
     fn answer(

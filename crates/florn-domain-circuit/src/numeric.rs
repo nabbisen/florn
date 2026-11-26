@@ -55,3 +55,6 @@ pub fn numeric_fields(
         exact: Vec::new(),
     })
 }
+
+#[cfg(test)]
+mod tests;

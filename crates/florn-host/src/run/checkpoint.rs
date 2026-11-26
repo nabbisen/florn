@@ -500,6 +500,7 @@ impl<E: Engine> Run<E> {
         if !self.world.restore(&checkpoint.domains) {
             return Err(HostError::Malformed("domain state"));
         }
+        self.restored_domains();
         self.world.restore_origin_seqs(&checkpoint.origins);
         self.world.dead.clear();
         for (id, a) in &checkpoint.kernel.actors {
@@ -667,6 +668,7 @@ impl<E: Engine> Run<E> {
         if !run.world.restore(&checkpoint.domains) {
             return Err(HostError::Malformed("domain state"));
         }
+        run.restored_domains();
         run.world.restore_origin_seqs(&checkpoint.origins);
         for (id, state) in &checkpoint.actors {
             run.restore_actor(*id, state)?;

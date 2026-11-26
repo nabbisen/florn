@@ -496,6 +496,10 @@ pub trait Domain {
     ) -> Result<Vec<Action>, Box<Notification>> {
         Ok(Vec::new())
     }
+    /// The guests at a restore (RFC 012 finding F-18, extended): a run continuing from a checkpoint
+    /// does not run the start hook, so the Host gives the domain the same `guests` after its state
+    /// is restored, that what the hook kept survives. The default keeps nothing.
+    fn restored(&mut self, _guests: &[Guest]) {}
     /// An event of its classes that carried a message to an actor that faulted meanwhile:
     /// the frame is dropped at delivery (RFC 008 rule 5).
     fn undelivered(&mut self, _event: &DomainEvent) -> Vec<Action> {
@@ -1279,6 +1283,9 @@ impl Domain for Lent {
     }
     fn limit_reached(&mut self) -> Option<Limit> {
         self.reached("limit_reached")
+    }
+    fn restored(&mut self, _: &[Guest]) {
+        self.reached("restored")
     }
     fn tolerance(&self) -> Option<Tolerance> {
         self.reached("tolerance")

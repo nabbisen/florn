@@ -47,6 +47,9 @@ pub struct Summary {
     pub iterations: u32,
     pub rejected: u32,
     pub rejections: u64,
+    /// The steps the error test failed at the minimum, accepted anyway (the notification is once
+    /// per advance, RFC 013 rule 12; this is the count).
+    pub at_minimum: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -214,6 +217,7 @@ impl Live {
             iterations: report.iterations,
             rejected: report.rejected,
             rejections: self.summary.rejections + u64::from(report.rejected),
+            at_minimum: report.minimum.len() as u32,
         };
         if report.rejected > 0 {
             let cause = match report.first_cause {
@@ -231,7 +235,8 @@ impl Live {
                 ],
             )));
         }
-        for m in &report.minimum {
+        // Once per advance, for the first step at the minimum (rule 28's row).
+        for m in report.minimum.iter().take(1) {
             actions.push(Action::Notify(note(
                 Code::CircuitStepMinimum,
                 Scope::run(),
@@ -300,7 +305,6 @@ impl Live {
             Input::Source(a) => self.transient.as_ref().and_then(|t| t.source_value(a)),
             // The plant's own view: the held value is updated before the breakpoint is recorded.
             Input::Signal(s) => self.transient.as_ref().map(|t| t.held(s)),
-            Input::Frozen(s) => Some(f64::from(u8::from(self.held[s].frozen))),
         };
         let holds = self.pending.last_value(input).or(in_force);
         if holds.is_some_and(|h| h.to_bits() == value.to_bits()) {
@@ -353,26 +357,10 @@ impl Live {
         }
     }
 
-    /// Freeze or release a signal (rule 15); the plant sees it as an input change (rule 9).
-    pub fn freeze(
-        &mut self,
-        plant: &Plant,
-        tick: u64,
-        signal: usize,
-        frozen: bool,
-        origin: Identity,
-    ) {
-        if self.held[signal].frozen == frozen {
-            return;
-        }
+    /// Freeze or release a signal (rule 15). The value in force does not change, so no breakpoint
+    /// is recorded and no history is cut (rule 9).
+    pub fn freeze(&mut self, signal: usize, frozen: bool) {
         self.held[signal].frozen = frozen;
-        self.record(
-            plant,
-            tick,
-            Input::Frozen(signal),
-            f64::from(u8::from(frozen)),
-            origin,
-        );
     }
 }
 

@@ -10,14 +10,13 @@ use florn_kernel::Identity;
 
 use crate::transient::Transient;
 
-/// What changes: a built-in's settable value (a source's `v` or `i`, a comparator's `threshold`),
-/// a signal's held value (the plant reads it through the built-ins it drives), or a signal's
-/// frozen flag (1 frozen, 0 released).
+/// What changes: a built-in's settable value (a source's `v` or `i`, a comparator's `threshold`)
+/// or a signal's held value (the plant reads it through the built-ins it drives). A signal frozen
+/// or released changes no value in force and so records no breakpoint (RFC 012 rule 9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Input {
     Source(Identity),
     Signal(usize),
-    Frozen(usize),
 }
 
 /// A pending breakpoint: the tick it acts from, the input, its value, and the actor whose output
@@ -106,7 +105,6 @@ impl Pending {
                     plant.set(actor, b.value);
                 }
                 Input::Signal(s) => plant.hold(s, b.value),
-                Input::Frozen(_) => {}
             }
             plant.cut();
         }

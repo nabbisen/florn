@@ -162,6 +162,7 @@ pub fn inspect(
             out.push(real("iterations", f64::from(l.summary.iterations), ""));
             out.push(real("rejected", f64::from(l.summary.rejected), ""));
             out.push(real("rejections", l.summary.rejections as f64, ""));
+            out.push(real("at-minimum", f64::from(l.summary.at_minimum), ""));
             out.push(real("pending-breakpoints", l.pending.len() as f64, ""));
             if let Some(at) = l.advance_at {
                 out.push(real("next-advance", at as f64, "ticks"));
