@@ -30,12 +30,22 @@ fn the_state_reads_back_to_the_bytes_it_was_written_as() {
     }
     live.record(&plant, 300_000, Input::Source(1), 0.25, 1);
     live.freeze(0, true);
+    live.samplers = vec![crate::controllers::Sampler {
+        actor: 9,
+        period: 1_000,
+        next_due: 205_000,
+        index: 205,
+    }];
     let bytes = encode(&live, Some(&solution));
     assert_eq!(bytes[0], VERSION);
     let (back, sol) = decode(&plant, &bytes).expect("it fits the plant");
     assert_eq!(encode(&back, sol.as_ref()), bytes);
     assert_eq!(back.pending.len(), live.pending.len());
     assert_eq!(back.last_advance, 200_000);
+    assert_eq!(
+        back.samplers, live.samplers,
+        "each controller's period, next sample and index"
+    );
     assert_eq!(
         back.transient.as_ref().unwrap().x(),
         live.transient.as_ref().unwrap().x()

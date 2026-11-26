@@ -83,6 +83,11 @@ fields = [{ name = "flag", type = "bool" }, { name = "again", type = "f64" }]
 channel = 3
 name = "note"
 fields = [{ name = "text", type = "text" }, { name = "late", type = "f64" }]
+
+[[telemetry]]
+channel = 4
+name = "stats"
+fields = [{ name = "mean", type = "f64" }]
 "#;
 
 #[test]
@@ -138,7 +143,35 @@ fn a_guests_report_is_drawn_for_its_control_channels_only_and_with_the_running_i
     assert_eq!(display_series(None, &g, 7, 2, &second), [(3, 9.5)]);
     // A channel that is not named `control` is not drawn; nor is an actor that is no guest here.
     assert!(display_series(None, &g, 7, 3, &[0; 12]).is_empty());
+    assert!(
+        display_series(None, &g, 7, 4, &1.0f64.to_le_bytes()).is_empty(),
+        "a channel not named control, whatever its fields"
+    );
     assert!(display_series(None, &g, 8, 1, &first).is_empty());
+}
+
+#[test]
+fn a_prefixed_unit_has_its_factor_to_si() {
+    use crate::numeric::numeric_fields;
+    use florn_host::domain::Site;
+    let text = TWO_CONTROLS.replace("input = \"rad/s\"", "input = \"mV\"");
+    let g = read(&[(7, &text)]);
+    let plant = crate::tests::Deck::new()
+        .builtin(1, "v1", "voltage-source", "v = \"1V\"")
+        .builtin(2, "r1", "resistor", "r = \"1kohm\"")
+        .builtin(3, "vm", "voltmeter", "period = \"1ms\"")
+        .net("a", &["v1.p", "r1.a", "vm.p"])
+        .ground("g", &["v1.n", "r1.b", "vm.n"])
+        .plant();
+    let mut first = Vec::new();
+    for v in [1.5f64, 2.5, 3.5] {
+        first.extend_from_slice(&v.to_le_bytes());
+    }
+    let n = numeric_fields(&plant, &g, 7, Site::Report { channel: 1 }, &first).unwrap();
+    assert_eq!(
+        (n.fields[0].unit.as_str(), n.fields[0].factor),
+        ("mV", 1e-3)
+    );
 }
 
 #[test]

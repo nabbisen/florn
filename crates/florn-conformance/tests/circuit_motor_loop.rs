@@ -394,3 +394,48 @@ fn a_replay_of_the_loop_begins_as_the_run_did_and_matches() {
     ));
     assert_eq!(replay.chain_hex(), run.chain_hex());
 }
+
+#[test]
+fn the_domain_answers_read_input_from_the_held_values_and_knows_its_controllers() {
+    // The domain as the Host composes it, given the guests the start hook gets: `read-input` is
+    // the held value in the unit of the signal (RFC 012 rule 18), none for a port on no signal;
+    // the controller is of a continuous class (RFC 013 rule 20, item 4).
+    use florn_abi::Val;
+    use florn_admission::ClassLimits;
+    use florn_host::compound::NoCalls;
+    use florn_host::domain::{Domain, Guest};
+    let s = motor_loop();
+    let bytes = s.modules().remove("pid").unwrap();
+    let admitted = host::admission()
+        .admit_under("pid", &bytes, &ClassLimits::defaults(), 1)
+        .expect("pid is admitted");
+    let guest = Guest {
+        actor: 5,
+        module: "pid".into(),
+        admitted,
+    };
+    let mut d = florn_domain_circuit::CircuitDomain::new(florn_domain_circuit::Limits::native());
+    d.compose(&s.manifest(), 1);
+    d.start_calling(&mut NoCalls, &[guest])
+        .expect("the plant starts");
+    let read = |d: &mut florn_domain_circuit::CircuitDomain, port| {
+        d.answer(5, "read-input", &[Val::U32(port)])
+    };
+    // Port 1 is `setpoint`, on the signal of the 100 rad/s constant; port 0 `measurement`, on the
+    // motor's speed (0 at rest); port 99 is on no signal.
+    assert_eq!(
+        read(&mut d, 1),
+        Some(Val::Option(Some(Box::new(Val::F64(100.0)))))
+    );
+    assert_eq!(
+        read(&mut d, 0),
+        Some(Val::Option(Some(Box::new(Val::F64(0.0)))))
+    );
+    assert_eq!(read(&mut d, 99), Some(Val::Option(None)));
+    assert!(
+        d.continuous_actor(5),
+        "a controller is of a continuous class"
+    );
+    assert!(d.continuous_actor(2), "so is a sensor");
+    assert!(!d.continuous_actor(1), "a source is not");
+}

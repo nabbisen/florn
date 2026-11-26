@@ -259,3 +259,76 @@ fn a_step_at_the_minimum_is_notified_once_per_advance_and_counted_in_the_summary
     assert_eq!(said, 1);
     assert!(live.summary.at_minimum > 1, "{:?}", live.summary);
 }
+
+fn with_controller(period: u64, phase: u64) -> (crate::plant::Plant, Live, Vec<Action>) {
+    let plant = deck("").plant();
+    let mut live = Live::new(&plant);
+    let sampler = crate::controllers::Sampler {
+        actor: 9,
+        period,
+        next_due: phase,
+        index: 0,
+    };
+    let solution = initial_solve(&plant).unwrap();
+    let actions = live.start(&plant, &solution, vec![sampler]);
+    (plant, live, actions)
+}
+
+fn samples_of(actions: &[Action], actor: u32) -> Vec<u64> {
+    actions
+        .iter()
+        .filter_map(|a| match a {
+            Action::Schedule {
+                class,
+                target,
+                delay,
+                ..
+            } if *class == CLASS_SAMPLE && *target == actor => Some(*delay),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_controllers_first_sample_is_at_its_phase_unless_that_is_the_end() {
+    // RFC 012 rule 10: the start hook schedules it at its phase; none at or after the end.
+    let (plant, _, actions) = with_controller(1_000, 40);
+    assert_eq!(samples_of(&actions, 9), [40]);
+    let (_, _, actions) = with_controller(1_000, plant.end - 1);
+    assert_eq!(samples_of(&actions, 9), [plant.end - 1]);
+    let (_, _, actions) = with_controller(1_000, plant.end);
+    assert!(samples_of(&actions, 9).is_empty(), "the end is exclusive");
+}
+
+#[test]
+fn a_controllers_sample_calls_on_sample_and_schedules_the_next_a_period_later() {
+    let (plant, mut live, _) = with_controller(1_000, 0);
+    let first = live.controller_sample(&plant, 9, 0, true);
+    assert!(matches!(
+        &first[0],
+        Action::Call { actor: 9, export, values }
+            if export == crate::controllers::ON_SAMPLE
+                && values == &[florn_abi::Val::U64(0), florn_abi::Val::U64(0)]
+    ));
+    assert_eq!(samples_of(&first, 9), [1_000]);
+    let second = live.controller_sample(&plant, 9, 1_000, true);
+    assert!(matches!(
+        &second[0],
+        Action::Call { values, .. } if values == &[florn_abi::Val::U64(1_000), florn_abi::Val::U64(1)]
+    ));
+    // The last sample before the end schedules none after it, not even one at the end.
+    let last = live.controller_sample(&plant, 9, plant.end - 1_000, true);
+    assert!(samples_of(&last, 9).is_empty(), "{last:?}");
+}
+
+#[test]
+fn a_faulted_controller_is_dropped_and_not_sampled_again() {
+    // RFC 012 rule 17: nothing is called and nothing scheduled, and the index does not move.
+    let (plant, mut live, _) = with_controller(1_000, 0);
+    assert!(live.controller_sample(&plant, 9, 0, false).is_empty());
+    assert_eq!(live.samplers[0].index, 0);
+    assert!(
+        live.controller_sample(&plant, 77, 0, true).is_empty(),
+        "not a controller"
+    );
+}
