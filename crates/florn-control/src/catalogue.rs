@@ -1489,7 +1489,14 @@ pub const ENUMERATIONS: &[(&str, &[&str])] = &[
             "actor-fault",
         ],
     ),
-    ("run-limit", &["microsteps-per-tick", "events-per-instant"]),
+    (
+        "run-limit",
+        &[
+            "microsteps-per-tick",
+            "events-per-instant",
+            "pending-breakpoints",
+        ],
+    ),
     ("rejection-cause", &["error", "convergence"]),
     ("unknown-kind", &["voltage", "current", "state"]),
     ("display-path", &["ring", "messages"]),

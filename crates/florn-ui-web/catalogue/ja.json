@@ -183,6 +183,7 @@
  "enum.end-reason.actor-fault": "アクターがフォールトし、ポリシーにより実行を止めた",
  "enum.run-limit.microsteps-per-tick": "ティックあたりのマイクロステップ数",
  "enum.run-limit.events-per-instant": "時点あたりのイベント数",
+ "enum.run-limit.pending-breakpoints": "保留中のブレークポイント",
  "enum.rejection-cause.error": "誤差の見積もり",
  "enum.rejection-cause.convergence": "収束",
  "enum.unknown-kind.voltage": "電圧",

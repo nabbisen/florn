@@ -119,3 +119,32 @@ fn a_tie_in_a_column_keeps_the_lowest_row_and_the_bits_show_it() {
         ]
     );
 }
+
+/// RFC 013 rule 18: the time of one factorisation at each Host maximum and the memory of the
+/// matrix, for the figures of a release. Run in release mode:
+/// `cargo test -p florn-domain-circuit --release -- --ignored --nocapture lu::tests::measure`.
+#[test]
+#[ignore = "a measurement, not a check"]
+fn measure_one_factorisation_at_each_host_maximum() {
+    for n in [64usize, 256, 512, 1024] {
+        let mut m = Matrix::new(n);
+        let mut seed = 12345u64;
+        for i in 0..n {
+            for j in 0..n {
+                seed = seed
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                let r = ((seed >> 33) as f64) / f64::from(1u32 << 31) - 0.5;
+                m.set(i, j, if i == j { r + 2.0 * n as f64 } else { r });
+            }
+        }
+        let mut b = vec![1.0; n];
+        let start = std::time::Instant::now();
+        m.solve(&mut b).unwrap();
+        let ms = start.elapsed().as_secs_f64() * 1e3;
+        eprintln!(
+            "MEASURE n = {n}: {ms:.2} ms, matrix {} KiB",
+            8 * n * n / 1024
+        );
+    }
+}

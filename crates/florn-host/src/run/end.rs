@@ -7,7 +7,7 @@ use florn_admission::{ADMISSION_VERSION, Admission};
 use florn_control::{Ends, Notification, Scope, Severity, Value};
 use florn_engine::Engine;
 use florn_kernel::trace::Comparison;
-use florn_kernel::{Advance, Instant};
+use florn_kernel::{Advance, Identity, Instant};
 use florn_model::Manifest;
 use florn_platform::Platform;
 
@@ -53,25 +53,7 @@ impl<E: Engine> Run<E> {
                             origins,
                         } => ("events-per-instant", limit, origins, instant),
                     };
-                    let n = Notification::new(
-                        "run.limit-exceeded",
-                        Severity::Error,
-                        Scope::run(),
-                        Ends::Run,
-                    )
-                    .with("what", Value::Enum(what.into()))
-                    .with("limit", Value::Count(limit))
-                    .with(
-                        "origins",
-                        Value::Text(
-                            origins
-                                .iter()
-                                .map(|o| o.to_string())
-                                .collect::<Vec<_>>()
-                                .join(","),
-                        ),
-                    )
-                    .at(at(instant));
+                    let n = limit_exceeded(what, limit, &origins, instant);
                     self.notify(n);
                     self.end(EndReason::HostFault);
                 } else if !self.kernel.has_next() {
@@ -107,13 +89,25 @@ impl<E: Engine> Run<E> {
     /// Read the domains' end requests, in the scenario's order (RFC 012 finding F-7): what a
     /// `deliver` found while a commit was made, which no action carried. The first ends the run.
     pub(super) fn poll_end_requests(&mut self) {
+        // A limit of a domain's own (RFC 012 rule 9): `run.limit-exceeded`, then `host-fault`.
+        let mut limit = None;
         let mut asked = None;
         for d in self.world.domains_mut() {
+            if let Some(l) = d.limit_reached() {
+                limit.get_or_insert(l);
+            }
             if let Some(r) = d.end_requested() {
                 asked.get_or_insert(r);
             }
         }
-        if let Some(r) = asked {
+        if self.ended.is_some() {
+            return;
+        }
+        if let Some(l) = limit {
+            let instant = self.kernel.now();
+            self.notify(limit_exceeded(l.what, l.limit, &l.origins, instant));
+            self.end(EndReason::HostFault);
+        } else if let Some(r) = asked {
             self.end(r.reason());
         }
     }
@@ -266,4 +260,27 @@ impl<E: Engine> Run<E> {
             created_ms: self.created_ms,
         }
     }
+}
+
+/// The notification of a limit the run met (RFC 007: `run.limit-exceeded`).
+fn limit_exceeded(what: &str, limit: u64, origins: &[Identity], instant: Instant) -> Notification {
+    Notification::new(
+        "run.limit-exceeded",
+        Severity::Error,
+        Scope::run(),
+        Ends::Run,
+    )
+    .with("what", Value::Enum(what.into()))
+    .with("limit", Value::Count(limit))
+    .with(
+        "origins",
+        Value::Text(
+            origins
+                .iter()
+                .map(|o| o.to_string())
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+    )
+    .at(at(instant))
 }

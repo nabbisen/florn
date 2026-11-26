@@ -38,6 +38,8 @@ pub struct Deck {
     connections: Vec<(String, String, Vec<String>, String)>,
     /// The guest modules of the scenario, by name: what `Run::new` is given.
     modules: BTreeMap<String, Vec<u8>>,
+    /// The scheduled changes: the time text, the target text and the payload lines.
+    changes: Vec<(String, String, String)>,
 }
 
 impl Deck {
@@ -49,7 +51,16 @@ impl Deck {
             actors: String::new(),
             connections: Vec::new(),
             modules: BTreeMap::new(),
+            changes: Vec::new(),
         }
+    }
+
+    /// A scheduled change (RFC 004 rule 20) at `at` (a time text), addressed to `target` (an actor
+    /// or connection name, or `world:circuit`), with the payload as TOML lines.
+    pub fn change(mut self, at: &str, target: &str, payload: &str) -> Self {
+        self.changes
+            .push((at.to_string(), target.to_string(), payload.to_string()));
+        self
     }
 
     /// A guest actor of the module `module` (its bytes given) with the ports given: a name and a
@@ -186,6 +197,11 @@ impl Deck {
                 "\n[[connections]]\nid = {}\nname = \"{name}\"\ntype = \"{ty}\"\nports = [{}]\n{attrs}",
                 Self::connection_id(i),
                 ports.join(", ")
+            ));
+        }
+        for (at, target, payload) in &self.changes {
+            text.push_str(&format!(
+                "\n[[changes]]\nat = \"{at}\"\ntarget = \"{target}\"\n[changes.payload]\n{payload}\n"
             ));
         }
         text

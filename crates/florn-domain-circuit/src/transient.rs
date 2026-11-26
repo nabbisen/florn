@@ -231,6 +231,27 @@ impl Transient {
         true
     }
 
+    /// The value a settable source or threshold has in the plant now (the inputs in force).
+    pub fn source_value(&self, actor: u32) -> Option<f64> {
+        match &self
+            .plant
+            .devices
+            .iter()
+            .find(|d| d.actor == actor)?
+            .element
+        {
+            Element::VoltageSource { v, .. } => Some(*v),
+            Element::CurrentSource { i, .. } => Some(*i),
+            Element::Comparator { threshold, .. } => Some(*threshold),
+            _ => None,
+        }
+    }
+
+    /// The held value of a signal as the plant reads it now (the inputs in force).
+    pub fn held(&self, signal: usize) -> f64 {
+        self.plant.signals[signal].held
+    }
+
     /// Set the held value of a signal, in its own unit (a controller's output, RFC 012 rule 11).
     pub fn hold(&mut self, signal: usize, value: f64) {
         self.plant.signals[signal].held = value;
@@ -563,6 +584,8 @@ impl Transient {
         report.steps += 1;
     }
 }
+
+mod snapshot;
 
 #[cfg(test)]
 mod tests;

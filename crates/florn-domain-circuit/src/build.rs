@@ -64,6 +64,11 @@ impl Wiring<'_> {
         }
     }
 
+    /// The identity of an actor's port by name.
+    fn port_id(&self, actor: &Actor, port: &str) -> Option<u32> {
+        actor.ports.iter().find(|p| p.name == port).map(|p| p.id)
+    }
+
     fn signal(&self, actor: &Actor, port: &str) -> Option<usize> {
         let p = actor.ports.iter().find(|p| p.name == port)?;
         self.signal_of_port.get(&(actor.id, p.id)).copied()
@@ -207,6 +212,7 @@ pub(crate) fn plant(
                 p: pin("p"),
                 n: pin("n"),
                 out: w.signal(a, "v"),
+                out_port: w.port_id(a, "v"),
                 period: p.ticks("period"),
                 phase: p.ticks("phase"),
             },
@@ -218,6 +224,7 @@ pub(crate) fn plant(
                     a: x,
                     b: y,
                     out: w.signal(a, "i"),
+                    out_port: w.port_id(a, "i"),
                     period: p.ticks("period"),
                     phase: p.ticks("phase"),
                     branch: branch - 1,
@@ -251,6 +258,7 @@ pub(crate) fn plant(
                     b: p.real("b"),
                     load: w.signal(a, "load"),
                     out: w.signal(a, "speed"),
+                    out_port: w.port_id(a, "speed"),
                     period: p.ticks("period"),
                     phase: p.ticks("phase"),
                     branch: branch - 1,
@@ -301,6 +309,9 @@ pub(crate) fn plant(
         devices,
         unknowns: unknown_list,
         transient_unknowns: layout.transient,
+        port_signal: w.signal_of_port.clone(),
+        end: w.scenario.time.end,
+        world: w.scenario.world_identity(crate::NAME).unwrap_or(0),
     };
     Built { plant, floating }
 }

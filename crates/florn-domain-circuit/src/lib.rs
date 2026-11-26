@@ -28,21 +28,27 @@ use florn_model::manifest::{DomainMap, DomainValue};
 pub mod analyse;
 mod assemble;
 mod build;
+pub mod changes;
 pub mod control;
 pub mod dc;
 pub mod diode;
 pub mod guests;
+pub mod inputs;
 mod inspect;
 pub mod integrate;
 pub mod kinds;
+pub mod live;
 pub mod lu;
 pub mod math;
 pub mod newton;
+mod numeric;
 mod params;
 pub mod plant;
 pub mod profile;
 mod read;
+mod sample;
 mod series;
+pub mod state;
 pub mod transient;
 pub mod units;
 
@@ -77,9 +83,9 @@ pub struct CircuitDomain {
     scenario: String,
     /// The guest actors the start hook read (RFC 012 finding F-18).
     guests: guests::Guests,
-    /// The transient solver from tick 0, built by the start hook once the operating point is
-    /// found; the advance of RFC 012 rule 8 drives it (PR-46).
-    transient: Option<transient::Transient>,
+    /// What the plant does between events: held values, breakpoints, the sensors' due ticks, the
+    /// pending advance, the solver from tick 0 (built by the start hook).
+    live: Option<live::Live>,
 }
 
 impl CircuitDomain {
@@ -91,7 +97,7 @@ impl CircuitDomain {
             solution: None,
             scenario: String::new(),
             guests: guests::Guests::default(),
-            transient: None,
+            live: None,
         }
     }
     /// The plant and its solution, for the inspectors and the kit's tests.
@@ -103,10 +109,14 @@ impl CircuitDomain {
     }
     /// The transient solver, once the run has started: the plant at `solved`.
     pub fn transient(&self) -> Option<&transient::Transient> {
-        self.transient.as_ref()
+        self.live.as_ref()?.transient.as_ref()
     }
     pub fn transient_mut(&mut self) -> Option<&mut transient::Transient> {
-        self.transient.as_mut()
+        self.live.as_mut()?.transient.as_mut()
+    }
+    /// What the plant does between events.
+    pub fn live(&self) -> Option<&live::Live> {
+        self.live.as_ref()
     }
     /// The circuit guests the start hook read: their kinds and declared channels.
     pub fn guests(&self) -> &guests::Guests {
@@ -152,11 +162,31 @@ impl Domain for CircuitDomain {
     fn units(&self) -> Vec<UnitDef> {
         units::all()
     }
+    fn intervention_kinds(&self) -> Vec<&'static str> {
+        vec!["source", "signal"]
+    }
 
     /// Every note of the reading, in one pass: the errors refuse the run and the warnings are
     /// kept (RFC 012 finding F-18).
     fn validate(&self, scenario: &Manifest) -> Vec<Notification> {
-        analyse::analyse(scenario, self.limits).notes
+        let analysis = analyse::analyse(scenario, self.limits);
+        let mut notes = analysis.notes;
+        // The scheduled changes addressed to this world (RFC 012 rule 15), read against the plant.
+        if let Some(plant) = &analysis.plant {
+            for (i, c) in scenario.changes.iter().enumerate() {
+                let florn_model::manifest::ChangeTarget::World(n) = &c.target else {
+                    continue;
+                };
+                if scenario.domains.get(*n as usize).map(String::as_str) != Some(NAME) {
+                    continue;
+                }
+                let field = format!("changes[{i}].payload");
+                if let Err(fault) = changes::source(plant, &c.payload, &field) {
+                    notes.push(fault.at_field(&field));
+                }
+            }
+        }
+        notes
     }
 
     fn validate_module(&self, module: &str, manifest: &ModuleManifest) -> Vec<Notification> {
@@ -200,47 +230,110 @@ impl Domain for CircuitDomain {
         self.plant = analyse::analyse(scenario, self.limits).plant;
         self.scenario = scenario.name.clone();
         self.solution = None;
-        self.transient = None;
+        self.live = self.plant.as_ref().map(live::Live::new);
         self.guests = guests::Guests::default();
     }
 
+    /// A committed send on a `signal-out` port (RFC 012 rule 11): the value the port's signal holds
+    /// from now on, and a breakpoint where it drives the plant. It returns no delivery.
     fn deliver(
         &mut self,
-        _now: Instant,
-        _origin: Identity,
+        now: Instant,
+        origin: Identity,
         _seq: u64,
-        _port: u32,
-        _payload: &[u8],
+        port: u32,
+        payload: &[u8],
         _dead: &std::collections::BTreeSet<Identity>,
     ) -> Vec<Delivery> {
+        if let (Some(plant), Some(live), Ok(bytes)) = (
+            self.plant.as_ref(),
+            self.live.as_mut(),
+            <[u8; 8]>::try_from(payload),
+        ) {
+            let value = f64::from_le_bytes(bytes);
+            if value.is_finite() {
+                live.output(plant, now.tick, origin, port, value);
+            }
+        }
         Vec::new()
     }
 
-    fn change(&mut self, _now: Instant, _target: Identity, _payload: &DomainMap) -> Vec<Action> {
+    /// A scheduled change addressed to the world (rule 15): a breakpoint at its instant.
+    fn change(&mut self, now: Instant, _target: Identity, payload: &DomainMap) -> Vec<Action> {
+        if let (Some(plant), Some(live)) = (self.plant.as_ref(), self.live.as_mut())
+            && let Ok(source) = changes::source(plant, payload, "payload")
+        {
+            live.set_source(plant, now.tick, source);
+        }
         Vec::new()
     }
 
     fn check_intervention(
         &self,
-        _target: Identity,
-        _kind: &str,
-        _content: &DomainMap,
+        target: Identity,
+        kind: &str,
+        content: &DomainMap,
     ) -> Result<(), Box<Notification>> {
-        Ok(())
+        let Some(plant) = &self.plant else {
+            return Err(changes::invalid("target"));
+        };
+        match kind {
+            "source" => {
+                if target != plant.world {
+                    return Err(changes::invalid("target"));
+                }
+                changes::source(plant, content, "content")
+                    .map(|_| ())
+                    .map_err(changes::Fault::as_intervention)
+            }
+            "signal" => changes::signal(plant, target, content).map(|_| ()),
+            _ => Err(changes::invalid("kind")),
+        }
     }
 
     fn intervene(
         &mut self,
-        _now: Instant,
-        _target: Identity,
-        _kind: &str,
-        _content: &DomainMap,
+        now: Instant,
+        target: Identity,
+        kind: &str,
+        content: &DomainMap,
     ) -> Vec<Action> {
+        let (Some(plant), Some(live)) = (self.plant.as_ref(), self.live.as_mut()) else {
+            return Vec::new();
+        };
+        match kind {
+            "source" => {
+                if let Ok(source) = changes::source(plant, content, "content") {
+                    live.set_source(plant, now.tick, source);
+                }
+            }
+            "signal" => {
+                if let Ok((signal, frozen)) = changes::signal(plant, target, content) {
+                    live.freeze(plant, now.tick, signal, frozen, target);
+                }
+            }
+            _ => {}
+        }
         Vec::new()
     }
 
-    fn event(&mut self, _event: &DomainEvent, _alive: bool) -> Vec<Action> {
-        Vec::new()
+    /// The `advance` event (rule 8) and nothing else: no other event is the domain's own.
+    fn event(&mut self, event: &DomainEvent, _alive: bool) -> Vec<Action> {
+        if event.key.class != CLASS_ADVANCE {
+            return Vec::new();
+        }
+        match (self.plant.as_ref(), self.live.as_mut()) {
+            (Some(plant), Some(live)) => live.on_advance(plant, event.key.tick),
+            _ => Vec::new(),
+        }
+    }
+
+    fn limit_reached(&mut self) -> Option<florn_host::domain::Limit> {
+        self.live.as_mut()?.limit.take()
+    }
+
+    fn end_requested(&mut self) -> Option<florn_host::domain::EndRequest> {
+        self.live.as_mut()?.end_request.take()
     }
 
     fn faulted_policy(&self) -> FaultPolicy {
@@ -266,11 +359,11 @@ impl Domain for CircuitDomain {
 
     fn numeric_fields(
         &self,
-        _actor: Identity,
-        _site: Site,
-        _payload: &[u8],
+        actor: Identity,
+        site: Site,
+        payload: &[u8],
     ) -> Option<florn_host::domain::Numeric> {
-        None
+        numeric::numeric_fields(self.plant.as_ref()?, actor, site, payload)
     }
 
     fn display_series(&self, actor: Identity, channel: u32, payload: &[u8]) -> Vec<(u8, f64)> {
@@ -278,7 +371,12 @@ impl Domain for CircuitDomain {
     }
 
     fn inspect(&self, target: Identity) -> Option<Vec<InspectField>> {
-        inspect::inspect(self.plant.as_ref(), self.solution.as_ref(), target)
+        inspect::inspect(
+            self.plant.as_ref(),
+            self.solution.as_ref(),
+            self.live.as_ref(),
+            target,
+        )
     }
 
     /// The start hook (RFC 012 rule 30): the held values are set when the plant is built (a
@@ -302,14 +400,15 @@ impl Domain for CircuitDomain {
                 ],
             )));
         }
-        let Some(plant) = &self.plant else {
+        let (Some(plant), Some(live)) = (self.plant.as_ref(), self.live.as_mut()) else {
             return Ok(Vec::new());
         };
-        match dc::initial_solve(plant) {
+        // The signals hold what the controllers' `init` set (rule 30, step 2).
+        match dc::initial_solve(&live.plant_in_force(plant)) {
             Ok(solution) => {
-                self.transient = Some(transient::Transient::new(plant, &solution));
+                let actions = live.start(plant, &solution);
                 self.solution = Some(solution);
-                Ok(Vec::new())
+                Ok(actions)
             }
             Err(e) => Err(Box::new(read::note(
                 Code::CircuitNoOperatingPoint,
@@ -324,6 +423,31 @@ impl Domain for CircuitDomain {
         }
     }
 
+    /// The plant's state (rule 29), empty for a scenario with no plant.
+    fn export(&self) -> Vec<u8> {
+        match &self.live {
+            Some(live) => state::encode(live, self.solution.as_ref()),
+            None => Vec::new(),
+        }
+    }
+
+    fn restore(&mut self, bytes: &[u8]) -> bool {
+        if bytes.is_empty() {
+            return self.live.is_none();
+        }
+        let Some(plant) = self.plant.as_ref() else {
+            return false;
+        };
+        match state::decode(plant, bytes) {
+            Some((live, solution)) => {
+                self.live = Some(live);
+                self.solution = solution;
+                true
+            }
+            None => false,
+        }
+    }
+
     fn answer(
         &mut self,
         _actor: Identity,
@@ -333,13 +457,24 @@ impl Domain for CircuitDomain {
         None
     }
 
-    fn builtin(
-        &mut self,
-        _actor: Identity,
-        _kind: &str,
-        _event: &BuiltinEvent<'_>,
-        _sink: &mut Sink,
-    ) {
+    /// A sensor's sample (rule 10): the state at `solved`, reported on `probe` and sent on its
+    /// signal, in the signal's unit; the plant was made current by the advance of this tick.
+    fn builtin(&mut self, actor: Identity, _kind: &str, event: &BuiltinEvent<'_>, sink: &mut Sink) {
+        let BuiltinEvent::Domain(ev) = event else {
+            return;
+        };
+        if ev.key.class != CLASS_SAMPLE {
+            return;
+        }
+        if let (Some(plant), Some(live)) = (self.plant.as_ref(), self.live.as_ref())
+            && let Some((value, port)) = sample::read(plant, live, actor)
+        {
+            let bytes = math::canonical(value).to_le_bytes().to_vec();
+            let _ = sink.report(CHANNEL_PROBE, bytes.clone());
+            if let Some(port) = port {
+                let _ = sink.send(port, bytes);
+            }
+        }
     }
 
     fn telemetry(&self) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {

@@ -88,6 +88,8 @@ pub enum Element {
         p: Node,
         n: Node,
         out: Option<usize>,
+        /// The identity of the `signal-out` port the sample is sent on.
+        out_port: Option<u32>,
         period: u64,
         phase: u64,
     },
@@ -95,6 +97,7 @@ pub enum Element {
         a: Node,
         b: Node,
         out: Option<usize>,
+        out_port: Option<u32>,
         period: u64,
         phase: u64,
         branch: usize,
@@ -121,6 +124,7 @@ pub enum Element {
         b: f64,
         load: Option<usize>,
         out: Option<usize>,
+        out_port: Option<u32>,
         period: u64,
         phase: u64,
         branch: usize,
@@ -179,6 +183,13 @@ pub struct Plant {
     pub unknowns: Vec<Unknown>,
     /// How many of the unknowns are rule 3's (the others exist in the initial solve only).
     pub transient_unknowns: usize,
+    /// The signal (an index into [`Plant::signals`]) a port is on, by actor and port identity:
+    /// a producer's, a built-in consumer's.
+    pub port_signal: std::collections::BTreeMap<(u32, u32), usize>,
+    /// The scenario's end tick (exclusive, RFC 004 section 3.3) and the circuit domain's world
+    /// identity (RFC 004 rule 8): the target and the origin of the plant's own events.
+    pub end: u64,
+    pub world: u32,
 }
 
 impl Plant {

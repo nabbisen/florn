@@ -49,7 +49,7 @@ fn name(s: &str) -> Value {
 }
 
 /// The number of a quantity as written, with its sign, rounded once (no unit conversion).
-fn as_written(q: &Quantity) -> Option<f64> {
+pub(crate) fn as_written(q: &Quantity) -> Option<f64> {
     let x = q
         .number
         .times_as_f64(Decimal {
@@ -61,7 +61,7 @@ fn as_written(q: &Quantity) -> Option<f64> {
 }
 
 /// A quantity written in `from`, in the unit `to`: exact decimal arithmetic, rounded once.
-fn converted(q: &Quantity, from: &UnitDef, to: &UnitDef) -> Option<f64> {
+pub(crate) fn converted(q: &Quantity, from: &UnitDef, to: &UnitDef) -> Option<f64> {
     let shift = Decimal {
         mantissa: 1,
         exponent: from.factor.exponent - to.factor.exponent,
@@ -71,7 +71,7 @@ fn converted(q: &Quantity, from: &UnitDef, to: &UnitDef) -> Option<f64> {
 }
 
 /// The unit's factor to the SI unit as an f64 (a power of ten rounded once).
-fn factor_of(u: &UnitDef) -> f64 {
+pub(crate) fn factor_of(u: &UnitDef) -> f64 {
     u.factor
         .times_as_f64(Decimal {
             mantissa: 1,

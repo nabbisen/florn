@@ -20,8 +20,8 @@ pub mod world;
 pub use compound::{CallError, CallIn, Compound};
 pub use controller::Controller;
 pub use domain::{
-    Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, Domains, Guest, Numeric, NumericField,
-    Site, Tolerance,
+    Action, BuiltinEvent, Domain, DomainEvent, DomainWorld, Domains, Guest, Limit, Numeric,
+    NumericField, Site, Tolerance,
 };
 pub use florn_admission::config::UnitDef;
 pub use florn_kernel::Advance;

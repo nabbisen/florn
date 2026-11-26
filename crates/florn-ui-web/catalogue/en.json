@@ -183,6 +183,7 @@
  "enum.end-reason.actor-fault": "an actor faulted and the policy stops the run",
  "enum.run-limit.microsteps-per-tick": "the microsteps per tick",
  "enum.run-limit.events-per-instant": "the events per instant",
+ "enum.run-limit.pending-breakpoints": "pending breakpoints",
  "enum.rejection-cause.error": "the error estimate",
  "enum.rejection-cause.convergence": "convergence",
  "enum.unknown-kind.voltage": "voltage",

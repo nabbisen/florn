@@ -242,6 +242,18 @@ impl EndRequest {
     }
 }
 
+/// A limit of the domain's that a run met (RFC 012 rule 9: the pending breakpoints; finding F-7): the
+/// Host reports it as `run.limit-exceeded` and ends the run with `host-fault`, which leaves the
+/// run reproducible, as the kernel's own limits do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Limit {
+    /// A value of the enumeration `run-limit`.
+    pub what: &'static str,
+    pub limit: u64,
+    /// The actors whose outputs or targets hold what exceeded it.
+    pub origins: Vec<Identity>,
+}
+
 /// An activation of a built-in actor (RFC 008 rule 19).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BuiltinEvent<'a> {
@@ -425,6 +437,12 @@ pub trait Domain {
     /// no [`Action`], RFC 012 finding F-7). The Host reads it after every commit, and the request
     /// is **taken**: it is told once. The default asks for nothing.
     fn end_requested(&mut self) -> Option<EndRequest> {
+        None
+    }
+    /// Whether the run met one of the domain's own limits (RFC 012 rule 9; finding F-7): read
+    /// after every event and every commit, **taken** when told, and the Host ends the run with
+    /// `run.limit-exceeded` and the reason `host-fault`. The default has none.
+    fn limit_reached(&mut self) -> Option<Limit> {
         None
     }
     /// The tolerance of the comparison of Tier 2 for a run of this domain (RFC 001 rule 62; RFC 013
@@ -1258,6 +1276,9 @@ impl Domain for Lent {
     }
     fn end_requested(&mut self) -> Option<EndRequest> {
         self.reached("end_requested")
+    }
+    fn limit_reached(&mut self) -> Option<Limit> {
+        self.reached("limit_reached")
     }
     fn tolerance(&self) -> Option<Tolerance> {
         self.reached("tolerance")
