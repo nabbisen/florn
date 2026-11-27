@@ -228,6 +228,8 @@ fn definitions() -> Vec<Shipped> {
         normal(echo_pair()),
         // The closed loop of Phase 4's exit criterion (RFC 012 rule 27): a PID controller, a DC motor.
         normal(crate::circuit_scenarios::motor_loop()),
+        // The analytic golden of the solver (RFC 013 rule 21): an RC network stepped at 2 ms.
+        normal(crate::circuit_scenarios::rc_step()),
         normal(race("by-identity", false)),
         normal(race("by-identity", true)),
         normal(race("by-seed", false)),
@@ -564,6 +566,9 @@ pub fn write(dir: &Path) -> Result<Digests, String> {
         let text = header(&s.scenario.name) + &s.scenario.text(&hashes);
         std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
     }
+    // The results of the circuit scenarios and the bit-identity table, recorded here (RFC 013
+    // rules 19 and 21): every other engine is compared to them.
+    crate::goldens::write(&dir.join("results"))?;
     let d = record();
     let path = dir.join("digests.toml");
     std::fs::write(&path, d.to_toml()).map_err(|e| format!("{}: {e}", path.display()))?;

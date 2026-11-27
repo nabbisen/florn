@@ -4,6 +4,18 @@
 
 use crate::scenario::Scenario;
 
+/// `rc-step` (RFC 012 rule 27, RFC 013 rule 21): a 1 kohm resistor and a 1 uF capacitor with
+/// `ic = 0V` (RC = 1 ms) on a voltage source of 1 V, stepped to 0 V at 2 ms by a scheduled change,
+/// a voltmeter across the capacitor with period 100 us, to 5 ms, at the default profile. The
+/// analytic solution is its golden; the results file is its record across the engines.
+pub fn rc_step() -> Scenario {
+    let deck = crate::circuit::rc_step().change("2ms", "world:circuit", "actor = 1\nv = \"0V\"");
+    // The end in nanoseconds, as the other shipped scenarios write it: the browser kit reads the
+    // half of a run from this line to take its cross-Host checkpoint there.
+    let text = deck.text().replace("end = \"5ms\"", "end = \"5000000ns\"");
+    Scenario::raw("rc-step", 5_000_000, text, &[])
+}
+
 /// `motor-loop` (RFC 012 rule 27, the closed loop of the exit criterion): a `pid` controller
 /// drives a voltage source into a DC motor, the motor's `speed` comes back to the controller, the
 /// set point and the load torque are each a `constant`, and a load step is scheduled at one second.

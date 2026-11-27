@@ -95,6 +95,59 @@ fn a_send_on_a_signal_out_port_is_the_value_in_the_unit_of_its_signal() {
 }
 
 #[test]
+fn a_send_on_a_sensors_output_port_on_no_signal_is_numeric_in_its_si_unit() {
+    // The ammeter's `i` port is connected to nothing; it still sends its sample, and the eight
+    // bytes are a number, not a digest (rule 20, item 2).
+    let p = plant();
+    let port_of = |actor: u32| {
+        p.devices
+            .iter()
+            .find(|d| d.actor == actor)
+            .and_then(|d| match &d.element {
+                crate::plant::Element::Ammeter { out_port, .. }
+                | crate::plant::Element::Voltmeter { out_port, .. } => *out_port,
+                _ => None,
+            })
+            .unwrap()
+    };
+    assert!(!p.port_signal.contains_key(&(4, port_of(4))));
+    let n = numeric_fields(
+        &p,
+        &Guests::default(),
+        4,
+        Site::Send { port: port_of(4) },
+        &bits(0.25),
+    )
+    .unwrap();
+    let f = &n.fields[0];
+    assert_eq!(
+        (f.name.as_str(), f.unit.as_str(), f.factor, f.value),
+        ("output", "A", 1.0, 0.25)
+    );
+    // Another port of that sensor, and a port of an actor that sends no sample, are not.
+    assert!(
+        numeric_fields(
+            &p,
+            &Guests::default(),
+            4,
+            Site::Send { port: 0 },
+            &bits(0.25)
+        )
+        .is_none()
+    );
+    assert!(
+        numeric_fields(
+            &p,
+            &Guests::default(),
+            2,
+            Site::Send { port: 0 },
+            &bits(0.25)
+        )
+        .is_none()
+    );
+}
+
+#[test]
 fn what_is_not_a_probe_value_or_eight_bytes_is_not_numeric() {
     let p = plant();
     assert!(

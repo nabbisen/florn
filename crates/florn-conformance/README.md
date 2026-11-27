@@ -95,6 +95,23 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 
 The later RFCs have their tests by file rather than by table: `rfc_008.rs` and `network.rs` (the domain interface and the link model), `ladder.rs`, `ospf.rs` and `bgp.rs` (the guests), `display.rs` (the display stream), `checkpoints.rs`, `navigation.rs`, `branching.rs`, `swapping.rs` and `retention.rs` (RFC 009), `cost_model_2.rs` (RFC 010), `ui.rs` (the view model over the real Host). Each test names the rule it verifies in its name or its comment.
 
+### RFC 013 rules 19 to 21 and section 11, results across engines (PR-48)
+
+The circuit's results are compared across engines through files the kit records on x86-64 with `cargo run --release -p florn-conformance -- scenarios`: `scenarios/results/<name>.results` for each circuit scenario (RFC 013 rule 21) and `scenarios/results/bit-identity.table` (rule 19, control 4). Every other Host and engine is compared to them by rule 20 as a second run, through `florn_host::compare::golden`, the one function native tests, the runner's kit and the browsers' worker all call. `florn-conformance cross-engine` prints this machine's row of the table (the browsers' rows come from `ci/browser/run.js`, in the same form); `figures` prints it with the figures.
+
+| Property | Test |
+|---|---|
+| Every circuit scenario against its file, on every architecture | `circuit_results::every_circuit_scenario_agrees_with_its_results_file_and_matches_where_it_was_recorded`; the three Rust jobs of CI (x86-64, AArch64 Linux, AArch64 macOS) and the browser jobs (Chromium, Firefox, WebKit) print their rows |
+| A scenario with no file, a file with no scenario | `circuit_results::every_circuit_scenario_has_a_results_file_and_every_file_has_a_scenario` |
+| The file is the run it records, and stays so | `circuit_results::a_results_file_is_the_trace_of_its_digests_run`, `…the_recorded_results_are_what_the_native_host_gives_here_…` (it fails on a stale file) |
+| The comparison fails on a planted difference | `circuit_results::the_controls_of_the_comparison_…` (a last bit: `within-tolerance`; another value, one record fewer: `diverged`); `florn-host`'s `compare::golden` tests; a sensor's send on a port connected to nothing is a number (`a_sensors_send_is_a_number_…`) |
+| `bit_identity` | `circuit_results::bit_identity_agrees_with_the_recorded_table`; `…_fails_on_a_doctored_file_and_on_a_doctored_function`; the crate's `bits` tests; in the browsers `ci/browser/run.js` |
+| It fails when the crate calls a `libm` function the table does not list | `circuit_results::the_crate_calls_no_libm_function_the_table_does_not_list` (reads the crate's sources), and its own control `…_fails_on_a_planted_libm_call` |
+| The lint list | `ci/test-gates.sh`: the crate's `clippy.toml` in a scratch crate with every method it lists called, and the operations the rule allows |
+| The dependency allow-list | `ci/test-gates.sh` (PR-44): a second external dependency, a range, a development dependency |
+| The flag script | `ci/check-float-flags.sh`; `ci/test-gates.sh`: `target-cpu`, `target-feature`, `-Z`, an LLVM argument, fast-math and a nightly toolchain, each in the file a build reads it from |
+| `florn replay` across Hosts | `crates/florn/tests/circuit_replay.rs`: a circuit record without payloads whose chain differs prints `needs-payloads` and exits 1; on one build it is `diverged`, exit 2 |
+
 ### RFC 005 section 11, the rows that apply in 0.1
 
 | Property | Test |

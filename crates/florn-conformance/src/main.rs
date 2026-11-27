@@ -3,6 +3,7 @@
 //! ```text
 //! florn-conformance scenarios [--out <dir>]   write the shipped scenarios and their digests
 //! florn-conformance figures [--quick]         run the benchmarks and print the figures
+//! florn-conformance cross-engine              this machine's results against the recorded files, as a table
 //! florn-conformance results <record> <scenario> [--modules <dir>] [--out <file>]
 //!                                             the results file of a run record with its trace and payloads
 //! ```
@@ -43,7 +44,20 @@ fn main() -> ExitCode {
             let quick = args.iter().any(|a| a == "--quick");
             let f = florn_conformance::bench::figures(quick);
             print!("{}", f.markdown());
+            let (table, _) =
+                florn_conformance::goldens::report(&florn_conformance::goldens::directory());
+            print!("\n### Results across engines (RFC 013 rules 19 to 21)\n\n{table}");
             ExitCode::SUCCESS
+        }
+        Some("cross-engine") => {
+            let (table, good) =
+                florn_conformance::goldens::report(&florn_conformance::goldens::directory());
+            print!("{table}");
+            if good {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            }
         }
         Some("results") => results(&args[1..]),
         _ => usage(),
@@ -111,7 +125,7 @@ fn results(args: &[String]) -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  florn-conformance scenarios [--out <dir>]\n  florn-conformance figures [--quick]\n  florn-conformance results <record> <scenario> [--modules <dir>] [--out <file>]"
+        "usage:\n  florn-conformance scenarios [--out <dir>]\n  florn-conformance figures [--quick]\n  florn-conformance cross-engine\n  florn-conformance results <record> <scenario> [--modules <dir>] [--out <file>]"
     );
     ExitCode::from(1)
 }

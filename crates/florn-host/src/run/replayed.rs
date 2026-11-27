@@ -167,6 +167,16 @@ impl<E: florn_engine::Engine> Run<E> {
         rows(kept, &self.payloads, &self.reading())
     }
 
+    /// This run against the text of a results file (RFC 013 rule 21): how another Host or engine
+    /// stands against the file the kit recorded. The run must keep its records and payloads.
+    pub fn against_results(&self, file: &str) -> Result<compare::golden::Golden, Missing> {
+        Ok(compare::golden::against(
+            file,
+            &self.rows()?,
+            &self.reading(),
+        ))
+    }
+
     /// How the replay compares with its record, once it has ended (RFC 001 rule 50; RFC 013 rule
     /// 20). `None` for a run that is no replay or has not ended.
     pub fn replayed(&self) -> Option<Replayed> {

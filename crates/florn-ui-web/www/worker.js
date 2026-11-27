@@ -346,7 +346,8 @@ function writeDisplay() {
 
 async function runScenario(m) {
   const d = m.display;
-  host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, d ? (d.ring ? 1 : 2) : 0, 0);
+  // A run that is compared with a results file keeps its records and payloads (RFC 013 rule 21).
+  host.exports.florn_start(m.capacity.instances, m.capacity.memory_bytes, d ? (d.ring ? 1 : 2) : 0, m.results ? 1 : 0);
   if (d) {
     display = { writer: createWriter(d.ring, (msg, transfer) => self.postMessage(msg, transfer)), pad: d.pad || 0, batches: 0, produced: 0, dropped: 0, chunks: [] };
   }
@@ -466,12 +467,19 @@ async function runScenario(m) {
       replay = { error: "no record exported" };
     }
   }
+  let golden = null;
+  if (m.results) {
+    // The run against the file the kit recorded on x86-64, by the Host's own comparison.
+    const file = encoder.encode(m.results);
+    host.exports.florn_compare_results(give(file), file.length);
+    golden = out();
+  }
   let written = null;
   if (display) {
     written = { transport: display.writer.kind, batches: display.batches, produced: display.produced, dropped_by_writer: display.dropped, produced_digest: await sha256Hex(display.chunks) };
     display = null;
   }
-  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay, written, checkpoint, branch };
+  return { ...state, admitted, events, ms, views_created: viewsCreated, instances: instances.filter(Boolean).length, support, replay, golden, written, checkpoint, branch };
 }
 
 function runBench(m) {
@@ -526,6 +534,13 @@ function runBench(m) {
     // The adapter cases of floats, lists and the post-return call (PR-37), over this engine.
     const failed = host.exports.florn_abi_cases();
     return { kind: "abi", failed, cases: out(), engine: family() };
+  }
+  if (m.kind === "bits") {
+    // `bit_identity` (RFC 013 rule 19): the table of the solver's arithmetic, run in this engine,
+    // against the file the kit recorded on x86-64.
+    const file = encoder.encode(m.table);
+    const differences = host.exports.florn_bit_identity(give(file), file.length);
+    return { kind: "bits", differences, ...out(), engine: family() };
   }
   if (m.kind === "handle") {
     // The transport's form with bytes that are no control message: the coded refusal.

@@ -18,6 +18,7 @@ ci/check-private-paths.sh
 ci/forbidden-words.sh
 ci/check-shell-exports.sh
 ci/check-test-layout.sh
+ci/check-float-flags.sh
 ci/test-gates.sh
 ```
 
@@ -26,6 +27,8 @@ After any change to the SDK or an example guest, regenerate the shipped modules 
 ```sh
 cargo run --release -p florn-conformance -- scenarios
 ```
+
+The same command writes the circuit's results files and the table of `bit_identity` (`scenarios/results/`), recorded on x86-64: every other engine is compared to them, and `cargo run --release -p florn-conformance -- cross-engine` prints this machine's row of the cross-engine table. A change to the circuit's arithmetic that changes a bit changes them, and the kit's test says so.
 
 Even a formatting change to a guest changes its bytes (panic locations), so the kit's test would otherwise fail. The release profile strips symbols; a change to the profile changes the modules too.
 

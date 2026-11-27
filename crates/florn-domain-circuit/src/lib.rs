@@ -27,6 +27,7 @@ use florn_model::manifest::{DomainMap, DomainValue};
 
 pub mod analyse;
 mod assemble;
+pub mod bits;
 mod build;
 pub mod changes;
 pub mod control;

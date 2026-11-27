@@ -13,6 +13,7 @@
 pub mod bench;
 pub mod circuit;
 pub mod circuit_scenarios;
+pub mod goldens;
 pub mod guests;
 pub mod host;
 pub mod results;

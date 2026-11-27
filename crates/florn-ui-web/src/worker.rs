@@ -664,6 +664,76 @@ pub extern "C" fn florn_abi_cases() -> i32 {
     results.iter().filter(|c| c.outcome.is_err()).count() as i32
 }
 
+/// The run that has ended against the text of a results file (RFC 013 rule 21: every other Host and
+/// engine is compared to the file by rule 20, as a second run), by the Host's own comparison: JSON
+/// `{"outcome", "agrees", "compared", "differing", "other_work", "line"}`. The run must have been
+/// started to keep its records (`florn_start` with `keep`); -1 when it did not, or there is none.
+///
+/// # Safety
+/// As `florn_load_scenario`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn florn_compare_results(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: as above.
+    let file = String::from_utf8_lossy(&unsafe { take(ptr, len) }).into_owned();
+    CONTROLLER.with(|slot| {
+        let slot = slot.borrow();
+        let Some(run) = slot.as_ref().and_then(|c| c.run()) else {
+            set_out(b"{\"error\":\"there is no run\"}".to_vec());
+            return -1;
+        };
+        match run.against_results(&file) {
+            Ok(g) => {
+                set_out(
+                    format!(
+                        "{{\"outcome\":{},\"agrees\":{},\"compared\":{},\"differing\":{},\"other_work\":{},\"line\":{}}}",
+                        json_str(g.word()),
+                        g.agrees(),
+                        g.compared(),
+                        g.differing(),
+                        g.consumption_differing(),
+                        json_str(&g.line())
+                    )
+                    .into_bytes(),
+                );
+                0
+            }
+            Err(_) => {
+                set_out(b"{\"error\":\"the run kept no records or payloads\"}".to_vec());
+                -1
+            }
+        }
+    })
+}
+
+/// The table of `bit_identity` (RFC 013 rule 19, control 4) in this engine against the text of the
+/// file the kit recorded: JSON `{"ok", "lines", "problems"}`; the status is the number of
+/// differences, 0 when every line agrees.
+///
+/// # Safety
+/// As `florn_load_scenario`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn florn_bit_identity(ptr: *mut u8, len: u32) -> i32 {
+    // SAFETY: as above.
+    let file = String::from_utf8_lossy(&unsafe { take(ptr, len) }).into_owned();
+    match florn_domain_circuit::bits::compare(&file, &florn_domain_circuit::bits::table()) {
+        Ok(lines) => {
+            set_out(format!("{{\"ok\":true,\"lines\":{lines},\"problems\":[]}}").into_bytes());
+            0
+        }
+        Err(problems) => {
+            let items: Vec<String> = problems.iter().map(|p| json_str(p)).collect();
+            set_out(
+                format!(
+                    "{{\"ok\":false,\"lines\":0,\"problems\":[{}]}}",
+                    items.join(",")
+                )
+                .into_bytes(),
+            );
+            problems.len() as i32
+        }
+    }
+}
+
 thread_local! {
     /// The cost-model version the kit's benches admit under (RFC 010 rule 9).
     static COST_MODEL: std::cell::Cell<u32> = const { std::cell::Cell::new(florn_host::run::COST_MODEL_VERSION) };

@@ -4,12 +4,14 @@
 // (rules 33 and 34); the start from the service worker's cache (rules 32 and 35); the transport's
 // refusal of bytes that are no message; the display stream over the ring and over messages
 // (rule 14; checklist C18): identical records, the transport's cell at 2,000 records per frame,
-// the drops reported; the crossing and cost benchmarks' figures.
+// the drops reported; the circuit's results against the files the kit recorded and the bits of
+// the solver's arithmetic (RFC 013 rules 19 to 21), the table printed; the crossing and cost
+// benchmarks' figures.
 //
 // Usage: node run.js --browsers chromium,firefox[,webkit] [--quick] [--port N]
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
@@ -63,6 +65,13 @@ const plain = await startServer({
   port: 0,
   isolated: false,
 });
+
+// The circuit scenarios that have a results file (RFC 013 rule 21), and the rows of the table.
+const results = (await readdir(join(root, "scenarios/results")))
+  .filter((f) => f.endsWith(".results"))
+  .map((f) => f.slice(0, -".results".length))
+  .sort();
+const crossEngine = [];
 
 let failures = 0;
 function check(ok, what, detail) {
@@ -251,6 +260,31 @@ for (const name of browsers) {
     check(false, `${name}: adapter cases`, { error: String(err).split("\n")[0] });
   }
 
+  // The circuit across engines (RFC 013 rules 19 to 21; checklist B-48): every circuit scenario
+  // with a results file is run in this browser and compared with the file the kit recorded on
+  // x86-64, by the Host's own comparison (rule 20, as a second run), and the table of
+  // `bit_identity` is run through this engine's arithmetic and compared bit for bit. Each row is
+  // kept for the table printed at the end.
+  for (const s of results) {
+    try {
+      const r = await open(`scenario=${s}&seed=${digests.runs[s].seed}&results=1`, 600000);
+      const g = r.golden || {};
+      check(g.agrees === true, `${name}: ${s} is matched or within-tolerance against its results file`, { outcome: g.outcome, line: g.line, error: g.error || r.error });
+      crossEngine.push({ engine: name, what: s, outcome: g.outcome || "error", compared: g.compared, differing: g.differing, other_work: g.other_work });
+    } catch (err) {
+      check(false, `${name}: ${s} against its results file`, { error: String(err).split("\n")[0] });
+      crossEngine.push({ engine: name, what: s, outcome: "error" });
+    }
+  }
+  try {
+    const b = await open("bench=bits");
+    check(b.ok === true && b.differences === 0, `${name}: bit_identity: every line of the table has the recorded bits`, { lines: b.lines, problems: (b.problems || []).slice(0, 3) });
+    crossEngine.push({ engine: name, what: "bit_identity", outcome: b.ok === true ? "matched" : "diverged", compared: b.lines, differing: b.differences || 0, other_work: null });
+  } catch (err) {
+    check(false, `${name}: bit_identity`, { error: String(err).split("\n")[0] });
+    crossEngine.push({ engine: name, what: "bit_identity", outcome: "error" });
+  }
+
   // The benchmarks (RFC 005 rule 11; RFC 003 section 7, step 2).
   try {
     const c = await open(`bench=crossing&scale=${quick ? 20 : 1}`);
@@ -321,14 +355,15 @@ for (const name of browsers) {
 
   // RFC 009 rule 6 (checklist C23): a checkpoint crosses the Hosts both ways. The native
   // runner writes one at the lab's half and the page resumes it to the recorded digest; the
-  // page writes one and the runner resumes it. Skipped with a notice where the runner is not
+  // page writes one and the runner resumes it; the circuit's two scenarios are in the list (RFC 013
+  // section 11, Checkpoint). Skipped with a notice where the runner is not
   // built (ci/build-shell.sh builds the worker only; CI builds the runner beside it).
   const runner = join(root, "target/release/florn");
   const checkpoints = join(root, "crates/florn-ui-web/www/checkpoints");
   if (existsSync(runner)) {
     const run = promisify(execFile);
     await mkdir(checkpoints, { recursive: true });
-    for (const s of ["ospf-lab", "net-lan"].filter((x) => digests.runs[x])) {
+    for (const s of ["ospf-lab", "net-lan", "rc-step", "motor-loop"].filter((x) => digests.runs[x])) {
       const rec = digests.runs[s];
       // The scenario's end, from its manifest: the checkpoint is taken at its half.
       const end = parseInt((/^end = "(\d+)/m.exec(await readFile(join(root, `scenarios/${s}.toml`), "utf8")) || [])[1] || "0", 10);
@@ -467,5 +502,15 @@ for (const name of browsers) {
 }
 server.close();
 plain.server.close();
+// The browsers' part of the cross-engine table (RFC 013 rule 21), in the form the kit's
+// `cross-engine` prints for the native engine: the release notes put them side by side.
+for (const name of browsers) {
+  const mine = crossEngine.filter((row) => row.engine === name);
+  if (!mine.length) continue;
+  console.log(`\n| ${name} | Outcome | Records | Differing | Other work |\n|---|---|---:|---:|---:|`);
+  for (const row of mine) {
+    console.log(`| \`${row.what}\` | ${row.outcome} | ${row.compared ?? "—"} | ${row.differing ?? "—"} | ${row.other_work ?? "—"} |`);
+  }
+}
 console.log(JSON.stringify({ failures }));
 process.exit(failures ? 1 : 0);

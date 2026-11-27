@@ -164,6 +164,13 @@ async function request(worker) {
     // `residency=swap`: swapping asked for (RFC 009 rule 14); `resident=N`: the pool's cap.
     const residency = query.get("residency");
     const resident = query.get("resident");
+    // `results=1`: the run is compared with the results file the kit recorded (RFC 013 rule 21).
+    let results = null;
+    if (query.get("results") === "1") {
+      const f = await fetch(`scenarios/results/${scenario}.results`);
+      if (!f.ok) throw new Error(`results ${scenario}: ${f.status}`);
+      results = await f.text();
+    }
     let display = null;
     let reader = null;
     if (query.get("display") === "1") {
@@ -184,6 +191,7 @@ async function request(worker) {
         modules,
         seed: seed === null ? null : seed,
         replay: query.get("replay") === "1",
+        results,
         display,
         resume,
         checkpoint_at: checkpointAt === null ? null : checkpointAt,
@@ -245,6 +253,11 @@ async function request(worker) {
   }
   if (bench === "probe") {
     return plain({ kind: "probe", bound: parseInt(query.get("bound") || "5000", 10) }, []);
+  }
+  if (bench === "bits") {
+    const f = await fetch("scenarios/results/bit-identity.table");
+    if (!f.ok) throw new Error(`bit-identity.table: ${f.status}`);
+    return plain({ kind: "bits", table: await f.text() }, []);
   }
   if (bench === "handle") {
     return plain({ kind: "handle" }, []);

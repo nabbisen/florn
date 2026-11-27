@@ -15,6 +15,13 @@
 #   - ci/check-deps.py (on a `cargo metadata` file with one dependency planted): a second external
 #     dependency of the circuit domain, normal or build, and an external dependency required as a
 #     range fail; a development dependency passes (RFC 013 rule 19, control 2)
+#   - ci/check-float-flags.sh (RFC 013 rule 19, control 3): `target-cpu`, `target-feature`, `-Z`,
+#     an LLVM argument, fast-math and a nightly toolchain, each planted in the file a build reads it
+#     from (.cargo/config, a workflow, rust-toolchain.toml, a Cargo.toml profile, a build.rs, a ci/
+#     script); a comment that names one passes
+#   - the circuit domain's clippy.toml (control 1): a scratch crate with the file as it is and one call
+#     of every method it lists fails `cargo clippy -D warnings`, each method named, and the
+#     operations the rule allows pass
 #   - the browser kit's page opener: a mutated copy that never retries fails its test
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -268,6 +275,116 @@ PY
   expect fail "check-deps.py fails an external dependency of another crate required as a range" deps_check "$scratch/planted.json"
 else
   echo "skip  the dependency check's controls: cargo and python3 are needed"
+fi
+
+# --- ci/check-float-flags.sh: flags that change float behaviour (RFC 013 rule 19, control 3) -------
+flags() { ci/check-float-flags.sh "$scratch/w"; }
+fresh_tree() {
+  rm -rf "$scratch/w"
+  mkdir -p "$scratch/w/ci" "$scratch/w/.github/workflows" "$scratch/w/crates/c"
+  cp rust-toolchain.toml "$scratch/w/"
+  printf '[workspace]\nmembers = ["crates/c"]\n\n[profile.release]\nopt-level = 3\n' >"$scratch/w/Cargo.toml"
+  printf '[package]\nname = "c"\n' >"$scratch/w/crates/c/Cargo.toml"
+  printf 'env:\n  RUSTFLAGS: "-D warnings"\njobs:\n  a:\n    steps:\n      - run: cargo test\n' >"$scratch/w/.github/workflows/ci.yml"
+  printf 'fn main() { println!("cargo:rerun-if-changed=build.rs"); }\n' >"$scratch/w/crates/c/build.rs"
+  printf '#!/bin/sh\ncargo build --release\n' >"$scratch/w/ci/build.sh"
+}
+fresh_tree
+expect pass "check-float-flags.sh passes a tree with no such flag" flags
+expect pass "check-float-flags.sh passes the repository as it is" ci/check-float-flags.sh
+plant() { # plant <file> <line>: append a line, check, and put the tree back
+  fresh_tree
+  mkdir -p "$(dirname "$scratch/w/$1")"
+  printf '%s\n' "$2" >>"$scratch/w/$1"
+}
+plant .cargo/config.toml '[build]'
+printf 'rustflags = ["-C", "target-cpu=native"]\n' >>"$scratch/w/.cargo/config.toml"
+expect fail "check-float-flags.sh fails target-cpu in .cargo/config.toml" flags
+plant .cargo/config '[target.x86_64-unknown-linux-gnu]'
+printf 'rustflags = ["-C", "target-feature=+fma"]\n' >>"$scratch/w/.cargo/config"
+expect fail "check-float-flags.sh fails target-feature in .cargo/config (no extension)" flags
+plant crates/c/.cargo/config.toml 'build.rustflags = ["-Ctarget-cpu=skylake"]'
+expect fail "check-float-flags.sh fails a flag in a crate's own .cargo/config.toml" flags
+plant .github/workflows/ci.yml '  RUSTFLAGS_EXTRA: "-C target-feature=+avx2"'
+expect fail "check-float-flags.sh fails target-feature in a workflow" flags
+plant .github/workflows/ci.yml '      - run: cargo +nightly -Zbuild-std test'
+expect fail "check-float-flags.sh fails a -Z option in a workflow" flags
+plant .github/workflows/ci.yml '      - run: RUSTFLAGS="-C llvm-args=-ffp-contract=fast" cargo build'
+expect fail "check-float-flags.sh fails an LLVM argument in a workflow" flags
+plant rust-toolchain.toml 'x = 1'
+sed -i 's/^channel = .*/channel = "nightly-2026-11-01"/' "$scratch/w/rust-toolchain.toml"
+expect fail "check-float-flags.sh fails a nightly toolchain in rust-toolchain.toml" flags
+plant Cargo.toml 'rustflags = ["-C", "target-cpu=native"]'
+expect fail "check-float-flags.sh fails a rustflags line in a Cargo.toml profile" flags
+plant crates/c/Cargo.toml '[profile.release]'
+printf 'rustflags = ["-Cfast-math"]\n' >>"$scratch/w/crates/c/Cargo.toml"
+expect fail "check-float-flags.sh fails fast-math in a crate's Cargo.toml" flags
+plant crates/c/build.rs 'fn flags() { println!("cargo:rustc-flags=-C target-cpu=native"); }'
+expect fail "check-float-flags.sh fails a build.rs that sets target-cpu" flags
+plant ci/build.sh 'export RUSTFLAGS="-C target-feature=+sse4.2"'
+expect fail "check-float-flags.sh fails an exported RUSTFLAGS in a ci/ script" flags
+plant ci/build.sh '# RUSTFLAGS with target-cpu=native would break NUM-001'
+expect pass "check-float-flags.sh passes a comment that names a flag" flags
+plant Cargo.toml '# rustflags = ["-C", "target-cpu=native"]   (a comment)'
+expect pass "check-float-flags.sh passes a commented flag in a Cargo.toml" flags
+plant .github/workflows/ci.yml '      - run: cargo +nightly fuzz run manifest'
+expect pass "check-float-flags.sh passes the fuzz job's cargo +nightly fuzz" flags
+
+# --- the circuit domain's clippy.toml (RFC 013 rule 19, control 1) --------------------------------
+if command -v cargo >/dev/null 2>&1 && cargo clippy --version >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+  c="$scratch/clippy"
+  rm -rf "$c"
+  mkdir -p "$c/src"
+  cp crates/florn-domain-circuit/clippy.toml "$c/clippy.toml"
+  # The toolchain of the repository: the scratch crate is outside it, so rustup is told.
+  cp rust-toolchain.toml "$c/"
+  printf '[package]\nname = "scratch"\nversion = "0.0.0"\nedition = "2024"\n' >"$c/Cargo.toml"
+  # One call of every method the file lists, by name, with the arguments of its arity.
+  python3 -I - "$c" <<'PY'
+import re, sys
+root = sys.argv[1]
+toml = open(root + "/clippy.toml").read()
+methods = re.findall(r'path = "f64::(\w+)"', toml)
+args = {"log": "y", "powf": "y", "hypot": "y", "atan2": "y", "min": "y", "max": "y", "powi": "2", "mul_add": "y, z"}
+out = ["#![allow(dead_code)]"]
+for m in methods:
+    out.append(f"pub fn call_{m}(x: f64, y: f64, z: f64) -> f64 {{ let _ = (y, z); x.{m}({args.get(m, '')}) }}")
+open(root + "/src/lib.rs", "w").write("\n".join(out) + "\n")
+open(root + "/methods", "w").write("\n".join(methods) + "\n")
+PY
+  clippy_in() { (cd "$c" && cargo clippy --offline -q -- -D warnings); }
+  expect fail "the circuit domain's clippy.toml makes cargo clippy fail on the std float methods" clippy_in
+  # Every listed method is named in the failure, and each is one the rule lists.
+  (cd "$c" && cargo clippy --offline -q -- -D warnings) >"$scratch/clippy.out" 2>&1
+  missing=""
+  for m in $(cat "$c/methods"); do
+    grep -q "disallowed method \`f64::$m\`" "$scratch/clippy.out" || missing="$missing $m"
+  done
+  tested=$((tested + 1))
+  if [ -z "$missing" ] && [ "$(wc -l <"$c/methods")" -ge 25 ]; then
+    echo "ok    the failure names every method of the list ($(wc -l <"$c/methods") of them)"
+  else
+    echo "FAIL  the failure does not name:$missing"
+    failed=$((failed + 1))
+  fi
+  # The operations the rule allows pass: sqrt, abs, floor, ceil, trunc, copysign, arithmetic.
+  printf 'pub fn ok(x: f64, y: f64) -> f64 { x.sqrt() + x.abs() + x.floor() + x.ceil() + x.trunc() + x.copysign(y) + x * y - x / y }\n' >"$c/src/lib.rs"
+  expect pass "the operations the rule allows pass cargo clippy under the same file" clippy_in
+  # And the file with its list emptied lets every method through: the list is what holds.
+  printf 'pub fn bad(x: f64) -> f64 { x.exp() }\n' >"$c/src/lib.rs"
+  expect fail "a std exp placed in the crate fails cargo clippy" clippy_in
+  printf 'pub fn bad(x: f64, y: f64) -> f64 { x.min(y) }\n' >"$c/src/lib.rs"
+  expect fail "f64::min placed in the crate fails cargo clippy" clippy_in
+  printf 'pub fn bad(x: f64) -> f64 { x.exp() }\n' >"$c/src/lib.rs"
+  : >"$c/clippy.toml"
+  expect pass "an empty clippy.toml lets a std exp through (the list is what holds)" clippy_in
+elif [ -n "${CI:-}" ]; then
+  # In CI a control that cannot run is a control that does not exist.
+  tested=$((tested + 1))
+  failed=$((failed + 1))
+  echo "FAIL  the clippy control could not run: cargo with clippy and python3 are needed in CI"
+else
+  echo "skip  the clippy control: cargo with clippy and python3 are needed"
 fi
 
 # --- the browser kit's page opener ----------------------------------------------------------------

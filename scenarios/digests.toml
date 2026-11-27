@@ -233,6 +233,12 @@ chain = "5642cea6b83f31203f43db5a4e6dd5e5ae43d426d30b591f6a5ec7c5630493fe"
 records = 67003
 ended = "end-reached"
 
+[runs."rc-step"]
+seed = 1
+chain = "a87a14d25604a95bde108a557ab29528052816022bfc4944e7dfddf0624cba0f"
+records = 54
+ended = "end-reached"
+
 [runs."zero-delay"]
 seed = 1
 chain = "a321a7af8fc6a30c33c4bb9b2ce0f075b032eeb51c08cc9d72473a5c20d13d80"

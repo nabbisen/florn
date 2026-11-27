@@ -17,6 +17,7 @@ use florn_kernel::{Digest, EventKey, Identity};
 use crate::domain::{Domain, Numeric, Site, Tolerance};
 use crate::identity::Environment;
 
+pub mod golden;
 pub mod results;
 
 /// The tier of a comparison (RFC 001 section 1.1, rule 41): the environments decide it.

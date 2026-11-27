@@ -43,11 +43,26 @@ pub fn numeric_fields(
             let (unit, factor) = unit_of(plant, signal, base);
             ("value", unit, factor)
         }
-        Site::Send { port } => {
-            let signal = *plant.port_signal.get(&(actor, port))?;
-            let (unit, factor) = unit_of(plant, Some(signal), "");
-            ("output", unit, factor)
-        }
+        Site::Send { port } => match plant.port_signal.get(&(actor, port)) {
+            Some(&signal) => {
+                let (unit, factor) = unit_of(plant, Some(signal), "");
+                ("output", unit, factor)
+            }
+            // A sensor's own output port that is on no signal still sends its sample (rule 11),
+            // in the sensor's SI unit, as its report does: a `signal-out` port is numeric
+            // whether or not anything is connected to it (RFC 013 rule 20, item 2).
+            None => {
+                let device = plant.devices.iter().find(|d| d.actor == actor)?;
+                let base = match &device.element {
+                    Element::Voltmeter { out_port, .. } if *out_port == Some(port) => "V",
+                    Element::Ammeter { out_port, .. } if *out_port == Some(port) => "A",
+                    Element::Motor { out_port, .. } if *out_port == Some(port) => "rad/s",
+                    _ => return None,
+                };
+                let (unit, factor) = unit_of(plant, None, base);
+                ("output", unit, factor)
+            }
+        },
         _ => return None,
     };
     debug_assert!(unit.is_empty() || units::all().iter().any(|u| u.symbol == unit));
