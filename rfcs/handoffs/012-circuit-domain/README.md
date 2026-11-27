@@ -28,18 +28,14 @@ PR-41's follow-up is done (`07687ed`): a `real` quantity may be negative (F-17),
 
 Milestone M2 is complete (PR-35 to PR-43). **M3 has begun:** PR-44 is done (`c1ffd81`, `01b2296`, 2026-11-25): `florn-domain-circuit` with validation, the passive built-ins and sources, the DC operating point (MNA, dense LU, Newton with the diode's limiter), the initial solve and its stages.
 
-PR-46 is done (`98a50b1`, `ad091e9`, 2026-11-27): the plant advances on demand, at sensor ticks and detector wake-ups. Inputs become breakpoints, bounded by `max-breakpoints`. Scheduled changes and interventions act, the solver's state is checkpointed, and rule 17's notifications are emitted.
+PR-47 is done (`0aab066`, `6bd3c35`, `bd6b4fd`, 2026-11-26): the first guest of the circuit. It brings the contract's controller block, `florn-guest-circuit`, `pid`, and `motor-loop`, shipped and recorded; its chain is the same natively and in Chromium and Firefox. **The closed loop runs.**
 
-**Next: PR-47, the controller** (milestone M3). Read its row in `task-breakdown-pr-plan.md`, section 3.7 of `implementation-handoff.md` and B-47 first; it starts from RFC 012 rules 16 to 18, 25 and 26. It brings the first guest of the circuit: the contract `florn:circuit`, `florn-guest-circuit`, the `pid` example and `motor-loop`. It registers the circuit domain in the command line and the shell, and runs the rows PR-46 could not (sample order, the controller running under a frozen signal, a `set-output` of the held value through a guest).
+**Next: PR-48, results across engines and the controls (V).** Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-48 first; it starts from RFC 013 rules 19 to 21. It is the last unit of milestone M3, whose end is the roadmap's exit criterion for Phase 4: the comparison is `matched` or `within-tolerance` on all five engines, and the cross-engine table is printed. B-48 also has the CLI check PR-42's verifier could not make (`needs-payloads`, exit 1). A verifier session follows its push. No first commit is asked for.
 
-**Its first commit, from PR-46's review** (RFC 012 as amended 2026-11-28):
-
-1. **A `signal` frozen or released records no breakpoint and cuts no history** (rule 9): the value in force does not change.
-2. **`circuit.step-minimum` at most once per advance**, for the first step at the minimum (rule 28's row; RFC 013 rule 12); the count stays in the inspection.
-3. **The domain gets its guests at a restore too** (F-18, added). The same `guests` as the start hook, so that a guest's `control` series index survives a checkpoint, with a test that restores and reads it.
-4. **A unit test of `numeric_fields`**: a sensor's `probe` value and a `signal-out` send, with their unit and factor (RFC 013 rule 20 item 2), before PR-48 compares two Hosts with it.
-
-The intervention shapes and `non-convergence`'s naming of a net are now RFC 012's text, as PR-46 made them. On scratch copies, the handoff's rule now says: clean only if a scratch build ever used the repository's `target/`.
+**Then PR-49's first commit, from PR-47's review: the device contract's names.** RFC 012 rule 19's block declares `interface device` and `world device` in one package, and WIT has one name space for both. The team found this; it is a fault of the RFC. In one commit, so that no run of the tests goes red between them:
+- In RFC 012 rule 19's block, the interface becomes `device-model` (`interface device-model {`), and the world's line becomes `export device-model;`. The world stays `device`, and the manifest's `kind = "device"` is unchanged. Add after rule 19's first sentence: "(Amended 2026-11-27, review of PR-47: the interface is `device-model`, because WIT gives an interface and a world one name space; the world stays `device`.)"
+- `contracts/florn-circuit/wit/circuit.wit` takes both blocks, and its RFC-equality test reads `[0, 1]`.
+- The tripwire test `the_device_block_of_rfc_012_does_not_parse_beside_the_controllers` becomes a test that both blocks parse together, with the world `device`.
 
 ## What Phase 4 delivers
 
