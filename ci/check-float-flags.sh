@@ -21,9 +21,9 @@ forbidden='target[-_]cpu|target[-_]feature|llvm[-_]args|fast[-_]math|ffast|fp[-_
 
 files=$(
   {
-    find . \( -path ./target -o -path '*/node_modules' -o -path ./.git -o -path ./.git-exclude \) -prune -o \
+    find . \( -path ./target -o -path '*/node_modules' -o -path ./.git \) -prune -o \
       \( -name config -o -name config.toml \) -path '*/.cargo/*' -print
-    find . \( -path ./target -o -path '*/node_modules' -o -path ./.git -o -path ./.git-exclude \) -prune -o \
+    find . \( -path ./target -o -path '*/node_modules' -o -path ./.git \) -prune -o \
       \( -name Cargo.toml -o -name rust-toolchain -o -name rust-toolchain.toml -o -name build.rs \) -print
     find .github -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null
     find ci -maxdepth 2 -type f \( -name '*.sh' -o -name '*.py' -o -name '*.js' \) -not -path '*/node_modules/*' 2>/dev/null
