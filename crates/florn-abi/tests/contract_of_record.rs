@@ -197,25 +197,27 @@ fn the_blocks_of_the_text_in_the_repository_are_found_by_the_same_reading() {
     assert_eq!(wit_blocks(&rfc)[0], first_wit_block(&rfc));
 }
 
-/// RFC 012 rule 18: the circuit contract's file is the controller's block of the RFC (the first
-/// ```wit block). The device's block (rule 19, the second) is part of the same package but does not
-/// parse as written (the interface and the world are both named `device`), so it joins the file when
-/// the RFC is amended: see the tripwire test below.
+/// RFC 012 rules 18 and 19: the circuit contract's file is the controller's block and the device's
+/// (the first two ```wit blocks of the RFC, in the order they appear). The third block is the
+/// `florn:cps` package of rule 22.
 #[test]
-fn circuit_wit_equals_rfc_012_block_one() {
+fn circuit_wit_equals_rfc_012_blocks_one_and_two() {
     let rfc = std::fs::read_to_string(root().join("rfcs/accepted/012-circuit-domain.md")).unwrap();
     let file =
         std::fs::read_to_string(root().join("contracts/florn-circuit/wit/circuit.wit")).unwrap();
     assert_eq!(
-        same_as_record(&rfc, &[0], &file),
+        same_as_record(&rfc, &[0, 1], &file),
         Ok(()),
-        "contracts/florn-circuit/wit/circuit.wit differs from RFC 012 rule 18"
+        "contracts/florn-circuit/wit/circuit.wit differs from RFC 012 rules 18 and 19"
     );
+    assert_eq!(wit_blocks(&rfc)[0], first_wit_block(&rfc));
 }
 
-/// The circuit package resolves over the core package, with the world `controller`.
+/// The circuit package resolves over the core package, with both worlds: `controller` and
+/// `device`. The device's interface is `device-model` (RFC 012 rule 19, amended 2026-11-27): WIT
+/// gives an interface and a world one name space, so the two cannot both be `device`.
 #[test]
-fn circuit_wit_parses_as_package_florn_circuit() {
+fn circuit_wit_parses_as_package_florn_circuit_with_both_worlds() {
     let mut resolve = wit_parser::Resolve::default();
     resolve
         .push_dir(root().join("contracts/florn-core/wit"))
@@ -229,26 +231,56 @@ fn circuit_wit_parses_as_package_florn_circuit() {
         ("florn", "circuit")
     );
     assert!(resolve.select_world(&[pkg], Some("controller")).is_ok());
+    let device = resolve
+        .select_world(&[pkg], Some("device"))
+        .expect("the world `device`");
+    let world = &resolve.worlds[device];
+    // The device world exports the interface `device-model` (and the core's, by its include).
+    let exports: Vec<&str> = world
+        .exports
+        .keys()
+        .filter_map(|k| match k {
+            wit_parser::WorldKey::Name(n) => Some(n.as_str()),
+            wit_parser::WorldKey::Interface(i) => resolve.interfaces[*i].name.as_deref(),
+        })
+        .collect();
+    assert!(exports.contains(&"device-model"), "{exports:?}");
+    // The interface carries the four calls of the compound activation (RFC 002 rule 44).
+    let interface = resolve.packages[pkg].interfaces["device-model"];
+    let mut functions: Vec<&str> = resolve.interfaces[interface]
+        .functions
+        .keys()
+        .map(String::as_str)
+        .collect();
+    functions.sort_unstable();
+    assert_eq!(
+        functions,
+        ["accept-step", "begin-step", "evaluate", "reject-step"]
+    );
 }
 
-/// A tripwire for a defect of RFC 012 rule 19's text, put to the architect with the review request
-/// of PR-47: the device block declares `interface device` and `world device`, and WIT has one name
-/// space for both in a package. When the RFC is amended this test fails: the file then takes the
-/// blocks `[0, 1]` (the same-as-record test above) and this test is removed.
+/// The edit of PR-49's first commit is what the RFC says: the text names `device-model`, and a
+/// file that kept the old name would not parse.
 #[test]
-fn the_device_block_of_rfc_012_does_not_parse_beside_the_controllers() {
+fn the_device_block_names_its_interface_device_model_and_the_old_form_does_not_parse() {
     let rfc = std::fs::read_to_string(root().join("rfcs/accepted/012-circuit-domain.md")).unwrap();
     let both = record_of(&rfc, &[0, 1]);
+    assert!(both.contains("interface device-model {"));
+    assert!(both.contains("export device-model;"));
+    assert!(rfc.contains("(Amended 2026-11-27, review of PR-47:"));
+    let old = both
+        .replace("interface device-model {", "interface device {")
+        .replace("export device-model;", "export device;");
     let dir = std::env::temp_dir().join(format!("florn-circuit-wit-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("circuit.wit"), both).unwrap();
+    std::fs::write(dir.join("circuit.wit"), old).unwrap();
     let mut resolve = wit_parser::Resolve::default();
     resolve
         .push_dir(root().join("contracts/florn-core/wit"))
         .expect("the core WIT parses");
     let error = resolve
         .push_dir(&dir)
-        .expect_err("the device block collides with its world");
+        .expect_err("the old names collide with the world");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(
         format!("{error:?}").contains("duplicate item named `device`"),

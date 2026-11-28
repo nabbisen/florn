@@ -41,7 +41,7 @@
         (br $grow)))
     (local.get $p))
 
-  (func (export "florn:circuit/device@0.1.0#begin-step") (param $start i64) (param $h f64)
+  (func (export "florn:circuit/device-model@0.1.0#begin-step") (param $start i64) (param $h f64)
     (global.set $gas (i64.sub (global.get $gas) (i64.const 10)))
     (i64.store (i32.const 0) (local.get $start))
     (f64.store (i32.const 8) (local.get $h))
@@ -51,10 +51,10 @@
     (i64.store (i32.const 16) (local.get $now))
     (i64.store (i32.const 24) (local.get $index)))
 
-  (func (export "florn:circuit/device@0.1.0#reject-step")
+  (func (export "florn:circuit/device-model@0.1.0#reject-step")
     (i32.store (i32.const 32) (i32.add (i32.load (i32.const 32)) (i32.const 1))))
 
-  (func (export "florn:circuit/device@0.1.0#evaluate") (param $ptr i32) (param $len i32) (result i32)
+  (func (export "florn:circuit/device-model@0.1.0#evaluate") (param $ptr i32) (param $len i32) (result i32)
     (local $area i32)
     (local $out i32)
     (local $i i32)
@@ -88,7 +88,7 @@
     (i32.store (i32.const 48) (local.get $area))
     (local.get $area))
 
-  (func (export "cabi_post_florn:circuit/device@0.1.0#evaluate") (param $area i32)
+  (func (export "cabi_post_florn:circuit/device-model@0.1.0#evaluate") (param $area i32)
     (global.set $gas (i64.sub (global.get $gas) (i64.const 1000)))
     (i32.store (i32.const 40) (local.get $area))
     (i32.store (i32.const 44) (i32.add (i32.load (i32.const 44)) (i32.const 1)))

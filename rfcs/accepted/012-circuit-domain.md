@@ -140,11 +140,11 @@ world controller {
 
 The module manifest's `[circuit]` table (the domain table of RFC 008 rule 16; the Host's `validate_module`) declares `kind = "controller"` and names the parameters the domain reads: `period = "<parameter>"` (type `ticks`, required or with a default) and optionally `phase = "<parameter>"` (type `ticks`, default `0`), and may declare `control-units = { input = "rad/s", error = "rad/s" }`, the units of its `control` series (RFC 014 rule 5), a key left out being dimensionless. A controller without a period parameter is `circuit.no-period`. Everything else the guest declares and receives as in RFC 002 section 3: parameters such as gains and a set point, telemetry channels, resources.
 
-**Rule 19.** The device model. Its world includes the core world (for `init`, parameters, telemetry and the diagnostic log) and adds the compound activation. Because the world includes `florn:core/guest`, a device module still **exports the core's `init`, `on-message` and `on-timer`** (the SDK macro writes stubs; the Host never calls the last two) and imports the core `host`; its `send`, `set-timer` and `cancel-timer` are contract violations, there being no queue presence (the Fault's parameter is 12019, rule 20).
+**Rule 19.** The device model. (Amended 2026-11-27, review of PR-47: the interface is `device-model`, because WIT gives an interface and a world one name space; the world stays `device`.) Its world includes the core world (for `init`, parameters, telemetry and the diagnostic log) and adds the compound activation. Because the world includes `florn:core/guest`, a device module still **exports the core's `init`, `on-message` and `on-timer`** (the SDK macro writes stubs; the Host never calls the last two) and imports the core `host`; its `send`, `set-timer` and `cancel-timer` are contract violations, there being no queue presence (the Fault's parameter is 12019, rule 20).
 
 ```wit
 /// A device model: evaluated by the solver inside a step (RFC 002 rules 44 and 45).
-interface device {
+interface device-model {
     use florn:core/types@0.1.0.{tick};
 
     /// Opens a step. `start` is the tick at which the step begins; `h` is its length in
@@ -172,7 +172,7 @@ interface device {
 /// A device model: the core world with the solver's calls.
 world device {
     include florn:core/guest@0.1.0;
-    export device;
+    export device-model;
 }
 ```
 

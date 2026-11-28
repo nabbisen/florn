@@ -21,10 +21,10 @@ pub const DEVICE_WASM: &[u8] = include_bytes!("cases/device.wasm");
 pub const DEVICE_WAT: &str = include_str!("cases/device.wat");
 
 const HOST: &str = "florn:circuit/host@0.1.0";
-const BEGIN_STEP: &str = "florn:circuit/device@0.1.0#begin-step";
+const BEGIN_STEP: &str = "florn:circuit/device-model@0.1.0#begin-step";
 const ON_SAMPLE: &str = "florn:circuit/controller@0.1.0#on-sample";
-const REJECT_STEP: &str = "florn:circuit/device@0.1.0#reject-step";
-const EVALUATE: &str = "florn:circuit/device@0.1.0#evaluate";
+const REJECT_STEP: &str = "florn:circuit/device-model@0.1.0#reject-step";
+const EVALUATE: &str = "florn:circuit/device-model@0.1.0#evaluate";
 
 /// What the cases need of the import spec: `set-output(port: u32, value: f64)`.
 pub fn import_spec() -> ImportSpec {

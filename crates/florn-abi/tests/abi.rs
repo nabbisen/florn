@@ -455,8 +455,8 @@ fn a_list_of_floats_round_trips_and_its_nans_are_canonical() {
 fn the_post_return_export_is_named_from_the_export() {
     // RFC 002 rule 2 and the canonical ABI: `cabi_post_` and the export's own (mangled) name.
     assert_eq!(
-        core_world::post_return_name("florn:circuit/device@0.1.0#evaluate"),
-        "cabi_post_florn:circuit/device@0.1.0#evaluate"
+        core_world::post_return_name("florn:circuit/device-model@0.1.0#evaluate"),
+        "cabi_post_florn:circuit/device-model@0.1.0#evaluate"
     );
 }
 
