@@ -216,6 +216,8 @@ jobs:
         run: ci/check-test-layout.sh
       - name: No flag changes float behaviour (RFC 013 rule 19, control 3)
         run: ci/check-float-flags.sh
+      - name: The lint list holds every float method of the toolchain and every libm function but the table's (RFC 013 rule 19, control 1)
+        run: python3 -I ci/check-float-methods.py
       - name: The controls fail when a violation is planted (fuzz, index, invariants, private paths, test layout, the dependency list, the float flags, the lint list, the opener)
         run: ci/test-gates.sh
       - name: Forbidden words in catalogues (RFC 006 §6)

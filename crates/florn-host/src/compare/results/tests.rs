@@ -168,3 +168,57 @@ fn what_is_not_a_results_file_is_refused() {
     let e = parse("florn-results 1\nh 1.2.3.4.5.6 1 2 3\nbad\n").unwrap_err();
     assert!(e.contains("line 3"), "{e}");
 }
+
+#[test]
+fn a_text_the_writer_would_not_write_is_refused_not_read_as_the_file_it_resembles() {
+    // The reader is frozen on its side too (RFC 013 rule 21): what the writer never writes for
+    // the rows it holds is refused with the line.
+    let rows = vec![Row::Fault {
+        key: EventKey {
+            tick: 7,
+            microstep: 0,
+            class: 7,
+            tie: 3,
+            origin: 1,
+            seq: 1,
+        },
+        actor: 3,
+        kind: 2,
+        parameter: 12018,
+        work: 9,
+    }];
+    let text = write(&rows);
+    assert_eq!(parse(&text).as_ref(), Ok(&rows));
+    for (what, doctored) in [
+        ("a carriage return", text.replace('\n', "\r\n")),
+        ("a leading zero", text.replace(" 12018 ", " 012018 ")),
+        ("a sign", text.replace(" 9\n", " +9\n")),
+        ("an empty line at the end", format!("{text}\n")),
+        ("no line end at the end", text.trim_end().to_string()),
+    ] {
+        let e = parse(&doctored).unwrap_err();
+        assert!(e.starts_with("line "), "{what}: {e}");
+    }
+}
+
+#[test]
+fn an_upper_case_hexadecimal_digit_in_a_number_or_a_digest_is_refused() {
+    let digest = *blake3::hash(b"x").as_bytes();
+    let rows = vec![Row::Intervention {
+        key: EventKey {
+            tick: 1,
+            microstep: 0,
+            class: 0,
+            tie: 0,
+            origin: 1,
+            seq: 1,
+        },
+        digest,
+        len: 4,
+    }];
+    let text = write(&rows);
+    assert_eq!(parse(&text).as_ref(), Ok(&rows));
+    let upper = text.to_uppercase().replacen("I ", "i ", 1);
+    let e = parse(&upper).unwrap_err();
+    assert!(e.contains("line"), "{e}");
+}

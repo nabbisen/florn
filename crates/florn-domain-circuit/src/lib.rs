@@ -15,6 +15,9 @@
 //! controller and the device model are the units after it, in
 //! `rfcs/handoffs/012-circuit-domain/task-breakdown-pr-plan.md`.
 #![forbid(unsafe_code)]
+// RFC 013 rule 19, control 1: no `allow` of the lint can hide a call of a float method the rule
+// disallows (`clippy.toml`).
+#![forbid(clippy::disallowed_methods)]
 
 use florn_admission::manifest::ModuleManifest;
 use florn_control::message::InspectField;

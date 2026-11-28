@@ -19,6 +19,7 @@ ci/forbidden-words.sh
 ci/check-shell-exports.sh
 ci/check-test-layout.sh
 ci/check-float-flags.sh
+python3 -I ci/check-float-methods.py
 ci/test-gates.sh
 ```
 

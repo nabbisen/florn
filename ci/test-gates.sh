@@ -252,6 +252,15 @@ if op == "add":
     name, req, kind, package = sys.argv[4:8]
     pkg = next(p for p in meta["packages"] if p["name"] == package)
     pkg["dependencies"].append({"name": name, "req": req, "kind": None if kind == "normal" else kind})
+elif op in ("feature", "defaults"):
+    name, package, feature = sys.argv[4:7]
+    pkg = next(p for p in meta["packages"] if p["name"] == package)
+    for d in pkg["dependencies"]:
+        if d["name"] == name:
+            if op == "feature":
+                d["features"] = d.get("features", []) + [feature]
+            else:
+                d["uses_default_features"] = True
 else:
     name, package = sys.argv[4:6]
     pkg = next(p for p in meta["packages"] if p["name"] == package)
@@ -271,6 +280,10 @@ PY
   expect pass "check-deps.py allows a development dependency in the circuit domain" deps_check "$scratch/planted.json"
   plant_dep loosen libm florn-domain-circuit
   expect fail "check-deps.py fails libm required as a range" deps_check "$scratch/planted.json"
+  plant_dep feature libm florn-domain-circuit arch
+  expect fail "check-deps.py fails libm with a feature (arch lets it call the platform)" deps_check "$scratch/planted.json"
+  plant_dep defaults libm florn-domain-circuit x
+  expect fail "check-deps.py fails libm with its default features" deps_check "$scratch/planted.json"
   plant_dep loosen blake3 florn-kernel
   expect fail "check-deps.py fails an external dependency of another crate required as a range" deps_check "$scratch/planted.json"
 else
@@ -323,6 +336,23 @@ plant crates/c/build.rs 'fn flags() { println!("cargo:rustc-flags=-C target-cpu=
 expect fail "check-float-flags.sh fails a build.rs that sets target-cpu" flags
 plant ci/build.sh 'export RUSTFLAGS="-C target-feature=+sse4.2"'
 expect fail "check-float-flags.sh fails an exported RUSTFLAGS in a ci/ script" flags
+plant .cargo/config.toml '[unstable]'
+printf 'build-std = ["core"]\n' >>"$scratch/w/.cargo/config.toml"
+expect fail "check-float-flags.sh fails an [unstable] table in .cargo/config.toml" flags
+plant .github/workflows/ci.yml '      - run: RUSTC_BOOTSTRAP=1 cargo build'
+expect fail "check-float-flags.sh fails RUSTC_BOOTSTRAP in a workflow" flags
+plant ci/build.sh 'export RUSTC_BOOTSTRAP=1'
+expect fail "check-float-flags.sh fails RUSTC_BOOTSTRAP in a ci/ script" flags
+plant .cargo/config.toml '[build]'
+printf 'rustc-wrapper = "/usr/bin/wrapper"\n' >>"$scratch/w/.cargo/config.toml"
+expect fail "check-float-flags.sh fails build.rustc-wrapper" flags
+plant .cargo/config.toml '[build]'
+printf 'rustc-workspace-wrapper = "/usr/bin/wrapper"\n' >>"$scratch/w/.cargo/config.toml"
+expect fail "check-float-flags.sh fails build.rustc-workspace-wrapper" flags
+plant .github/workflows/ci.yml '      - run: RUSTC_WRAPPER=sccache cargo build'
+expect fail "check-float-flags.sh fails RUSTC_WRAPPER in a workflow" flags
+plant Cargo.toml 'codegen-backend = "cranelift"'
+expect fail "check-float-flags.sh fails a code-generation backend in a Cargo.toml" flags
 plant ci/build.sh '# RUSTFLAGS with target-cpu=native would break NUM-001'
 expect pass "check-float-flags.sh passes a comment that names a flag" flags
 plant Cargo.toml '# rustflags = ["-C", "target-cpu=native"]   (a comment)'
@@ -338,43 +368,61 @@ if command -v cargo >/dev/null 2>&1 && cargo clippy --version >/dev/null 2>&1 &&
   cp crates/florn-domain-circuit/clippy.toml "$c/clippy.toml"
   # The toolchain of the repository: the scratch crate is outside it, so rustup is told.
   cp rust-toolchain.toml "$c/"
-  printf '[package]\nname = "scratch"\nversion = "0.0.0"\nedition = "2024"\n' >"$c/Cargo.toml"
-  # One call of every method the file lists, by name, with the arguments of its arity.
+  libm_req=$(sed -n 's/^libm = { version = "\(=[0-9.]*\)", default-features = false }/\1/p' Cargo.toml)
+  printf '[package]\nname = "scratch"\nversion = "0.0.0"\nedition = "2024"\n\n[dependencies]\nlibm = { version = "%s", default-features = false }\n' "$libm_req" >"$c/Cargo.toml"
+  # One use of every method and function the file lists, by its path (a path used as a value is a
+  # use the lint sees, whatever the method's arity).
   python3 -I - "$c" <<'PY'
 import re, sys
 root = sys.argv[1]
 toml = open(root + "/clippy.toml").read()
-methods = re.findall(r'path = "f64::(\w+)"', toml)
-args = {"log": "y", "powf": "y", "hypot": "y", "atan2": "y", "min": "y", "max": "y", "powi": "2", "mul_add": "y, z"}
-out = ["#![allow(dead_code)]"]
-for m in methods:
-    out.append(f"pub fn call_{m}(x: f64, y: f64, z: f64) -> f64 {{ let _ = (y, z); x.{m}({args.get(m, '')}) }}")
+paths = re.findall(r'path = "([^"]+)"', toml)
+out = ["#![allow(dead_code, unused)]"]
+for k, p in enumerate(paths):
+    use = p + "::<i32>" if p.endswith("::to_int_unchecked") else p  # the one generic method
+    out.append(f"pub fn use_{k}() {{ let _ = {use}; }}")
 open(root + "/src/lib.rs", "w").write("\n".join(out) + "\n")
-open(root + "/methods", "w").write("\n".join(methods) + "\n")
+open(root + "/paths", "w").write("\n".join(paths) + "\n")
 PY
   clippy_in() { (cd "$c" && cargo clippy --offline -q -- -D warnings); }
-  expect fail "the circuit domain's clippy.toml makes cargo clippy fail on the std float methods" clippy_in
-  # Every listed method is named in the failure, and each is one the rule lists.
+  expect fail "the circuit domain's clippy.toml makes cargo clippy fail on the float methods and the libm functions" clippy_in
+  # Every listed path is named in the failure.
   (cd "$c" && cargo clippy --offline -q -- -D warnings) >"$scratch/clippy.out" 2>&1
   missing=""
-  for m in $(cat "$c/methods"); do
-    grep -q "disallowed method \`f64::$m\`" "$scratch/clippy.out" || missing="$missing $m"
+  for m in $(cat "$c/paths"); do
+    grep -q "disallowed method \`$m\`" "$scratch/clippy.out" || missing="$missing $m"
   done
   tested=$((tested + 1))
-  if [ -z "$missing" ] && [ "$(wc -l <"$c/methods")" -ge 25 ]; then
-    echo "ok    the failure names every method of the list ($(wc -l <"$c/methods") of them)"
+  if [ -z "$missing" ] && [ "$(wc -l <"$c/paths")" -ge 100 ]; then
+    echo "ok    the failure names every path of the list ($(wc -l <"$c/paths") of them: f64, f32, libm)"
   else
     echo "FAIL  the failure does not name:$missing"
     failed=$((failed + 1))
   fi
-  # The operations the rule allows pass: sqrt, abs, floor, ceil, trunc, copysign, arithmetic.
-  printf 'pub fn ok(x: f64, y: f64) -> f64 { x.sqrt() + x.abs() + x.floor() + x.ceil() + x.trunc() + x.copysign(y) + x * y - x / y }\n' >"$c/src/lib.rs"
-  expect pass "the operations the rule allows pass cargo clippy under the same file" clippy_in
+  # The operations the rule allows pass: sqrt, abs, floor, ceil, trunc, copysign, arithmetic, and
+  # the three libm functions of the table.
+  printf 'pub fn ok(x: f64, y: f64) -> f64 { x.sqrt() + x.abs() + x.floor() + x.ceil() + x.trunc() + x.copysign(y) + x * y - x / y + libm::exp(x) + libm::log(x) + libm::cbrt(x) }\n' >"$c/src/lib.rs"
+  expect pass "the operations the rule allows, and the three libm functions of the table, pass cargo clippy" clippy_in
+  # The cases the verifier of PR-48 walked round the first list: methods outside the 25.
+  for call in 'x.sin_cos()' 'x.asinh()' 'x.acosh()' 'x.atanh()' 'x.round()' 'x.fract()' 'x.signum()' 'x.recip()' 'x.clamp(y, y)' 'x.rem_euclid(y)' 'x.to_degrees()' 'x.to_radians()' 'x.algebraic_add(y)' '(x as f32).exp() as f64'; do
+    printf 'pub fn bad(x: f64, y: f64) -> f64 { let _ = %s; x }\n' "$call" >"$c/src/lib.rs"
+    expect fail "a std $call placed in the crate fails cargo clippy" clippy_in
+  done
+  printf 'pub fn bad(x: f64) -> f64 { libm::sin(x) }\n' >"$c/src/lib.rs"
+  expect fail "libm::sin, a function the table does not name, fails cargo clippy" clippy_in
+  # An `allow` hides nothing: the crate's root forbids the lint, and a forbidden lint cannot be allowed.
+  printf '#![forbid(clippy::disallowed_methods)]\n#[allow(clippy::disallowed_methods)]\npub fn bad(x: f64) -> f64 { x.exp() }\n' >"$c/src/lib.rs"
+  expect fail "an allow of disallowed_methods under the crate's forbid fails" clippy_in
+  printf '#[allow(clippy::disallowed_methods)]\npub fn bad(x: f64) -> f64 { x.exp() }\n' >"$c/src/lib.rs"
+  expect pass "an allow of disallowed_methods hides a std exp without the forbid (what the forbid is for)" clippy_in
+  tested=$((tested + 1))
+  if grep -q '^#!\[forbid(clippy::disallowed_methods)\]' crates/florn-domain-circuit/src/lib.rs; then
+    echo "ok    the crate's root forbids clippy::disallowed_methods"
+  else
+    echo "FAIL  the crate's root does not forbid clippy::disallowed_methods"
+    failed=$((failed + 1))
+  fi
   # And the file with its list emptied lets every method through: the list is what holds.
-  printf 'pub fn bad(x: f64) -> f64 { x.exp() }\n' >"$c/src/lib.rs"
-  expect fail "a std exp placed in the crate fails cargo clippy" clippy_in
-  printf 'pub fn bad(x: f64, y: f64) -> f64 { x.min(y) }\n' >"$c/src/lib.rs"
-  expect fail "f64::min placed in the crate fails cargo clippy" clippy_in
   printf 'pub fn bad(x: f64) -> f64 { x.exp() }\n' >"$c/src/lib.rs"
   : >"$c/clippy.toml"
   expect pass "an empty clippy.toml lets a std exp through (the list is what holds)" clippy_in
@@ -385,6 +433,33 @@ elif [ -n "${CI:-}" ]; then
   echo "FAIL  the clippy control could not run: cargo with clippy and python3 are needed in CI"
 else
   echo "skip  the clippy control: cargo with clippy and python3 are needed"
+fi
+
+# --- ci/check-float-methods.py: the list is every method of the toolchain (control 1) ------------
+if command -v python3 >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
+  docs="$(rustc --print sysroot)/share/doc/rust/html/std"
+  if [ -f "$docs/primitive.f64.html" ]; then
+    expect pass "check-float-methods.py passes the list as it is" python3 -I ci/check-float-methods.py
+    toml=crates/florn-domain-circuit/clippy.toml
+    for gone in 'f64::asinh' 'f32::sin_cos' 'f64::algebraic_add' 'libm::sin' 'f64::exp'; do
+      grep -v "path = \"$gone\"" "$toml" >"$scratch/trimmed.toml"
+      expect fail "check-float-methods.py fails a list without $gone" python3 -I ci/check-float-methods.py --clippy-toml "$scratch/trimmed.toml"
+    done
+    { cat "$toml"; } | sed 's/^disallowed-methods = \[/disallowed-methods = [\n    { path = "f64::not_a_method", reason = "x" },/' >"$scratch/extra.toml"
+    expect fail "check-float-methods.py fails a list with a name that is no method of the toolchain" python3 -I ci/check-float-methods.py --clippy-toml "$scratch/extra.toml"
+    # A toolchain that has a method the list lacks: a copy of the documentation with one more.
+    mkdir -p "$scratch/docs"
+    cp "$docs/primitive.f64.html" "$docs/primitive.f32.html" "$scratch/docs/"
+    sed -i 's#<details class="toggle method-toggle" open><summary><section id="method.sqrt" class="method">#<details class="toggle method-toggle" open><summary><section id="method.next_gen_sin" class="method"></section></summary></details><details class="toggle method-toggle" open><summary><section id="method.sqrt" class="method">#' "$scratch/docs/primitive.f64.html"
+    expect fail "check-float-methods.py fails a toolchain with a method the list lacks" python3 -I ci/check-float-methods.py --docs "$scratch/docs"
+    expect pass "check-float-methods.py passes the documentation copied unchanged" python3 -I ci/check-float-methods.py --docs "$docs"
+  elif [ -n "${CI:-}" ]; then
+    tested=$((tested + 1))
+    failed=$((failed + 1))
+    echo "FAIL  the method list's control could not run: rust-docs is a component of rust-toolchain.toml and is missing"
+  else
+    echo "skip  the method list's control: the toolchain's documentation is not installed"
+  fi
 fi
 
 # --- the browser kit's page opener ----------------------------------------------------------------

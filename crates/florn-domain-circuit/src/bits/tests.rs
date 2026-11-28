@@ -195,3 +195,29 @@ fn a_doctored_function_fails_the_comparison_with_the_file() {
         Ok(table().len())
     );
 }
+
+#[test]
+fn no_line_of_the_table_is_written_twice() {
+    let text = render(&table());
+    let mut seen = std::collections::BTreeSet::new();
+    for line in text.lines() {
+        assert!(seen.insert(line), "a line written twice: {line}");
+    }
+}
+
+#[test]
+fn a_file_with_a_carriage_return_or_without_its_last_line_end_is_refused_not_read() {
+    let t = table();
+    let text = render(&t);
+    // The same lines with CRLF ends are not the file the writer writes.
+    let crlf = text.replace('\n', "\r\n");
+    let e = compare(&crlf, &t).unwrap_err();
+    assert!(e[0].contains("the form the writer writes"), "{e:?}");
+    // Nor a file whose last line end is gone.
+    let e = compare(text.trim_end_matches('\n'), &t).unwrap_err();
+    assert!(e[0].contains("the form the writer writes"), "{e:?}");
+    // Nor an upper-case digit: it is not the line rendered.
+    let upper = text.replacen("3ff0000000000000", "3FF0000000000000", 1);
+    assert!(compare(&upper, &t).is_err());
+    assert_eq!(compare(&text, &t), Ok(t.len()));
+}

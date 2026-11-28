@@ -149,6 +149,13 @@ fn sweep(count: usize, seed: u64) -> Vec<u64> {
         .collect()
 }
 
+/// The values without a repeat, in the order they first appear: a line of the table is written
+/// once.
+fn unique(values: Vec<u64>) -> Vec<u64> {
+    let mut seen = std::collections::BTreeSet::new();
+    values.into_iter().filter(|v| seen.insert(*v)).collect()
+}
+
 /// The pairs of the binary operations: every one of the first values with every other.
 fn pairs(values: &[u64]) -> Vec<(u64, u64)> {
     let mut out = Vec::new();
@@ -173,6 +180,7 @@ pub fn table_using(f: &Functions) -> Vec<Entry> {
     let specials = specials();
     let mut values = specials.clone();
     values.extend(sweep(300, 1));
+    let values = unique(values);
     for bits in &values {
         let x = f64::from_bits(*bits);
         push("exp", &[*bits], (f.exp)(x));
@@ -193,6 +201,7 @@ pub fn table_using(f: &Functions) -> Vec<Entry> {
         0x7ff8_0000_0000_0001,
         0xfff8_0000_0000_0000,
     ]);
+    let nasty = unique(nasty);
     for (a, b) in pairs(&nasty) {
         let (x, y) = (f64::from_bits(a), f64::from_bits(b));
         push("add", &[a, b], x + y);
@@ -203,7 +212,7 @@ pub fn table_using(f: &Functions) -> Vec<Entry> {
         push("fmax", &[a, b], (f.fmax)(x, y));
         push("copysign", &[a, b], x.copysign(y));
     }
-    let ordinary = sweep(40, 7);
+    let ordinary = unique(sweep(40, 7));
     for pair in ordinary.chunks(2) {
         let (a, b) = (pair[0], pair[1]);
         let (x, y) = (f64::from_bits(a), f64::from_bits(b));
@@ -298,6 +307,13 @@ pub fn render(table: &[Entry]) -> String {
 /// A table against the file the kit recorded: the number of lines that agree, or what differs
 /// (at most the first eight lines that do, and the counts).
 pub fn compare(file: &str, now: &[Entry]) -> Result<usize, Vec<String>> {
+    // The syntax is frozen on both sides: a carriage return, or a file that does not end in a line
+    // end, is not the file the writer writes (an upper-case digit differs from the rendered line).
+    if file.contains('\r') || !file.ends_with('\n') {
+        return Err(vec![
+            "the file is not in the form the writer writes (a carriage return, or no line end at the end)".into(),
+        ]);
+    }
     let mut lines = file.lines();
     if lines.next() != Some(FIRST_LINE) {
         return Err(vec![format!("the file does not begin with `{FIRST_LINE}`")]);

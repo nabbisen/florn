@@ -9,6 +9,8 @@
 #   - `rust-toolchain` and `rust-toolchain.toml` (a nightly toolchain is what lets `-Z` work)
 #   - every `Cargo.toml` (profiles, `rustflags`)
 #   - the scripts of `ci/` and every `build.rs` (a `cargo:rustc-flags`, an exported `RUSTFLAGS`)
+# Cargo's own unstable switches count: an `[unstable]` table, `RUSTC_BOOTSTRAP` (which makes `-Z` work
+# on stable), `rustc` wrappers and a code-generation backend (a program that may change any flag).
 # The fuzz job's `cargo +nightly fuzz` is not a flag: cargo-fuzz builds its own targets, which no
 # result is compared from. A comment (a line that begins with `#` or `//` after any space) is not a flag.
 # Usage: ci/check-float-flags.sh [root]   (default: the repository)
@@ -17,7 +19,7 @@ root=${1:-$(cd "$(dirname "$0")/.." && pwd)}
 cd "$root" || exit 2
 
 # The flags and where they are written: one token per alternative.
-forbidden='target[-_]cpu|target[-_]feature|llvm[-_]args|fast[-_]math|ffast|fp[-_]contract|fp-model|unsafe[-_]fp|(^|[^A-Za-z0-9_-])-Z[A-Za-z ]|unstable-options|channel *= *"nightly'
+forbidden='target[-_]cpu|target[-_]feature|llvm[-_]args|fast[-_]math|ffast|fp[-_]contract|fp-model|unsafe[-_]fp|(^|[^A-Za-z0-9_-])-Z[A-Za-z ]|unstable-options|channel *= *"nightly|^[[:space:]]*\[unstable\]|RUSTC_BOOTSTRAP|rustc[-_]wrapper|rustc[-_]workspace[-_]wrapper|RUSTC_WRAPPER|RUSTC_WORKSPACE_WRAPPER|codegen[-_]backend'
 
 files=$(
   {

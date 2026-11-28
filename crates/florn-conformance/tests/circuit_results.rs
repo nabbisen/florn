@@ -209,51 +209,154 @@ fn crate_sources() -> Vec<PathBuf> {
     out
 }
 
-/// The `libm` functions a source text calls, and whether it names `libm` in a form that cannot be
-/// read call by call (`use libm`, `libm::{`).
-fn libm_calls(text: &str) -> (BTreeSet<String>, bool) {
-    let mut calls = BTreeSet::new();
-    let mut unreadable = false;
-    for line in text.lines() {
-        let code = line.split("//").next().unwrap_or("");
-        if code.contains("use libm")
-            || code.contains("libm::{")
-            || code.contains("extern crate libm")
-        {
-            unreadable = true;
-        }
-        let mut rest = code;
-        while let Some(at) = rest.find("libm::") {
-            let after = &rest[at + 6..];
-            let name: String = after
-                .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                .collect();
-            if name.is_empty() {
-                unreadable = true;
-            } else {
-                calls.insert(name);
+/// A token of Rust source, as far as the check of `libm` needs: identifiers and single punctuation
+/// marks. Comments, string and character literals, and numbers are skipped, so a `libm::sin` in a
+/// comment or in a string is not a call and one after a `"//"` in a string is seen.
+#[derive(Debug, PartialEq, Eq)]
+enum Token {
+    Ident(String),
+    Punct(char),
+}
+
+fn tokens(src: &str) -> Vec<Token> {
+    let c: Vec<char> = src.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    let at = |i: usize| c.get(i).copied().unwrap_or('\0');
+    while i < c.len() {
+        let ch = c[i];
+        if ch.is_whitespace() {
+            i += 1;
+        } else if ch == '/' && at(i + 1) == '/' {
+            while i < c.len() && c[i] != '\n' {
+                i += 1;
             }
-            rest = after;
+        } else if ch == '/' && at(i + 1) == '*' {
+            let mut depth = 1;
+            i += 2;
+            while i < c.len() && depth > 0 {
+                if c[i] == '/' && at(i + 1) == '*' {
+                    depth += 1;
+                    i += 2;
+                } else if c[i] == '*' && at(i + 1) == '/' {
+                    depth -= 1;
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+        } else if ch == '"' || (matches!(ch, 'b' | 'c') && at(i + 1) == '"') {
+            i += if ch == '"' { 1 } else { 2 };
+            while i < c.len() && c[i] != '"' {
+                i += if c[i] == '\\' { 2 } else { 1 };
+            }
+            i += 1;
+        } else if (ch == 'r' || (matches!(ch, 'b' | 'c') && at(i + 1) == 'r')) && {
+            let mut j = i + if ch == 'r' { 1 } else { 2 };
+            while at(j) == '#' {
+                j += 1;
+            }
+            at(j) == '"'
+        } {
+            // A raw string: r"..", r#".."#, br".." and the like.
+            let mut j = i + if ch == 'r' { 1 } else { 2 };
+            let mut hashes = 0;
+            while at(j) == '#' {
+                hashes += 1;
+                j += 1;
+            }
+            j += 1;
+            loop {
+                if j >= c.len() {
+                    break;
+                }
+                if c[j] == '"' && (1..=hashes).all(|k| at(j + k) == '#') {
+                    j += 1 + hashes;
+                    break;
+                }
+                j += 1;
+            }
+            i = j;
+        } else if ch == '\'' {
+            // A character literal ('x', '\n', '\u{..}') or a lifetime ('a).
+            if at(i + 1) == '\\' {
+                i += 2;
+                while i < c.len() && c[i] != '\'' {
+                    i += 1;
+                }
+                i += 1;
+            } else if at(i + 2) == '\'' {
+                i += 3;
+            } else {
+                i += 1;
+            }
+        } else if ch.is_ascii_digit() {
+            while at(i).is_ascii_alphanumeric() || at(i) == '_' {
+                i += 1;
+            }
+        } else if ch.is_alphabetic() || ch == '_' {
+            let start = i;
+            while at(i).is_alphanumeric() || at(i) == '_' {
+                i += 1;
+            }
+            out.push(Token::Ident(c[start..i].iter().collect()));
+        } else {
+            out.push(Token::Punct(ch));
+            i += 1;
         }
     }
-    (calls, unreadable)
+    out
+}
+
+/// What a source text does with `libm`: the functions it calls by a path `libm::name`, and every
+/// other way the word is used (a `use`, a brace list, an alias, a name made by a macro), which the
+/// check cannot read and so refuses.
+fn libm_use(src: &str) -> (BTreeSet<String>, Vec<String>) {
+    let t = tokens(src);
+    let (mut calls, mut other) = (BTreeSet::new(), Vec::new());
+    for (k, tok) in t.iter().enumerate() {
+        if *tok != Token::Ident("libm".into()) {
+            continue;
+        }
+        let colons =
+            t.get(k + 1) == Some(&Token::Punct(':')) && t.get(k + 2) == Some(&Token::Punct(':'));
+        match (colons, t.get(k + 3)) {
+            (true, Some(Token::Ident(name))) => {
+                calls.insert(name.clone());
+            }
+            _ => other.push(format!("token {k}")),
+        }
+    }
+    (calls, other)
+}
+
+/// What is wrong with one source file of the crate as to `libm`: a use the check cannot read, or a
+/// call outside `crate::math` (RFC 013 rule 19, control 4).
+fn libm_problems(path: &Path, text: &str) -> Vec<String> {
+    let (calls, other) = libm_use(text);
+    let mut problems = Vec::new();
+    if !other.is_empty() {
+        problems.push(format!(
+            "`libm` is used in a form the check cannot read: {other:?}"
+        ));
+    }
+    if !calls.is_empty() && !path.ends_with("src/math.rs") {
+        problems.push(format!("calls libm outside crate::math: {calls:?}"));
+    }
+    problems
 }
 
 #[test]
-fn the_crate_calls_no_libm_function_the_table_does_not_list() {
+fn every_libm_call_goes_through_crate_math_and_names_a_function_of_the_table() {
     let listed: BTreeSet<String> = bits::LIBM.iter().map(|(l, _)| l.to_string()).collect();
     let sources = crate_sources();
     assert!(sources.len() > 20, "the crate's sources were found");
     let mut called = BTreeSet::new();
     for path in sources {
-        let (calls, unreadable) = libm_calls(&std::fs::read_to_string(&path).unwrap());
-        assert!(
-            !unreadable,
-            "{}: `libm` is named in a form the check cannot read",
-            path.display()
-        );
-        called.extend(calls);
+        let text = std::fs::read_to_string(&path).unwrap();
+        let problems = libm_problems(&path, &text);
+        assert!(problems.is_empty(), "{}: {problems:?}", path.display());
+        called.extend(libm_use(&text).0);
     }
     let missing: Vec<&String> = called.difference(&listed).collect();
     assert!(
@@ -265,21 +368,58 @@ fn the_crate_calls_no_libm_function_the_table_does_not_list() {
 }
 
 #[test]
-fn the_check_of_the_sources_fails_on_a_planted_libm_call() {
-    let (calls, _) = libm_calls("fn f(x: f64) -> f64 { libm::exp(x) + libm::sinh(x) }");
-    let listed: BTreeSet<String> = bits::LIBM.iter().map(|(l, _)| l.to_string()).collect();
+fn a_libm_call_outside_crate_math_is_a_problem_and_inside_it_is_not() {
+    let call = "pub fn f(x: f64) -> f64 { libm::exp(x) }";
+    let elsewhere = Path::new("crates/florn-domain-circuit/src/newton.rs");
+    let home = Path::new("crates/florn-domain-circuit/src/math.rs");
+    assert_eq!(libm_problems(elsewhere, call).len(), 1);
+    assert!(libm_problems(home, call).is_empty());
+    assert_eq!(libm_problems(elsewhere, "use libm::exp;").len(), 1);
+    // A name that hides is a problem even at home.
+    assert_eq!(libm_problems(home, "use libm::{exp, log};").len(), 1);
+}
+
+#[test]
+fn the_check_of_the_sources_fails_on_every_form_a_call_can_take() {
+    let calls = |src: &str| libm_use(src).0.into_iter().collect::<Vec<_>>();
+    let other = |src: &str| libm_use(src).1.len();
+    // A plain call, a spaced path, a path with its name on the next line, a call after a string
+    // that holds `//`, a call in a macro's body, an attribute-looking line.
     assert_eq!(
-        calls.difference(&listed).collect::<Vec<_>>(),
-        [&"sinh".to_string()]
+        calls("fn f(x: f64) -> f64 { libm::exp(x) + libm::sinh(x) }"),
+        ["exp", "sinh"]
     );
-    // A comment is not a call; a form that hides the name is refused.
-    assert!(
-        libm_calls("// libm::tanh is not used\nfn f() {}")
-            .0
-            .is_empty()
+    assert_eq!(calls("fn f(x: f64) -> f64 { libm ::sin(x) }"), ["sin"]);
+    assert_eq!(calls("fn f(x: f64) -> f64 { libm::\n    sin(x) }"), ["sin"]);
+    assert_eq!(
+        calls("fn f(x: f64) -> f64 { let _s = \"//\"; libm::sin(x) }"),
+        ["sin"]
     );
-    assert!(libm_calls("use libm::{exp, ln};").1);
-    assert!(libm_calls("use libm;").1);
+    assert_eq!(
+        calls("macro_rules! m { ($x:expr) => { libm::tanh($x) }; }"),
+        ["tanh"]
+    );
+    assert_eq!(
+        calls("fn f() { let _: fn(f64) -> f64 = libm::cos; }"),
+        ["cos"]
+    );
+    // The forms that hide the name are refused: a `use`, a brace list, an alias, a macro's name.
+    assert_eq!(other("use libm::{exp, ln};"), 1);
+    assert_eq!(other("use libm;"), 1);
+    assert_eq!(other("extern crate libm as m;"), 1);
+    assert_eq!(
+        other("macro_rules! m { ($f:ident) => { libm::$f(1.0) }; }"),
+        1
+    );
+    // A comment, a string, a raw string and a character are not a call.
+    assert!(calls("// libm::tanh is not used\nfn f() {}").is_empty());
+    assert!(calls("/* libm::tanh /* nested */ libm::sin */ fn f() {}").is_empty());
+    assert!(calls("fn f() -> &'static str { \"libm::sin\" }").is_empty());
+    assert!(calls("fn f() -> &'static str { r#\"libm::sin \" libm::cos\"# }").is_empty());
+    assert!(calls("fn f() -> char { 'l' }  // 'libm::sin'").is_empty());
+    assert!(calls("fn f<'a>(x: &'a str) -> &'a str { x }").is_empty());
+    // A name that only contains the word is not it.
+    assert!(calls("fn my_libm_wrapper() { not_libm::sin(); }").is_empty());
 }
 
 #[test]

@@ -241,8 +241,29 @@ fn effect_of(token: &str) -> Option<Effect> {
     }
 }
 
-/// The rows of a results file, or the line that is not one.
+/// The rows of a results file, or the line that is not one. The syntax is frozen on both sides
+/// (RFC 013 rule 21): a text the writer would not write for the rows it holds is refused, so a
+/// carriage return, an upper-case hexadecimal digit, a sign or a leading zero on a number, or an
+/// empty line at the end is not read as the file it resembles.
 pub fn parse(text: &str) -> Result<Vec<Row>, String> {
+    let rows = parse_lines(text)?;
+    let written = write(&rows);
+    if written != text {
+        let (a, b) = (text.split('\n'), written.split('\n'));
+        let n = a
+            .clone()
+            .zip(b.clone())
+            .position(|(x, y)| x != y)
+            .unwrap_or_else(|| a.count().min(b.count()));
+        return Err(format!(
+            "line {}: not the text the writer writes for it (a carriage return, an upper-case digit, a sign, a leading zero, or an empty line)",
+            n + 1
+        ));
+    }
+    Ok(rows)
+}
+
+fn parse_lines(text: &str) -> Result<Vec<Row>, String> {
     let mut lines = text.lines();
     if lines.next() != Some(FIRST_LINE) {
         return Err(format!("the first line is not `{FIRST_LINE}`"));

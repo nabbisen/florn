@@ -82,6 +82,16 @@ for p in meta["packages"]:
         extra = external - EXTERNAL[p["name"]]
         if extra:
             print(f"{p['name']}: external dependencies {sorted(extra)}, only {sorted(EXTERNAL[p['name']])} allowed (RFC 013 rule 19)"); bad += 1
+# `libm` with a feature is `libm` that may call the platform: `arch` (a default feature) selects the
+# target's own instructions for the operations it can, which is what rule 19 keeps out. Wherever a
+# workspace crate depends on it, it is `default-features = false` and no feature (amended 2026-11-28).
+for p in meta["packages"]:
+    if p["name"] not in workspace:
+        continue
+    for d in p["dependencies"]:
+        if d["name"] == "libm" and (d.get("features") or d.get("uses_default_features")):
+            how = f"features {sorted(d['features'])}" if d.get("features") else "its default features"
+            print(f"{p['name']}: libm with {how}; it takes default-features = false and no feature (RFC 013 rule 19)"); bad += 1
 for crate in sorted(workspace):
     florn_direct = {d for d in direct(crate) if d.startswith("florn")}
     extra = florn_direct - ALLOWED.get(crate, set())
