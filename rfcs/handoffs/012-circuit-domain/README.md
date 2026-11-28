@@ -32,7 +32,14 @@ PR-47 is done (`0aab066`, `6bd3c35`, `bd6b4fd`, 2026-11-26): the first guest of 
 
 Milestone M3 is complete (PR-44 to PR-48): Phase 4's exit criterion is met. **M4 has begun:** PR-49 is done (`8c400b9`, `bafb39e`, `db48434`, 2026-11-28). It brings the device model: the solver calls a guest device inside every step, `guest-diode` agrees with the built-in diode to 0 V, and all seven circuit scenarios are `matched` on all five engines. RFC 013 rule 19's controls are hardened.
 
-**Next: PR-50, two domains in one actor.** Read its row in `task-breakdown-pr-plan.md`, section 3.7 of `implementation-handoff.md` and B-50 first; it starts from RFC 012 rule 22 and RFC 002 rule 48. It brings the composed world `florn:cps` (the third block of RFC 012, tested like the other two), `florn-guest-cps`, `networked-pid` and `cps-loop`, registered with `Domains::with_composed` (PR-39) in the runner and the shell, and the rows of RFC 012 section 10 that need it ("input outside a sample"). No first commit is asked for.
+PR-50 is done (`9cfcb41`, 2026-11-28): one actor in two domains, `networked-pid` on the circuit, and `cps-loop`, which is `matched` on all five engines.
+
+**Next: PR-51, the detector** (the last unit of M4). Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-51 first; it starts from RFC 012 rule 13 and RFC 013 rule 15. It brings `comparator-latch`, with its results file on the five engines.
+
+**Its first commit, from PR-50's review: `cps-link`** (RFC 012 rule 27, amended). A scenario file cannot carry the `message` intervention of `cps-loop`, so the shipped file never runs the composed actor's `on-message` on the five engines. `cps-link` is the same plant with a peer actor on a `network/link` that sends the new set point once: eight bytes, the little-endian `f64` (40 rad/s at 600.5 ms, as the kit's test uses).
+- Write the peer as a small example guest of the network SDK. `net_echo` sends its ordinal, which is no set point.
+- Ship `cps-link` with a digest and a results file, and put it in the cross-Host checkpoint check.
+- The loop follows the new set point on every engine.
 
 ## What Phase 4 delivers
 
