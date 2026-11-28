@@ -34,10 +34,17 @@ Milestone M3 is complete (PR-44 to PR-48): Phase 4's exit criterion is met. **M4
 
 **Milestone M4 is complete** with PR-51 (`8839c86`, `dc99597`, 2026-11-28). `guest-diode` agrees with the built-in diode, `cps-loop` and `cps-link` work (the composed actor's `on-message` on every engine), `comparator-latch` passes, and the hostile scenarios fault the same way on every engine. Ten circuit scenarios and the `bit_identity` table are `matched`, bit for bit, on all five engines.
 
-**Next: milestone M5, the application. PR-52: series, workspace, plot primitives.** Read its row in `task-breakdown-pr-plan.md`, section 3.8 of `implementation-handoff.md` and B-52 first; it starts from RFC 014 rules 4 and 15 and the external design (revision 3). It is the first RFC 014 unit:
-- `crates/florn-ui-web/src/panels.rs` (1,678 lines) is split by the first unit that touches it heavily, in its first commit, with the item-for-item proof of PR-36 and PR-43 (`prove_split.py` is in PR-43's review-request folder).
-- The authoring draft keeps built-in actors, which replaces 0.3.1's interim refusal.
-- The evidence of a unit with pictures goes in its review-request folder (section 3.8).
+PR-52 is done (`a76058e`, `8ba6db2`, 2026-11-28): `panels.rs` split; series with retention, a workspace per domain, the plot primitives and a time-value viewport; the authoring draft keeps built-in actors.
+
+**Next: PR-53, the schematic, the plots, the inspectors.** Read its row in `task-breakdown-pr-plan.md`, section 3.8 of `implementation-handoff.md` and B-53 first; it starts from RFC 014 rules 6 to 10 and the external design (revision 3). Put the pictures of the unit in its review-request folder.
+
+**Its first commit, from PR-52's review: finding F-19** (RFC 012 section 11, written before the code):
+1. **The scenario answer's trailing optional section carries each declared domain's table as TOML text**, and the draft writes it back. Every shipped scenario then reads back to its own hash; the kit's test that names `rc-step` as the exception becomes "no exception".
+2. **A nested domain value is written as inline TOML** (`{ input = "rad/s" }`), not Rust's debug text, and the view model reads that. The format tests record the old and the new form of each answer, as F-12 requires.
+
+Also from PR-52's review:
+- A kit test compares the view model's table of the built-ins' layouts and units (`workspace::Drawn::CIRCUIT`) with the circuit domain's own (`builtin_channels` and the units of RFC 012 rule 24), so that the two cannot drift.
+- The plots panel keeps a lane's legend clear of the data. In PR-52's picture the label `pid.output` is drawn over by the trace where it saturates at 1.
 
 ## What Phase 4 delivers
 
