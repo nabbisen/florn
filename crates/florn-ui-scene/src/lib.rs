@@ -12,11 +12,13 @@
 #![forbid(unsafe_code)]
 
 pub mod layout;
+pub mod plot;
 
 use florn_ui_model::topology::Point;
 use florn_ui_model::{Selection, ViewModel};
 
 pub use layout::Layout;
+pub use plot::waveforms;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Color(pub u8, pub u8, pub u8, pub u8);
@@ -26,6 +28,24 @@ pub struct Stroke {
     pub color: Color,
     pub width: f32,
     pub dashed: bool,
+}
+
+/// An axis (RFC 014 rule 15, item 4): a line from `origin` along the panel's x (`horizontal`) or up
+/// from the origin, `length` long, with ticks at offsets from the origin and the value each stands
+/// for. It carries numbers and the unit's symbol and no text a language decides: the shell writes
+/// the labels (RFC 007 rule 19: a unit symbol is untranslated).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Axis {
+    pub origin: Point,
+    pub length: f32,
+    pub horizontal: bool,
+    /// (offset in pixels from the origin along the axis, the value there).
+    pub ticks: Vec<(f32, f64)>,
+    /// The unit's symbol; empty for a dimensionless axis.
+    pub unit: String,
+    pub stroke: Stroke,
+    pub font_px: f32,
+    pub fill: Color,
 }
 
 /// One batch of items that share a style. Coordinates are screen pixels.
@@ -54,6 +74,39 @@ pub enum Item {
         font_px: f32,
         fill: Color,
     },
+    /// One joined line through the points, in order; `dash` is a pattern of the canvas back end
+    /// (0 solid), a cue beside the colour (RFC 014 rule 8).
+    Polyline {
+        points: Vec<Point>,
+        stroke: Stroke,
+        dash: u8,
+    },
+    /// Rectangles `[x, y, width, height]`, filled and/or outlined.
+    Rects {
+        rects: Vec<[f32; 4]>,
+        fill: Option<Color>,
+        stroke: Option<Stroke>,
+    },
+    /// An axis with its ticks.
+    Axis(Axis),
+    /// What `items` draw is cut to `rect` `[x, y, width, height]`.
+    Clip { rect: [f32; 4], items: Vec<Item> },
+}
+
+impl Item {
+    /// The objects the item draws, as the display's ceiling counts them (RFC 005 rule 14): each
+    /// segment, disc, cross, label or rectangle; a polyline is one object however many points it
+    /// joins (RFC 014 rule 4), an axis is one with its ticks.
+    pub fn objects(&self) -> usize {
+        match self {
+            Item::Lines { segments, .. } => segments.len(),
+            Item::Circles { centers, .. } | Item::Crosses { centers, .. } => centers.len(),
+            Item::Labels { labels, .. } => labels.len(),
+            Item::Polyline { .. } | Item::Axis(_) => 1,
+            Item::Rects { rects, .. } => rects.len(),
+            Item::Clip { items, .. } => items.iter().map(Item::objects).sum(),
+        }
+    }
 }
 
 /// What the scene shows, in words for the canvas's description (§3.11).
@@ -65,6 +118,9 @@ pub struct Description {
     pub faulted: usize,
     pub flights: usize,
     pub selected: Option<String>,
+    /// The waveform scene's: the series drawn and the lanes (units) they are drawn in.
+    pub series: usize,
+    pub lanes: usize,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -72,6 +128,13 @@ pub struct Scene {
     pub items: Vec<Item>,
     pub description: Description,
     pub nodes_visible: usize,
+}
+
+impl Scene {
+    /// The objects a frame draws (the display's ceiling counts these).
+    pub fn objects(&self) -> usize {
+        self.items.iter().map(Item::objects).sum()
+    }
 }
 
 pub const LINK: Color = Color(150, 160, 175, 255);
@@ -302,6 +365,8 @@ pub fn build(vm: &ViewModel, instant: u64) -> Scene {
             faulted,
             flights: flight_count,
             selected: selected_name,
+            series: 0,
+            lanes: 0,
         },
         nodes_visible,
     }

@@ -586,6 +586,17 @@ impl<E: Engine> Run<E> {
                         .at(at(instant));
                         self.notify(n);
                     }
+                    // A built-in's report is a committed report like a guest's: the display's
+                    // `sample` records are written from it (RFC 014 rules 2 and 3), the sensors'
+                    // among them.
+                    if let Some(reported) = self.reported.as_mut() {
+                        reported.push(Telemetry {
+                            at: instant,
+                            actor: id,
+                            channel,
+                            payload: payload.clone(),
+                        });
+                    }
                     if self.telemetry.len() >= self.options.telemetry_capacity {
                         self.telemetry.pop_front();
                         self.telemetry_dropped += 1;

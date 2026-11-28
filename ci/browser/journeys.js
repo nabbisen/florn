@@ -770,9 +770,10 @@ for (const name of browsers) {
     check(false, `${name}: P4`, { error: String(err).split("\n")[0] });
   }
 
-  // PR-33: the draft cannot take a built-in actor (the summary carries no built-in's name), and a
-  // draft that dropped an actor is not the scenario it was made from. It is said, in the language
-  // of the page, and the draft is neither applied nor saved; the scenario that is loaded still runs.
+  // PR-52 (RFC 014 rule 15, item 1; replaces PR-33's interim refusal): the draft keeps a built-in
+  // actor, its name coming with the actor summary, so a scenario with one is edited, applied and
+  // saved like any other. The page says nothing was dropped, the draft applies, the scenario that
+  // loads again is the one that ran before (the same digest), and Save gives a file that loads.
   try {
     const { page, errors } = await openApp(context);
     const [m1] = await Promise.all([page.waitForEvent("filechooser"), page.click("#import-module")]);
@@ -782,29 +783,29 @@ for (const name of browsers) {
     await m2.setFiles(join(root, "scenarios/net-blackhole.toml"));
     await until(page, (x) => x.state === "ready" && x.nodes === 2, 30000, "net-blackhole ready");
     await page.click("#authoring-title");
-    // The page paints what the model holds a moment after the model says it is ready.
-    await page.waitForFunction(() => (document.querySelector("#draft-dropped")?.textContent || "") !== "", null, { timeout: 10000 });
-    await page.waitForFunction(() => (document.querySelector("#save-dropped")?.textContent || "") !== "", null, { timeout: 10000 });
-    const said = (await page.textContent("#draft-dropped")) || "";
-    const savedSaid = (await page.textContent("#save-dropped")) || "";
-    check(/could not be taken into the editor/.test(said) && said === savedSaid, `${name}: PR-33 a draft that dropped a built-in says which actor, beside the draft and beside Save`, { said });
-    await page.waitForFunction(() => document.querySelector("#apply-draft")?.disabled && document.querySelector("#save-scenario")?.disabled, null, { timeout: 10000 }).catch(() => {});
-    check((await page.isDisabled("#apply-draft")) && (await page.isDisabled("#save-scenario")), `${name}: PR-33 such a draft can be neither applied nor saved`);
-    await page.click("#lang-ja");
-    await sleep(300);
-    const saidJa = (await page.textContent("#draft-dropped")) || "";
-    check(/エディターに取り込めない/.test(saidJa), `${name}: PR-33 the sentence is in Japanese when the page is`, { said: saidJa });
-    await page.click("#lang-en");
+    await sleep(500);
+    check(((await page.textContent("#draft-dropped")) || "") === "" && ((await page.textContent("#save-dropped")) || "") === "", `${name}: PR-52 a draft of a scenario with a built-in drops nothing and says nothing of it`);
+    check(!(await page.isDisabled("#apply-draft")) && !(await page.isDisabled("#save-scenario")), `${name}: PR-52 such a draft can be applied and saved`);
+    const listed = (await page.textContent("#draft-actors")) || "";
+    check(/network\/blackhole/.test(listed), `${name}: PR-52 the draft lists the built-in by its name`, { listed: listed.slice(0, 200) });
+    await page.click("#apply-draft");
+    await until(page, (x) => x.state === "ready" && x.nodes === 2, 30000, "the draft applied");
     await runToEnd(page);
-    check((await state(page)).state === "ended", `${name}: PR-33 the scenario that is loaded still runs to its end`);
-    // A new scenario has nothing dropped: the buttons work again.
+    const after = await state(page);
+    const recorded = digests.runs["net-blackhole"];
+    check(after.state === "ended" && after.chain === recorded.chain, `${name}: PR-52 the applied draft runs to the recorded digest of the scenario it was made from`, { chain: after.chain, recorded: recorded.chain });
+    const [save] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click("#save-scenario")]);
+    const savedPath = join(dir, `${name}-draft-saved.toml`);
+    await save.saveAs(savedPath);
+    const saved = await readFile(savedPath, "utf8");
+    check(/kind = "builtin"\nbuiltin = "network\/blackhole"/.test(saved) && !/kind = "module"\nmodule = "blackhole"/.test(saved), `${name}: PR-52 the saved manifest writes the built-in as a built-in`, { saved: saved.slice(0, 300) });
     await page.click("#new-draft");
-    await page.waitForFunction(() => (document.querySelector("#draft-dropped")?.textContent || "") === "", null, { timeout: 10000 }).catch(() => {});
-    check(((await page.textContent("#draft-dropped")) || "") === "" && !(await page.isDisabled("#apply-draft")), `${name}: PR-33 a new scenario can be applied again`);
-    await consoleCheck(page, errors, `${name}: PR-33 no error of the application in the console`);
+    await sleep(300);
+    check(((await page.textContent("#draft-dropped")) || "") === "" && !(await page.isDisabled("#apply-draft")), `${name}: PR-52 a new scenario can be applied`);
+    await consoleCheck(page, errors, `${name}: PR-52 no error of the application in the console`);
     await page.close();
   } catch (err) {
-    check(false, `${name}: PR-33`, { error: String(err).split("\n")[0] });
+    check(false, `${name}: PR-52`, { error: String(err).split("\n")[0] });
   }
 
   // RFC 011 rule 8 (checklist C29): the BGP lab opens from the list with its story, its peer

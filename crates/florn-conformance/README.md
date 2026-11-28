@@ -129,6 +129,19 @@ The circuit's results are compared across engines through files the kit records 
 | The detector reads the plant and changes none of it | `circuit_detector::the_voltmeters_samples_are_the_plants_…` |
 | A restore between the crossing, the advance and the event continues to the same digest | `circuit_detector::a_run_restored_between_…`; the detector's state is in the solver's snapshot (`the_detectors_state_is_in_the_solvers_snapshot`) |
 
+### RFC 014 rules 3 to 5 and 15, series, the workspace and the plot primitives (PR-52)
+
+| Property | Test |
+|---|---|
+| The last value of each series equals the last report of the trace to `f32` rounding, and the counts are equal | `ui_series::the_last_value_of_each_series_is_the_last_report_of_the_trace_and_the_counts_are_equal` (`motor-loop` through the view model over the real Host: every series against `SeriesSet::decode` of the trace) |
+| A built-in sensor's samples are in the display as its reports are in the trace | `circuit_motor_loop::a_built_in_sensors_samples_are_in_the_display_as_its_reports_are_in_the_trace` (the Host's gap this unit found: only a guest's reports were written as `sample` records) |
+| What the ring let go is filled from `trace-window` and equals the live series | `ui_series::what_the_ring_let_go_is_filled_from_the_trace_and_equals_the_live_series` (6,000 samples, a ring of 4,096) |
+| A move backward and a new run take the samples out | `ui_series::a_move_backward_and_a_new_run_take_their_samples_out_of_the_series` |
+| A million samples keep the ring, and a window gives its width in columns | `series::tests::a_million_samples_keep_the_ring_and_a_window_of_the_panels_width`; the scene's `a_million_samples_draw_one_polyline_of_at_most_two_points_a_column` (objects under the 2,000 ceiling) |
+| The authoring draft keeps built-ins; `motor-loop` read into the draft and saved reads back to the same scenario hash | `ui_series::motor_loop_loaded_into_the_draft_and_saved_reads_back_to_the_same_scenario_hash`, `…every_shipped_scenario_reads_back_from_the_draft_to_its_hash_but_the_one_with_a_profile`; the browser journey (the applied draft runs to the recorded digest) |
+| The workspace is chosen by the domains the scenario declares | `ui_series::the_motor_loop_gets_the_circuits_workspace`; `workspace::tests` |
+| The plots' pictures | `ui_series::the_waveform_scene_of_the_motor_loop_is_drawn_and_kept_under_the_ceiling` (writes SVG when `FLORN_PICTURES` names a folder) |
+
 ### RFC 012 rules 9 and 22, two domains in one actor (PR-50)
 
 | Property | Test |

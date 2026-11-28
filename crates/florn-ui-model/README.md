@@ -11,6 +11,9 @@ The view model of florn's user interface (RFC 005 rule 37): what is shown, over 
 | `timeline.rs` | The ordered record of the run from the trace and the notifications: activations, faults, interventions, scheduled changes, domain events, the reports the view reads; filters by actor, kind and window |
 | `inspector.rs` | The selected actor, connection, message or world: configuration as fields, status and faults, the latest reports decoded by the module's layouts, a message's bytes and decoded fields |
 | `draft.rs` | Authoring: a scenario as fields, its manifest text, the Host's refusals attached to the fields they name |
+| `series.rs` | The series of a scenario's reports (RFC 014 rules 3 to 5): a ring of the newest 4,096 samples, the minimum and maximum of each pixel column of a window, the older samples filled from `trace-window` when the window is scrolled back |
+| `plot.rs` | The plots' window (time against value, following the run until the person pans or zooms), the series toggles and the cursor |
+| `workspace.rs` | The scene and the panels the declared domains call for, and what each domain draws and lists |
 | `fields.rs` | A field a person types into: the text is theirs until committed, the model never writes into it while they type |
 
 No text a person reads is here: every state is a code, a name or a number the shell's catalogue renders.

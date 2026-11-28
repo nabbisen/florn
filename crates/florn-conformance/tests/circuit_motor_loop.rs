@@ -330,6 +330,31 @@ fn a_guest_with_two_control_channels_numbers_its_series_across_both() {
 }
 
 #[test]
+fn a_built_in_sensors_samples_are_in_the_display_as_its_reports_are_in_the_trace() {
+    // RFC 014 rules 2 and 3: the Host writes a `sample` record for each `f64` a domain draws in a
+    // committed report, a built-in sensor's among them (found by the view model's series, which
+    // had the controller's and not the motor's). The motor is the second actor in id order
+    // (1, 2, 3, 4, 5): place 1, and its `speed` is the one field, index 0.
+    let mut run = host::try_start(
+        &motor_loop(),
+        Options {
+            display: true,
+            ..host::options()
+        },
+    )
+    .expect("starts");
+    let samples = drawn(&mut run, 20_000_000);
+    let motor: Vec<f32> = samples.iter().filter(|s| s.1 == 1).map(|s| s.2).collect();
+    let reports = speeds(&run);
+    assert_eq!(motor.len(), reports.len(), "one record for each report");
+    assert!(motor.len() >= 19, "a sample every millisecond");
+    assert!(samples.iter().all(|s| s.1 != 1 || s.0 == 0));
+    for (record, (_, exact)) in motor.iter().zip(&reports) {
+        assert_eq!(*record, *exact as f32);
+    }
+}
+
+#[test]
 fn the_series_index_of_a_guest_survives_a_checkpoint() {
     // RFC 012 finding F-18, extended: a run continuing from a checkpoint is told the guests as the
     // start hook was, so the continuation draws the same series with the same indices.

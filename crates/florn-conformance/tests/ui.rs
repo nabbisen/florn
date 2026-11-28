@@ -917,8 +917,9 @@ fn p4_swapping_is_said_and_the_files_of_storage_are_listed() {
     );
 }
 
-/// A draft cannot take a built-in (the summary carries no built-in's name), and a draft that
-/// dropped an actor is not the scenario it was made from: its manifest need not even load, for a
+/// From 0.4 the summary carries a built-in's name and the draft keeps the built-in (PR-52). A Host
+/// that does not carry it (an older one: `builtin` is `None`) leaves the draft unable to take the
+/// built-in, and a draft that dropped an actor is not the scenario it was made from: its manifest need not even load, for a
 /// connection names the actor that is gone. So it is told, and it is not applied (safety before
 /// function); the scenario that is loaded stays and runs as it was.
 #[test]
@@ -938,7 +939,14 @@ fn a_draft_that_dropped_a_built_in_is_not_applied() {
         vm.load_module(bytes);
     }
     pump(&mut c, &mut vm);
-    let summary = vm.scenario.clone().expect("the scenario is loaded");
+    let mut summary = vm.scenario.clone().expect("the scenario is loaded");
+    // This Host names the built-in: the draft keeps it and can be applied.
+    assert!(vm.draft.dropped.is_empty() && vm.draft.can_apply());
+    // An older Host's summary has no name for it.
+    for a in &mut summary.actors {
+        a.builtin = None;
+    }
+    vm.draft = florn_ui_model::Draft::from_scenario(&summary);
     let builtin: Vec<(u32, String)> = summary
         .actors
         .iter()

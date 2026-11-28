@@ -22,10 +22,21 @@ pub struct DraftModule {
 pub struct DraftActor {
     pub id: u32,
     pub name: Field,
+    /// The `[modules]` name; empty for a built-in.
     pub module: String,
+    /// The built-in's `<domain>/<name>` for an actor that is one (RFC 014 rule 15, item 1): the
+    /// manifest's `kind = "builtin"`, its `builtin` and its `config`.
+    pub builtin: Option<String>,
     /// (id, name, type)
     pub ports: Vec<(u32, String, String)>,
     pub config: Vec<Field>,
+}
+
+impl DraftActor {
+    /// What the actor is: its module's name, or its built-in's.
+    pub fn kind_name(&self) -> &str {
+        self.builtin.as_deref().unwrap_or(&self.module)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,16 +73,23 @@ pub struct Draft {
     /// The Host's refusals of the last load that name no field, and every one in order.
     pub errors: Vec<Notification>,
     /// The actors of the scenario this draft was made from that it could not take, as (identity,
-    /// name): a built-in has no module, and the summary does not carry the built-in's name, so
-    /// the draft cannot write it back. A draft that dropped an actor is not the scenario it was
-    /// made from, and its manifest need not even load (a connection names the dropped actor); it
-    /// is not applied while this is not empty (see [`Draft::can_apply`]).
+    /// name): an actor with neither a module nor a built-in's name, which is what a Host that does
+    /// not carry the name (before 0.4) answers for a built-in. A draft that dropped an actor is not
+    /// the scenario it was made from, and its manifest need not even load (a connection names the
+    /// dropped actor); it is not applied while this is not empty (see [`Draft::can_apply`]).
     pub dropped: Vec<(u32, String)>,
+    /// The domains the scenario this draft was made from declared, in its order: a domain's world
+    /// is addressed by its place in that list (RFC 004 rule 8), so a scheduled change of a world
+    /// (`world:circuit`) is written back to the world it named.
+    declared: Vec<String>,
     next_actor: u32,
     next_connection: u32,
 }
 
 pub const FIRST_CONNECTION_ID: u32 = 1000;
+/// The identity of the first domain's world (RFC 004 rule 8): `florn_model::manifest::
+/// WORLD_IDENTITY_BASE`, which this crate does not depend on (the kit tests that they are equal).
+pub const WORLD_IDENTITY_BASE: u32 = 0xF000_0010;
 
 impl Default for Draft {
     fn default() -> Self {
@@ -95,6 +113,7 @@ impl Draft {
             changes: Vec::new(),
             errors: Vec::new(),
             dropped: Vec::new(),
+            declared: Vec::new(),
             next_actor: 1,
             next_connection: FIRST_CONNECTION_ID,
         }
@@ -112,6 +131,7 @@ impl Draft {
         d.tie = s.tie.clone();
         d.seed = Field::new("root", Kind::Integer, &s.seed.to_string());
         d.limits = s.limits.clone();
+        d.declared = s.domains.clone();
         for m in &s.modules {
             d.modules.push(DraftModule {
                 name: m.name.clone(),
@@ -121,11 +141,15 @@ impl Draft {
             });
         }
         for a in &s.actors {
-            let Some(module) = &a.module else {
-                d.dropped.push((a.id, a.name.clone()));
-                continue;
+            let module = match (&a.module, &a.builtin) {
+                (Some(module), _) => module.clone(),
+                (None, Some(_)) => String::new(),
+                (None, None) => {
+                    d.dropped.push((a.id, a.name.clone()));
+                    continue;
+                }
             };
-            let summary = s.modules.iter().find(|m| m.name == *module);
+            let summary = s.modules.iter().find(|m| m.name == module);
             // What the manifest sets, as set (the file round-trips to the same scenario);
             // the declared parameters it leaves to the module, as empty optional fields.
             let mut config: Vec<Field> = a
@@ -148,7 +172,12 @@ impl Draft {
             d.actors.push(DraftActor {
                 id: a.id,
                 name: Field::new("name", Kind::Name, &a.name),
-                module: module.clone(),
+                module,
+                builtin: if a.module.is_none() {
+                    a.builtin.clone()
+                } else {
+                    None
+                },
                 ports: a
                     .ports
                     .iter()
@@ -224,6 +253,7 @@ impl Draft {
             id,
             name: Field::new("name", Kind::Name, &format!("a{id}")),
             module: module.into(),
+            builtin: None,
             ports: (0..ports)
                 .map(|p| (p, format!("p{p}"), port_type.to_string()))
                 .collect(),
@@ -288,10 +318,14 @@ impl Draft {
         });
     }
 
-    /// The domains the draft uses: the core, then those of its ports and connection types in
-    /// first-seen order.
+    /// The domains the draft uses: those the scenario declared, in its order, else the core; then
+    /// those of its ports and connection types in first-seen order.
     pub fn domains(&self) -> Vec<String> {
-        let mut out = vec!["core".to_string()];
+        let mut out = if self.declared.is_empty() {
+            vec!["core".to_string()]
+        } else {
+            self.declared.clone()
+        };
         let mut add = |ty: &str| {
             if let Some((d, _)) = ty.split_once('/')
                 && !out.iter().any(|x| x == d)
@@ -395,6 +429,13 @@ impl Draft {
         changed
     }
 
+    /// The name a manifest gives a domain's world (`world:circuit`), for the identity a change of it
+    /// carries.
+    fn world_name(&self, id: u32) -> Option<String> {
+        let n = id.checked_sub(WORLD_IDENTITY_BASE)?;
+        self.domains().get(n as usize).map(|d| format!("world:{d}"))
+    }
+
     /// The manifest (RFC 004 §3) from the committed values, readable in a diff.
     pub fn to_toml(&self) -> String {
         let mut t = String::new();
@@ -442,11 +483,14 @@ impl Draft {
                     )
                 })
                 .collect();
+            let kind = match &a.builtin {
+                Some(b) => format!("kind = \"builtin\"\nbuiltin = {}", quote(b)),
+                None => format!("kind = \"module\"\nmodule = {}", quote(&a.module)),
+            };
             t.push_str(&format!(
-                "\n[[actors]]\nid = {}\nname = {}\nkind = \"module\"\nmodule = {}\nports = [{}]\n",
+                "\n[[actors]]\nid = {}\nname = {}\n{kind}\nports = [{}]\n",
                 a.id,
                 quote(&a.name.committed),
-                quote(&a.module),
                 ports.join(", ")
             ));
             let set: Vec<&Field> = a
@@ -526,6 +570,7 @@ impl Draft {
                         .find(|a| a.id == c.target)
                         .map(|a| a.name.committed.clone())
                 })
+                .or_else(|| self.world_name(c.target))
                 .unwrap_or_default();
             t.push_str(&format!(
                 "\n[[changes]]\nat = {}\ntarget = {}\n[changes.payload]\n",

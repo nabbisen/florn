@@ -54,7 +54,7 @@ pub(super) fn Authoring(shared: Shared) -> impl IntoView {
                         (
                             a.id,
                             a.name.committed.clone(),
-                            a.module.clone(),
+                            a.kind_name().to_string(),
                             a.ports
                                 .iter()
                                 .map(|p| (p.0, p.1.clone()))

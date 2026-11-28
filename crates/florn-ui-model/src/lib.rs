@@ -15,8 +15,11 @@ pub mod fields;
 /// The control interface, for a scene or a shell to name its types through the view model.
 pub use florn_control;
 pub mod inspector;
+pub mod plot;
+pub mod series;
 pub mod timeline;
 pub mod topology;
+pub mod workspace;
 
 use std::collections::BTreeMap;
 
@@ -34,8 +37,11 @@ use florn_control::{
 pub use draft::Draft;
 pub use fields::Field;
 pub use inspector::Inspector;
+pub use plot::Plots;
+pub use series::SeriesSet;
 pub use timeline::Timeline;
 pub use topology::{Point, Topology, Viewport};
+pub use workspace::Workspace;
 
 /// What is selected (external design §3.6).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -163,6 +169,12 @@ pub struct ViewModel {
     pub status: Status,
     pub topology: Topology,
     pub timeline: Timeline,
+    /// The series of the scenario's reports, with retention (RFC 014 rules 3 to 5).
+    pub series: SeriesSet,
+    /// The plots' window, toggles and cursor (rule 7): what a person looks at, not the run's.
+    pub plots: Plots,
+    /// The scene and the panels the scenario's domains call for (rule 15, item 2).
+    pub workspace: Workspace,
     pub interventions: Vec<InterventionView>,
     /// The ended run's interventions, kept so that a person can turn them into scheduled
     /// changes or discard them (§3.3, Reset).
@@ -697,6 +709,20 @@ impl ViewModel {
 
     /// A display batch (RFC 005 rule 14): the 60 Hz path, straight to the topology.
     pub fn display(&mut self, records: &[Record]) {
+        for r in records {
+            match *r {
+                Record::Sample {
+                    index,
+                    actor,
+                    value,
+                    tick,
+                } => {
+                    self.series.display(actor, index, value, tick);
+                }
+                Record::Instant { tick } => self.plots.viewport.follow_run(tick),
+                _ => {}
+            }
+        }
         self.topology.apply_display(records);
     }
 
@@ -712,6 +738,9 @@ impl ViewModel {
                             ..Timeline::default()
                         };
                         self.timeline.push_changes(&s.changes);
+                        self.workspace = Workspace::of(&s.domains);
+                        self.series = SeriesSet::of(s, &self.workspace.drawn);
+                        self.plots.reset(&s.tick);
                         if !self.loading_draft {
                             self.draft = Draft::from_scenario(s);
                         }
@@ -719,6 +748,9 @@ impl ViewModel {
                     None => {
                         self.topology = Topology::default();
                         self.timeline = Timeline::default();
+                        self.workspace = Workspace::default();
+                        self.series = SeriesSet::default();
+                        self.plots = Plots::default();
                     }
                 }
                 self.loading_draft = false;
@@ -864,6 +896,8 @@ impl ViewModel {
         self.timeline.selected = None;
         self.events.retain(|(at, ..)| at.tick <= to);
         self.topology.reset_run();
+        self.series.truncate_from(to);
+        self.plots.cursor = None;
         let events = self.events.clone();
         for (_, target, event, detail) in &events {
             match event.as_str() {
@@ -894,6 +928,8 @@ impl ViewModel {
     fn forget_run(&mut self) {
         self.topology.reset_run();
         self.timeline.clear_run();
+        self.series.clear_run();
+        self.plots.new_run();
         if !self.interventions.is_empty() {
             self.kept = std::mem::take(&mut self.interventions);
         }
@@ -964,7 +1000,7 @@ impl ViewModel {
         if let Some(c) = self
             .module_of(t.actor)
             .and_then(|m| m.channels.iter().find(|c| c.channel == t.channel))
-            && matches!(c.name.as_str(), "neighbour" | "route" | "peer")
+            && self.workspace.reads.contains(&c.name.as_str())
         {
             let fields = inspector::decode_report(&c.fields, &t.payload);
             let name = c.name.clone();
