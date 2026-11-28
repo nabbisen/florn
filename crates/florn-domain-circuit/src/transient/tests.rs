@@ -494,7 +494,7 @@ fn the_error_ratio_uses_the_spans_of_unequal_steps() {
     let start = t.now();
     // The candidate is the solver's own: the estimate is of the numerical points, whose smooth
     // error is negligible against the third derivative.
-    let Tried::Done(candidate) = t.attempt(n, Formula::Trapezoidal, true) else {
+    let Tried::Done(candidate) = t.attempt(n, Formula::Trapezoidal, true, &mut NoDevice) else {
         panic!("the step converges")
     };
     let ratio = candidate.ratio.expect("a tested step");
@@ -634,3 +634,5 @@ fn no_gear2_step_has_omega_above_2_after_a_short_whole_distance_step() {
         );
     }
 }
+
+mod device;

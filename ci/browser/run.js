@@ -138,9 +138,11 @@ for (const name of browsers) {
       check(hash === digests.admitted[mod], `${name}: ${s}: admitted hash of ${mod}`, { hash });
     }
     const fault = faultOf(r);
-    const expected = { "hostile-loop": "fault.budget", "hostile-recurse": "fault.stack", "hostile-grow": "fault.trap", "hostile-flood": "fault.quota", "hostile-bad-pointer": "fault.contract" }[s];
+    // The fault and the actor that has it: the hostile guests are actor 1, the device of
+    // `hostile-stamp` (a contract violation of RFC 012 rule 20) is actor 3.
+    const expected = { "hostile-loop": ["fault.budget", 1], "hostile-recurse": ["fault.stack", 1], "hostile-grow": ["fault.trap", 1], "hostile-flood": ["fault.quota", 1], "hostile-bad-pointer": ["fault.contract", 1], "hostile-stamp": ["fault.contract", 3] }[s];
     if (expected) {
-      check(fault && fault.fault === expected && fault.actor === 1 && fault.metered > 0, `${name}: ${s} faults with ${expected}`, fault || {});
+      check(fault && fault.fault === expected[0] && fault.actor === expected[1] && fault.metered > 0, `${name}: ${s} faults with ${expected[0]}`, fault || {});
     } else if (s !== "zero-delay") {
       check(!fault, `${name}: ${s} has no fault`, fault || {});
     }
@@ -363,7 +365,7 @@ for (const name of browsers) {
   if (existsSync(runner)) {
     const run = promisify(execFile);
     await mkdir(checkpoints, { recursive: true });
-    for (const s of ["ospf-lab", "net-lan", "rc-step", "motor-loop"].filter((x) => digests.runs[x])) {
+    for (const s of ["ospf-lab", "net-lan", "rc-step", "motor-loop", "guest-diode", "hostile-stamp"].filter((x) => digests.runs[x])) {
       const rec = digests.runs[s];
       // The scenario's end, from its manifest: the checkpoint is taken at its half.
       const end = parseInt((/^end = "(\d+)/m.exec(await readFile(join(root, `scenarios/${s}.toml`), "utf8")) || [])[1] || "0", 10);

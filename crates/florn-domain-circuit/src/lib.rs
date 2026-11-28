@@ -22,11 +22,14 @@
 use florn_admission::manifest::ModuleManifest;
 use florn_control::message::InspectField;
 use florn_control::{Code, Notification, Scope, Value};
+use florn_host::compound::NoCalls;
 use florn_host::domain::{Action, BuiltinEvent, Domain, DomainEvent, Guest, Site, Tolerance};
 use florn_host::{CallIn, FaultPolicy, UnitDef};
 use florn_kernel::{Delivery, Identity, Instant, Sink};
 use florn_model::Manifest;
 use florn_model::manifest::{DomainMap, DomainValue};
+
+use crate::device::{Calls, NoDevice};
 
 pub mod analyse;
 mod assemble;
@@ -36,6 +39,7 @@ pub mod changes;
 pub mod control;
 pub mod controllers;
 pub mod dc;
+pub mod device;
 pub mod diode;
 pub mod guests;
 pub mod inputs;
@@ -177,7 +181,7 @@ impl Domain for CircuitDomain {
         vec!["source", "signal"]
     }
     fn worlds(&self) -> Vec<florn_host::domain::DomainWorld> {
-        vec![controllers::world()]
+        vec![controllers::world(), device::world()]
     }
 
     /// Every note of the reading, in one pass: the errors refuse the run and the warnings are
@@ -344,10 +348,26 @@ impl Domain for CircuitDomain {
             return Vec::new();
         };
         match event.key.class {
-            CLASS_ADVANCE => live.on_advance(plant, event.key.tick),
+            CLASS_ADVANCE => live.on_advance(plant, event.key.tick, &mut NoCalls),
             // A controller's sample: a built-in sensor's is the Host's `builtin`.
             CLASS_SAMPLE => live.controller_sample(plant, event.target, event.key.tick, alive),
             _ => Vec::new(),
+        }
+    }
+
+    /// The `advance` event with the call-in handle: the guest device, if the plant has one, is
+    /// called inside every attempted step (RFC 012 rules 19 to 21).
+    fn event_calling(
+        &mut self,
+        event: &DomainEvent,
+        alive: bool,
+        calls: &mut dyn CallIn,
+    ) -> Vec<Action> {
+        match (event.key.class, self.plant.as_ref(), self.live.as_mut()) {
+            (CLASS_ADVANCE, Some(plant), Some(live)) => {
+                live.on_advance(plant, event.key.tick, calls)
+            }
+            _ => self.event(event, alive),
         }
     }
 
@@ -379,6 +399,7 @@ impl Domain for CircuitDomain {
             .and_then(|p| p.devices.iter().find(|d| d.actor == actor))
             .is_some_and(|d| is_sensor_or_detector(d.kind))
             || self.guests.controllers().contains(&actor)
+            || self.guests.device() == Some(actor)
     }
 
     fn numeric_fields(
@@ -409,7 +430,7 @@ impl Domain for CircuitDomain {
     /// solve of RFC 013 rule 9 refuses the run when it finds no operating point.
     fn start_calling(
         &mut self,
-        _calls: &mut dyn CallIn,
+        calls: &mut dyn CallIn,
         guests: &[Guest],
     ) -> Result<Vec<Action>, Box<Notification>> {
         self.guests = guests::Guests::read(guests);
@@ -424,6 +445,11 @@ impl Domain for CircuitDomain {
                 ],
             )));
         }
+        // The guest device model, if the scenario has one (rule 19): its pins and its place in the
+        // order of the evaluation (RFC 013 rule 5).
+        if let (Some(plant), Some(actor)) = (self.plant.as_mut(), self.guests.device()) {
+            plant.set_guest(actor);
+        }
         let (Some(plant), Some(live)) = (self.plant.as_ref(), self.live.as_mut()) else {
             return Ok(Vec::new());
         };
@@ -435,13 +461,32 @@ impl Domain for CircuitDomain {
             self.tick,
         )?;
         // The signals hold what the controllers' `init` set (rule 30, step 2).
-        match dc::initial_solve(&live.plant_in_force(plant)) {
-            Ok(solution) => {
-                let actions = live.start(plant, &solution, samplers);
-                self.solution = Some(solution);
+        // The initial solve calls the guest device in DC form (rule 9); the activations are keyed
+        // as the device's own `init` event (rule 21).
+        let in_force = live.plant_in_force(plant);
+        let solved = match plant.guest.as_ref() {
+            Some(g) => {
+                dc::initial_solve_with(&in_force, &mut Calls::new(calls, g.actor, g.nodes.len()))
+            }
+            None => dc::initial_solve_with(&in_force, &mut NoDevice),
+        };
+        match solved {
+            Ok(solved) => {
+                let mut actions = Vec::new();
+                // A device lost in the analysis is absent from the start, and said once.
+                let mut start_plant = plant.clone();
+                if let (Some(lost), Some(g)) = (&solved.lost, plant.guest.as_ref()) {
+                    live.guest_lost = true;
+                    start_plant.guest = None;
+                    actions.extend(device::lost_notes(lost, g));
+                }
+                actions.extend(live.start(&start_plant, &solved.solution, samplers));
+                self.solution = Some(solved.solution);
                 Ok(actions)
             }
-            Err(e) => Err(Box::new(read::note(
+            // The run ended in a call of the device (a fault under `stop-run`): the Host ends it.
+            Err(dc::Stop::Ended) => Ok(Vec::new()),
+            Err(dc::Stop::NoPoint(e)) => Err(Box::new(read::note(
                 Code::CircuitNoOperatingPoint,
                 Scope::run(),
                 None,
@@ -482,6 +527,20 @@ impl Domain for CircuitDomain {
     /// The guests after a restore, as the start hook has them (RFC 012 finding F-18).
     fn restored(&mut self, guests: &[Guest]) {
         self.guests = guests::Guests::read(guests);
+        // The device model is the plant's again, unless it was lost before the checkpoint: the
+        // solver the checkpoint restored holds a plant of its own.
+        if let (Some(plant), Some(actor)) = (self.plant.as_mut(), self.guests.device()) {
+            plant.set_guest(actor);
+            if let Some(live) = self.live.as_mut()
+                && let Some(t) = live.transient.as_mut()
+            {
+                t.set_guest(if live.guest_lost {
+                    None
+                } else {
+                    plant.guest.clone()
+                });
+            }
+        }
     }
 
     /// `read-input` (rule 18): the value held on the signal the port is on, in the unit of that

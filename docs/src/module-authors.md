@@ -218,6 +218,46 @@ At a tick where a controller and a sensor both sample, the controller reads the 
 
 A report on a channel named `control` with `f64` fields is drawn as a series, one per field, numbered across the module's `control` channels in channel order. The ladder's first example is `pid` in `crates/florn-guest-circuit/examples`, a PID controller whose gains are those of the discrete form (the integral gains `ki × error` at every sample, the derivative is `kd` times the change of the error), with output limits and no integration while it is saturated; `bad_controller` is the kit's, for what a good one cannot show. The shipped scenario `motor-loop` is `pid` driving a DC motor, with the set point and the load torque as `constant`s and a load step at one second.
 
+## Device-model guests
+
+The second kind of guest of the circuit domain (RFC 012 rule 19) is a **device model**: a component the solver evaluates inside a step, as it evaluates a built-in diode. It speaks the device world, `florn:circuit/device@0.1.0`: the core world plus one export, the interface `device-model`, whose four calls are one **compound activation** (RFC 002 rules 44 and 45): `begin-step(start, h)` opens it, `evaluate(trial)` is called once per Newton iteration, and `accept-step(solution)` commits or `reject-step()` discards it. It depends on `florn-guest` and on `florn-guest-device`, implements `florn_guest::Actor` and `florn_guest_device::Device`, and exports with `florn_guest_device::device!`:
+
+```toml
+[dependencies]
+florn-guest = "0.3.1"
+florn-guest-device = "0.3.1"
+```
+
+```rust
+florn_guest::declare! {
+    world: "florn:circuit/device@0.1.0",
+    kind: "guest-diode",
+    description: "A diode as a guest device model",
+    ports: [("pin", "circuit/pin", 2, 2)],
+    params: [(is, "is", f64, false, default = 1e-14), (n, "n", f64, false, default = 1.0)],
+    telemetry: [(1, "junction", Junction, [(v, "v", f64), (i, "i", f64)])],
+    resources: [("memory", "1MiB")],
+    tables: [("circuit", [("kind", "device")])],
+}
+
+impl florn_guest_device::Device for Diode {
+    fn begin_step(&mut self, _start: u64, _h: f64) { self.junction.begin(); }
+    fn evaluate(&mut self, trial: &[f64]) -> Vec<f64> { /* n + n² + 1 values */ }
+    fn accept_step(&mut self, solution: &[f64]) { self.junction.accept(); /* report */ }
+    fn reject_step(&mut self) { self.junction.reject(); }
+}
+
+florn_guest_device::device!(Diode);
+```
+
+The module declares one port kind of the type `circuit/pin`, with a `min` and a `max` (a two-terminal device is `2, 2`; at most sixteen pins, or the scenario is refused with `circuit.device-ports`), and a `circuit` table with `kind = "device"`. A scenario may have **at most one** device module (`circuit.device-limit`): the kernel has one open activation at a time and the browser engine one budget for every instance. `evaluate` is given the voltage of each pin in volts, in ascending port identity, and returns **`n + n² + 1` values**: the `n` currents into the pins in amperes, the `n × n` Jacobian row-major in siemens (`∂i_k/∂v_j`), and one more value, `1.0` when the device limited a junction in this evaluation and `0.0` when it did not. A device that limits is not converged in that iteration (RFC 013 rule 8). `h` is the step's length in seconds (`0.0` for the solves of the initial analysis); `host::now()` inside the activation is the step's start.
+
+The Host checks the result **before** it reads it: a length other than `n + n² + 1` (a longer one is never lifted), a value that is not finite, or a last value that is neither 0 nor 1 is a contract violation (the Fault's parameter 12020, and `circuit.stamp-invalid` says how). A `send`, a timer or a cancel inside a device is a contract violation too (12019). A device that faults, by a contract violation, a trap or the budget, is dead: the solver discards the step, makes it again without the device, and the plant continues without it (`circuit.device-faulted`, once), or, under `faulted-policy = "stop-run"`, the run ends with `actor-fault`. The one budget of the class covers the whole activation, so a device that loops in `evaluate` is stopped like any guest.
+
+A step the solver rejects is discarded whole: nothing the device reported in it is recorded and its random stream is restored. What the device carries from step to step must therefore change in `accept_step` only. `florn_guest_device::Trial` keeps the **committed** state apart from the state a step **tries**, so that `reject_step` is a drop; `pnjlim` is SPICE3's junction limiter with the solver's literals (RFC 013 rule 8), and `florn_guest_device::math::{exp, ln}` are the solver's own functions, so that a guest and a built-in diode compute the same bits. Each accepted step leaves one record of the device, keyed as the plant's `advance` event with the device as its target; the initial solve leaves one, keyed as the device's `init`.
+
+The ladder's example is `guest_diode` in `crates/florn-guest-device/examples`: the shipped scenario `guest-diode` is `diode-clip` with the guest in the built-in's place, and the two voltmeters' samples agree. `bad_device` is the kit's, for what a good one cannot show: a NaN, a wrong length, a flag that is not 0 or 1, a timer, a trap, and stamps that never converge, each at the evaluation its `at` parameter names (`hostile-stamp` and `hostile-diverge` are two of them).
+
 ## Where to look next
 
 The fifteen example guests under `crates/florn-guest/examples/` show every feature in use: `echo` is the reference, `chatter` exercises parameters, telemetry and faults, `timers` the timer rules, `heap` state that grows, and the `hostile_*` guests each one fault kind. The conformance kit's readme maps every rule of RFC 002 and RFC 003 to the test that proves it.

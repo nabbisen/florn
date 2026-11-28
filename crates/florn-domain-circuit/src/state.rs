@@ -15,7 +15,7 @@ use crate::plant::Plant;
 use crate::transient::Transient;
 
 /// The version of this encoding.
-pub const VERSION: u8 = 2;
+pub const VERSION: u8 = 3;
 
 fn stage_code(s: Stage) -> u8 {
     match s {
@@ -67,6 +67,7 @@ pub fn encode(live: &Live, solution: Option<&Solution>) -> Vec<u8> {
         Status::Held => 1,
     });
     e.u8(u8::from(live.notified));
+    e.u8(u8::from(live.guest_lost));
     e.list(&live.sensors, |e, s| e.u64(s.next_due));
     e.list(&live.samplers, |e, c| {
         e.u32(c.actor);
@@ -115,6 +116,7 @@ pub fn decode(plant: &Plant, bytes: &[u8]) -> Option<(Live, Option<Solution>)> {
         _ => return None,
     };
     live.notified = d.u8()? != 0;
+    live.guest_lost = d.u8()? != 0;
     let due = d.list(|d| d.u64())?;
     if due.len() != live.sensors.len() {
         return None;

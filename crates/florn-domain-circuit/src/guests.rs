@@ -88,6 +88,14 @@ impl Guests {
             .count()
     }
 
+    /// The guest actor that is a device model, when there is one (more than one is refused).
+    pub fn device(&self) -> Option<Identity> {
+        self.0
+            .iter()
+            .find(|(_, g)| g.kind == GuestKind::Device)
+            .map(|(a, _)| *a)
+    }
+
     /// The guest actors that are controllers, in ascending identity.
     pub fn controllers(&self) -> Vec<Identity> {
         self.0

@@ -6,11 +6,13 @@
 //! `solved`; a committed output or a change records a breakpoint and advances nothing.
 
 use florn_control::{Code, Scope, Value};
+use florn_host::compound::CallIn;
 use florn_host::domain::{Action, EndRequest, Limit};
 use florn_kernel::Identity;
 
 use crate::controllers::Sampler;
 use crate::dc::Solution;
+use crate::device::Calls;
 use crate::inputs::{Breakpoint, Input, Pending};
 use crate::plant::{Element, Plant};
 use crate::profile::OnNonConvergence;
@@ -68,6 +70,9 @@ pub struct Live {
     pub status: Status,
     /// The once-only mark of the non-convergence notification (RFC 013 rule 17).
     pub notified: bool,
+    /// The guest device was lost (it faulted, or its result was no stamp) and the plant has none
+    /// from then on (RFC 012 rule 17).
+    pub guest_lost: bool,
     pub summary: Summary,
     pub transient: Option<Transient>,
     pub limit: Option<Limit>,
@@ -134,6 +139,7 @@ impl Live {
             last_advance: 0,
             status: Status::Running,
             notified: false,
+            guest_lost: false,
             summary: Summary::default(),
             transient: None,
             limit: None,
@@ -240,12 +246,19 @@ impl Live {
 
     /// The advance event at `tick` (rule 8): the plant made current, the sensors due scheduled on
     /// the next microstep, the next advance scheduled. An advance calls no actor.
-    pub fn on_advance(&mut self, plant: &Plant, tick: u64) -> Vec<Action> {
+    pub fn on_advance(&mut self, plant: &Plant, tick: u64, calls: &mut dyn CallIn) -> Vec<Action> {
         let mut actions = Vec::new();
         self.last_advance = tick;
         self.advance_at = None;
         let mut report = Advance::default();
         let mut stuck = None;
+        let mut ended = false;
+        // The guest device, if the plant has one still: it is called inside every attempted step
+        // (RFC 012 rules 19 to 21).
+        let guest = self
+            .transient
+            .as_ref()
+            .and_then(|t| t.plant().guest.clone());
         if self.status == Status::Running
             && let Some(t) = self.transient.as_mut()
         {
@@ -255,10 +268,19 @@ impl Live {
                     .pending
                     .next_after(t.now())
                     .map_or(tick, |b| b.min(tick));
-                let out = t.advance(limit);
+                let out = match t.plant().guest.as_ref() {
+                    Some(g) => {
+                        t.advance_with(limit, &mut Calls::new(&mut *calls, g.actor, g.nodes.len()))
+                    }
+                    None => t.advance(limit),
+                };
                 merge(&mut report, out.report);
                 if out.stuck.is_some() {
                     stuck = out.stuck;
+                    break;
+                }
+                if out.ended {
+                    ended = true;
                     break;
                 }
                 if t.now() < tick {
@@ -273,6 +295,17 @@ impl Live {
             rejections: self.summary.rejections + u64::from(report.rejected),
             at_minimum: report.minimum.len() as u32,
         };
+        // The device lost in this advance: `circuit.stamp-invalid` for a result that was no stamp,
+        // and `circuit.device-faulted`, once (rule 17), for any loss.
+        if let (Some(lost), Some(g)) = (&report.lost, &guest) {
+            self.guest_lost = true;
+            actions.extend(crate::device::lost_notes(lost, g));
+        }
+        // The run ended in a call of the device (a fault under `stop-run`): the advance is
+        // abandoned where it stands and the plant keeps its last accepted step (rule 17).
+        if ended {
+            return actions;
+        }
         if report.rejected > 0 {
             let cause = match report.first_cause {
                 Some(Cause::Convergence) => "convergence",
@@ -302,9 +335,22 @@ impl Live {
             let device = s
                 .owner
                 .or_else(|| s.unknown.map(|u| owner_of_unknown(plant, u)));
-            let name = device
-                .and_then(|d| plant.devices.get(d))
-                .map_or_else(String::new, |d| d.name.clone());
+            let builtin = device.and_then(|d| plant.devices.get(d));
+            // The device with the largest residual (rule 17), the guest device included: it is named
+            // when it has a pin on the net and a lower identity than the built-in found.
+            let name = match (&guest, s.unknown) {
+                (Some(g), Some(u))
+                    if self
+                        .transient
+                        .as_ref()
+                        .is_some_and(|t| t.plant().guest.is_some())
+                        && g.nodes.contains(&Some(u))
+                        && builtin.is_none_or(|b| g.actor < b.actor) =>
+                {
+                    g.name.clone()
+                }
+                _ => builtin.map_or_else(String::new, |d| d.name.clone()),
+            };
             let never_said = !self.notified;
             self.notified = true;
             if never_said {
@@ -427,6 +473,9 @@ fn merge(into: &mut Advance, from: Advance) {
     }
     into.iterations += from.iterations;
     into.minimum.extend(from.minimum);
+    if into.lost.is_none() {
+        into.lost = from.lost;
+    }
 }
 
 /// The device a notification names for an unknown: the owner of a branch current or a state, the

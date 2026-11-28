@@ -230,6 +230,16 @@ fn definitions() -> Vec<Shipped> {
         normal(crate::circuit_scenarios::motor_loop()),
         // The analytic golden of the solver (RFC 013 rule 21): an RC network stepped at 2 ms.
         normal(crate::circuit_scenarios::rc_step()),
+        // The nonlinear plant, with the built-in diode and with the guest device (RFC 012 rule 27),
+        // and the hostile devices (RFC 012 rule 17, RFC 013 rule 17).
+        normal(crate::circuit_scenarios::diode_clip()),
+        normal(crate::circuit_scenarios::guest_diode()),
+        normal(crate::circuit_scenarios::hostile_stamp()),
+        // It ends with the end reason `non-convergence`, not at its end and not with a fault.
+        Shipped {
+            scenario: crate::circuit_scenarios::hostile_diverge(),
+            ends_normally: false,
+        },
         normal(race("by-identity", false)),
         normal(race("by-identity", true)),
         normal(race("by-seed", false)),

@@ -84,7 +84,7 @@ Not compared: the memory of a guest, data taken from the wall clock, display out
 | 1 ps | 213 days |
 | 1 fs | 5.1 hours |
 
-**Rule 3.** The kernel and every contract represent time in ticks. No floating-point value represents time in the kernel, and none crosses a contract as a time.
+**Rule 3.** The kernel and every contract represent time in ticks. No floating-point value represents time in the kernel, and none crosses a contract as a time. (Noted 2026-11-28, PR-49, as RFC 012 rule 19 asks: the circuit's device model receives `h`, a duration in seconds as an `f64` derived exactly from whole ticks and the tick length (RFC 013 rule 14), for arithmetic and never as a time of the kernel; RFC 012 rule 19 makes the exception, here and only here.)
 
 **Rule 4.** A duration written in a scenario carries its unit. A duration that is not a whole number of ticks is a validation error. The Host does not round.
 

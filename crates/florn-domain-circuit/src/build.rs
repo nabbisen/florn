@@ -273,19 +273,33 @@ pub(crate) fn plant(
             element,
         });
     }
-    // The pins of a guest device conduct (rule 9): every pin of one actor is one set.
+    // The pins of a guest device conduct (rule 9): every pin of one actor is one set. The nodes of
+    // the pins of every guest actor are kept, in ascending port identity (the order of a device's
+    // trial and result, RFC 012 rule 19), for the one of them the start hook finds is a device.
+    let mut module_pins = std::collections::BTreeMap::new();
+    let mut module_names = std::collections::BTreeMap::new();
     for a in &w.scenario.actors {
         if matches!(a.kind, ActorKind::Module(_)) {
-            let nodes: Vec<usize> = a
+            let mut pins: Vec<(u32, Node)> = a
                 .ports
                 .iter()
                 .filter(|p| p.r#type == crate::PIN)
-                .filter_map(|p| w.net_of_port.get(&(a.id, p.id)))
-                .map(|&n| idx(w.node_of_net(n)))
+                .filter_map(|p| {
+                    w.net_of_port
+                        .get(&(a.id, p.id))
+                        .map(|&n| (p.id, w.node_of_net(n)))
+                })
                 .collect();
+            pins.sort_by_key(|(id, _)| *id);
+            let nodes: Vec<usize> = pins.iter().map(|(_, n)| idx(*n)).collect();
             for pair in nodes.windows(2) {
                 dsu.union(pair[0], pair[1]);
             }
+            module_pins.insert(
+                a.id,
+                pins.into_iter().map(|(_, n)| n).collect::<Vec<Node>>(),
+            );
+            module_names.insert(a.id, a.name.clone());
         }
     }
     let mut floating = Vec::new();
@@ -310,6 +324,9 @@ pub(crate) fn plant(
         unknowns: unknown_list,
         transient_unknowns: layout.transient,
         port_signal: w.signal_of_port.clone(),
+        module_pins,
+        module_names,
+        guest: None,
         end: w.scenario.time.end,
         world: w.scenario.world_identity(crate::NAME).unwrap_or(0),
     };

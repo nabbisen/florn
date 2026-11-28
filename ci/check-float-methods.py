@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """RFC 013 rule 19, controls 1 and 4: the lint list of the circuit domain is complete.
 
-`crates/florn-domain-circuit/clippy.toml` must list as `disallowed-methods`
+`crates/florn-domain-circuit/clippy.toml` and the device SDK's `crates/florn-guest-device/clippy.toml`
+must each list as `disallowed-methods`
   * every stable inherent method of `f64` and of `f32` in the pinned toolchain that is not one of
     the operations the rule allows (a toolchain update that adds a method fails this check until
     the method is listed or allowed here), and
@@ -10,7 +11,7 @@
 The methods of the toolchain are read from its documentation (`rust-docs`, a component of
 `rust-toolchain.toml`); the functions of `libm` from the source of the locked crate.
 
-Usage: ci/check-float-methods.py            check the file in the repository
+Usage: ci/check-float-methods.py            check the files in the repository
        ci/check-float-methods.py --print    print the file it expects
        ci/check-float-methods.py --clippy-toml <path> [--docs <dir>] [--libm <dir>]
 """
@@ -21,6 +22,10 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# The crates that compute with floats for the solver's results (RFC 013 rule 19): the domain, and the
+# device SDK, whose `libm` is the one the solver uses. Each has the same `clippy.toml`.
+CRATES = ["crates/florn-domain-circuit", "crates/florn-guest-device"]
 
 # What the rule allows: IEEE `+ - * /`, negation, `sqrt`, `abs`, `floor`, `ceil`, `trunc`,
 # `copysign`, comparisons and casts (RFC 013 rule 19). Classification and the bit casts are
@@ -116,7 +121,7 @@ def listed(text):
 
 def main(argv):
     args = argv[1:]
-    toml = os.path.join(ROOT, "crates/florn-domain-circuit/clippy.toml")
+    tomls = [os.path.join(ROOT, c, "clippy.toml") for c in CRATES]
     docs = os.path.join(sysroot(), "share/doc/rust/html/std")
     libm_dir = None
     print_only = False
@@ -125,7 +130,7 @@ def main(argv):
         if a == "--print":
             print_only = True
         elif a == "--clippy-toml":
-            toml = args.pop(0)
+            tomls = [args.pop(0)]
         elif a == "--docs":
             docs = args.pop(0)
         elif a == "--libm":
@@ -139,21 +144,26 @@ def main(argv):
     if print_only:
         sys.stdout.write(render(entries))
         return 0
-    have = listed(open(toml, encoding="utf-8").read())
     want = [p for p, _ in entries]
-    missing = sorted(set(want) - set(have))
-    extra = sorted(set(have) - set(want))
-    dup = sorted({p for p in have if have.count(p) > 1})
-    for p in missing:
-        print(f"error: {p} is not in clippy.toml (RFC 013 rule 19, control 1)", file=sys.stderr)
-    for p in extra:
-        print(f"error: clippy.toml lists {p}, which is not a stable method of the toolchain or a libm function the rule disallows", file=sys.stderr)
-    for p in dup:
-        print(f"error: clippy.toml lists {p} twice", file=sys.stderr)
-    if missing or extra or dup:
-        print("regenerate it with: ci/check-float-methods.py --print > crates/florn-domain-circuit/clippy.toml", file=sys.stderr)
+    bad = False
+    for toml in tomls:
+        name = os.path.relpath(toml, ROOT) if toml.startswith(ROOT) else toml
+        have = listed(open(toml, encoding="utf-8").read())
+        missing = sorted(set(want) - set(have))
+        extra = sorted(set(have) - set(want))
+        dup = sorted({p for p in have if have.count(p) > 1})
+        for p in missing:
+            print(f"error: {p} is not in {name} (RFC 013 rule 19, control 1)", file=sys.stderr)
+        for p in extra:
+            print(f"error: {name} lists {p}, which is not a stable method of the toolchain or a libm function the rule disallows", file=sys.stderr)
+        for p in dup:
+            print(f"error: {name} lists {p} twice", file=sys.stderr)
+        if missing or extra or dup:
+            print(f"regenerate it with: ci/check-float-methods.py --print > {name}", file=sys.stderr)
+            bad = True
+    if bad:
         return 1
-    print(f"clippy.toml lists all {len(want)} methods and functions (f64, f32, libm)")
+    print(f"{len(tomls)} clippy.toml file(s) list all {len(want)} methods and functions (f64, f32, libm)")
     return 0
 
 

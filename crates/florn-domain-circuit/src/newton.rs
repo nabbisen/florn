@@ -5,7 +5,8 @@
 //! residual within `abstol + reltol·s_i`, and no device limited in the last iteration. More than
 //! `newton.max-iterations` iterations is a convergence failure (rule 16).
 
-use crate::assemble::{Form, Memory, System, assemble_form};
+use crate::assemble::{Form, Memory, System, assemble_with};
+use crate::device::{Device, Lost};
 use crate::math::fmax;
 use crate::plant::{Plant, UnknownKind};
 
@@ -25,6 +26,9 @@ pub struct Failure {
     pub iterations: u32,
     /// The matrix was singular (a zero pivot), as against the iteration not converging.
     pub singular: bool,
+    /// The guest device was lost in an evaluation (it faulted, or the run ended): the solve was
+    /// abandoned, and this is what the solver does about it (RFC 013 rule 16).
+    pub lost: Option<Lost>,
 }
 
 /// The absolute tolerance of an unknown (rule 8): `vntol` for a voltage or a speed, `abstol` for a
@@ -56,23 +60,52 @@ pub fn solve_form(
     gmin: f64,
     memory: &mut Memory,
 ) -> Result<Converged, Failure> {
-    iterate(plant, x0, |x| assemble_form(plant, x, gmin, form, memory))
+    solve_form_with(plant, form, x0, gmin, memory, &mut crate::device::NoDevice)
 }
 
-/// The iteration itself over a system the caller assembles at each trial point: the criteria of
-/// rule 8 and the bound on the iterations. The unknowns past the nets are branch currents and
-/// states, whose tolerances are the plant's.
-pub(crate) fn iterate(
+/// As [`solve_form`], with the guest device called once per iteration at the trial voltages of its
+/// pins (rule 8): the stamps it answers are added at its place in the order of the evaluation.
+pub fn solve_form_with(
+    plant: &Plant,
+    form: Form<'_>,
+    x0: Vec<f64>,
+    gmin: f64,
+    memory: &mut Memory,
+    device: &mut dyn Device,
+) -> Result<Converged, Failure> {
+    iterate_with(plant, x0, |x| {
+        let stamp = match &plant.guest {
+            Some(_) if device.present() => Some(device.evaluate(&plant.guest_voltages(x))?),
+            _ => None,
+        };
+        Ok(assemble_with(plant, x, gmin, form, memory, stamp.as_ref()))
+    })
+}
+
+/// The iteration itself over a system the caller assembles at each trial point, which may lose the
+/// guest device (the loss ends the solve): the criteria of rule 8 and the bound on the iterations.
+/// The unknowns past the nets are branch currents and states, whose tolerances are the plant's.
+pub(crate) fn iterate_with(
     plant: &Plant,
     x0: Vec<f64>,
-    mut system: impl FnMut(&[f64]) -> System,
+    mut system: impl FnMut(&[f64]) -> Result<System, Lost>,
 ) -> Result<Converged, Failure> {
     let p = &plant.profile;
     let nets = plant.nets.len();
     let mut x = x0;
     let mut worst = 0;
     for iteration in 1..=p.max_iterations {
-        let mut s = system(&x);
+        let mut s = match system(&x) {
+            Ok(s) => s,
+            Err(lost) => {
+                return Err(Failure {
+                    unknown: 0,
+                    iterations: iteration,
+                    singular: false,
+                    lost: Some(lost),
+                });
+            }
+        };
         let n = s.f.len();
         let mut dx: Vec<f64> = s.f.iter().map(|f| -f).collect();
         let finite = s.f.iter().all(|f| f.is_finite());
@@ -81,6 +114,7 @@ pub(crate) fn iterate(
                 unknown: column,
                 iterations: iteration,
                 singular: true,
+                lost: None,
             });
         }
         if !finite || dx.iter().any(|d| !d.is_finite()) {
@@ -89,6 +123,7 @@ pub(crate) fn iterate(
                 unknown: bad,
                 iterations: iteration,
                 singular: false,
+                lost: None,
             });
         }
         let mut converged = !s.limited;
@@ -124,6 +159,7 @@ pub(crate) fn iterate(
         unknown: worst,
         iterations: p.max_iterations,
         singular: false,
+        lost: None,
     })
 }
 

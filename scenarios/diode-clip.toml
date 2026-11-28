@@ -1,0 +1,94 @@
+# diode-clip: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "diode-clip"
+domains = ["core", "circuit"]
+
+[time]
+tick = "1ns"
+end = "1600000ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 1
+
+[limits.default]
+memory = "2MiB"
+
+[[actors]]
+id = 1
+name = "vs"
+kind = "builtin"
+builtin = "circuit/voltage-source"
+ports = [{ id = 0, name = "p", type = "circuit/pin" }, { id = 1, name = "n", type = "circuit/pin" }]
+[actors.config]
+v = "5V"
+
+[[actors]]
+id = 2
+name = "r"
+kind = "builtin"
+builtin = "circuit/resistor"
+ports = [{ id = 0, name = "a", type = "circuit/pin" }, { id = 1, name = "b", type = "circuit/pin" }]
+[actors.config]
+r = "1kohm"
+
+[[actors]]
+id = 3
+name = "d"
+kind = "builtin"
+builtin = "circuit/diode"
+ports = [{ id = 0, name = "a", type = "circuit/pin" }, { id = 1, name = "k", type = "circuit/pin" }]
+
+[[actors]]
+id = 4
+name = "vm"
+kind = "builtin"
+builtin = "circuit/voltmeter"
+ports = [{ id = 0, name = "p", type = "circuit/pin" }, { id = 1, name = "n", type = "circuit/pin" }]
+[actors.config]
+period = "10us"
+
+[[connections]]
+id = 100
+name = "in"
+type = "circuit/net"
+ports = ["vs.p", "r.a"]
+
+[[connections]]
+id = 101
+name = "mid"
+type = "circuit/net"
+ports = ["r.b", "d.a", "vm.p"]
+
+[[connections]]
+id = 102
+name = "gnd"
+type = "circuit/net"
+ports = ["vs.n", "d.k", "vm.n"]
+[connections.attrs]
+ground = true
+
+[[changes]]
+at = "400000ns"
+target = "world:circuit"
+[changes.payload]
+actor = 1
+v = "-5V"
+
+[[changes]]
+at = "800000ns"
+target = "world:circuit"
+[changes.payload]
+actor = 1
+v = "5V"
+
+[[changes]]
+at = "1200000ns"
+target = "world:circuit"
+[changes.payload]
+actor = 1
+v = "-5V"

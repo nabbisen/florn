@@ -56,7 +56,8 @@ ALLOWED = {
     "florn-domain-circuit": {"florn-host", "florn-kernel", "florn-model", "florn-control", "florn-abi", "florn-admission"},
     "florn-guest-network": {"florn-guest"},
     "florn-guest-circuit": {"florn-guest"},
-    "florn-conformance": {"florn-host", "florn-domain-circuit", "florn-model", "florn-control", "florn-engine", "florn-engine-wasmtime", "florn-platform", "florn-platform-native", "florn-guest", "florn-kernel", "florn-admission", "florn-abi", "florn-test-guests", "florn-domain-network"},
+    "florn-guest-device": {"florn-guest"},
+    "florn-conformance": {"florn-host", "florn-domain-circuit", "florn-model", "florn-control", "florn-engine", "florn-engine-wasmtime", "florn-platform", "florn-platform-native", "florn-guest", "florn-kernel", "florn-admission", "florn-abi", "florn-test-guests", "florn-domain-network", "florn-guest-device"},
     "florn-test-guests": {"florn-model", "florn-admission"},
     "florn-guest": set(),
     "florn-kernel": set(),
@@ -67,6 +68,8 @@ ALLOWED = {
 # not listed is limited by `cargo deny` alone; every external dependency is pinned exactly.
 EXTERNAL = {
     "florn-domain-circuit": {"libm"},
+    # The device SDK: the bindings and the one implementation of exp and ln the solver uses.
+    "florn-guest-device": {"libm", "wit-bindgen"},
 }
 bad = 0
 for p in meta["packages"]:

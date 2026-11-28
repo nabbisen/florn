@@ -86,10 +86,11 @@ fn ac_001_every_shipped_scenario_produces_its_recorded_digest() {
             s.scenario.module_names().len(),
             "{name}: every module admitted"
         );
+        // `hostile-diverge`'s device never faults: the solver gives up on it (RFC 013 rule 17).
         let faulted = run.log().codes().contains(&"actor.faulted");
         assert_eq!(
             faulted,
-            name.starts_with("hostile-"),
+            name.starts_with("hostile-") && name != "hostile-diverge",
             "{name}: only the hostile scenarios fault"
         );
     }

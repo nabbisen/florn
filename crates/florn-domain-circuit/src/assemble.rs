@@ -6,9 +6,10 @@
 //! with an `ic`), an inductor short (or a current source with an `ic`), the motor in its steady
 //! state (rule 9).
 
+use crate::device::Stamp;
 use crate::diode::Junction;
 use crate::lu::Matrix;
-use crate::plant::{Element, Node, Plant};
+use crate::plant::{Element, GuestPins, Node, Plant};
 
 /// The system at a trial point: the Jacobian, the residual, and for every net the sum of the
 /// magnitudes of the branch currents at it (the scale of the residual test, rule 8).
@@ -114,13 +115,30 @@ fn held_raw(plant: &Plant, s: Option<usize>) -> f64 {
     s.map_or(0.0, |i| plant.signals[i].held)
 }
 
-/// Assemble a system of either form at `x`.
-pub fn assemble_form(
+/// A guest device's stamps added into the system at its place in the order of the evaluation (RFC
+/// 013 rule 5): the current into each pin leaves its net, and the Jacobian is added row by row.
+fn stamp_guest(s: &mut System, g: &GuestPins, st: &Stamp) {
+    let n = g.nodes.len();
+    for (k, node) in g.nodes.iter().enumerate() {
+        s.leaves(*node, st.currents[k]);
+    }
+    for (k, row) in g.nodes.iter().enumerate() {
+        for (j, col) in g.nodes.iter().enumerate() {
+            s.jac(*row, *col, st.jacobian[k * n + j]);
+        }
+    }
+    s.limited |= st.limited;
+}
+
+/// Assemble a system of either form at `x`, with the stamps the guest device answered at this trial
+/// point, when there is one (RFC 013 rules 5 and 8).
+pub fn assemble_with(
     plant: &Plant,
     x: &[f64],
     gmin: f64,
     form: Form<'_>,
     memory: &mut Memory,
+    guest: Option<&Stamp>,
 ) -> System {
     let (lambda, step) = match form {
         Form::Dc { lambda } => (lambda, None),
@@ -137,6 +155,11 @@ pub fn assemble_form(
         s.j.add(k, k, gmin);
     }
     for (d, dev) in plant.devices.iter().enumerate() {
+        if let (Some(g), Some(st)) = (&plant.guest, guest)
+            && g.before == d
+        {
+            stamp_guest(&mut s, g, st);
+        }
         match &dev.element {
             Element::Resistor { a, b, g } => {
                 let i = g * (volt(x, *a) - volt(x, *b));
@@ -269,6 +292,12 @@ pub fn assemble_form(
                 }
             }
         }
+    }
+    // A guest device after every built-in of lower identity than its own is after all of them.
+    if let (Some(g), Some(st)) = (&plant.guest, guest)
+        && g.before >= plant.devices.len()
+    {
+        stamp_guest(&mut s, g, st);
     }
     s
 }

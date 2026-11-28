@@ -6,6 +6,7 @@ recorded-on = "x86_64"
 
 [modules]
 bad_controller = "c5a594837b7b2f31d9cef2b697b833e80e88550644867c15100dcf2178308edd"
+bad_device = "5d6817e1d1e87c03628dbd8eb0e9f4215523d824226e1859c486ae6a106a9624"
 bench_compute = "f0c56955a04d2cf5d58d72fceff1582e2740fe339fde6f210110388365b36c74"
 bench_protocol = "1bcdf8da600918bb72c1244809345e185eeddc293f955205388be7ccac2c7f79"
 bgp = "01aebf97f0035406e8c6d8f3fa588afc0194105574b38b9a9a880695a660b28e"
@@ -13,6 +14,7 @@ chatter = "32fe171fb80616572c4ef29c6abc84714af0221250311808c48d65b7a75587b3"
 clock = "8c2a10d3ee03b3e7c0ea938d849bc2bbf2efac99c501e8a6a2832c3fbcc5af5e"
 distance_vector = "8f323a0fa712d4cd32cb7c92ca1e1428671ffc5a667a3916e66cc7b76aeae692"
 echo = "2e67a71dac293e96f0553f175e0c195ff1dc55bc394bff04f9b0943070d5e4ab"
+guest_diode = "98b87021d645f34f91fde5d87a7c8ac4c8bb4de53605b164ed1c4a8016c01744"
 heap = "8db7b36d9da1023f7a866ebe2a0326998f38e9dbe75633ebedafd3d55134d40b"
 hostile_bad_pointer = "20ea2bac2defc2057f9103dbd5e7b3665a10070e9a09ab9226975b1273bf5886"
 hostile_flood = "79fd5c2f46abdfb7d0156351a40ed5df424434f4279be239ba7f1f4c2af012fe"
@@ -29,6 +31,7 @@ timers = "c4620ce5f550ae2baff413b8308003ba3121ce93f2766ef8d2c89d520327f0d5"
 
 [admitted]
 bad_controller = "fbfc9b75d7457994739eef8ee528b83f0b85656e74a81fdd9919b514c47d4f6d"
+bad_device = "fc7d3c13499108cb2fdfdde139f74257cfa4d226302e3e678ae41fd35dac6ed7"
 bench_compute = "b3d9d74c1915a35b688bca4cf7a63899ca83d668ef77220666047180cc84409b"
 bench_protocol = "feab83437c37118511f7d29ab13853e8b90ede99cfd8b67e13fef2ec78c231ad"
 bgp = "80a5d7fa86b9d8cba84fc6772fe24dbf0a7096e379441024f27e88ffe5b45ca2"
@@ -36,6 +39,7 @@ chatter = "bf4b74129ae2f88d62f4d069d03a2319855245c3ab06fe74b4c8ae3101239c6e"
 clock = "cf86e762105b74d071fd7278d9759690757ee54eab5488e5d9a78c0a7590f103"
 distance_vector = "3c6db87827ddaaffca25817cb33a7167695cbc00beeb8fee34268a332c0d503d"
 echo = "a79e118e8f24b200739bae3b4be68073210242356583c88ff7d25fe8656e90e0"
+guest_diode = "eedb723323f764634299e87cfc6f7c23b87f1f2e5bb9bfde25ac7770d9412649"
 heap = "56bca6f663f64ac34ea3826b88a604189aeddcc13880803b97860ea2955cc26d"
 hostile_bad_pointer = "453881ef5f93e008f6ff052b2d94ac42811963655c27e633d5c3fd411c319ae3"
 hostile_flood = "0059debb918ad26ac832b48cc3fa2658adf101b8235a52aae03daeed7948345e"
@@ -51,6 +55,7 @@ timers = "fb9dbe1c6735fdb613b3b9ba4f533b80bae515bb6733e0517496b0dd4d60eed5"
 
 [admitted-2]
 bad_controller = "fbfc9b75d7457994739eef8ee528b83f0b85656e74a81fdd9919b514c47d4f6d"
+bad_device = "fc7d3c13499108cb2fdfdde139f74257cfa4d226302e3e678ae41fd35dac6ed7"
 bench_compute = "b3d9d74c1915a35b688bca4cf7a63899ca83d668ef77220666047180cc84409b"
 bench_protocol = "feab83437c37118511f7d29ab13853e8b90ede99cfd8b67e13fef2ec78c231ad"
 bgp = "80a5d7fa86b9d8cba84fc6772fe24dbf0a7096e379441024f27e88ffe5b45ca2"
@@ -58,6 +63,7 @@ chatter = "bf4b74129ae2f88d62f4d069d03a2319855245c3ab06fe74b4c8ae3101239c6e"
 clock = "cf86e762105b74d071fd7278d9759690757ee54eab5488e5d9a78c0a7590f103"
 distance_vector = "3c6db87827ddaaffca25817cb33a7167695cbc00beeb8fee34268a332c0d503d"
 echo = "a79e118e8f24b200739bae3b4be68073210242356583c88ff7d25fe8656e90e0"
+guest_diode = "eedb723323f764634299e87cfc6f7c23b87f1f2e5bb9bfde25ac7770d9412649"
 heap = "56bca6f663f64ac34ea3826b88a604189aeddcc13880803b97860ea2955cc26d"
 hostile_bad_pointer = "453881ef5f93e008f6ff052b2d94ac42811963655c27e633d5c3fd411c319ae3"
 hostile_flood = "0059debb918ad26ac832b48cc3fa2658adf101b8235a52aae03daeed7948345e"
@@ -95,6 +101,12 @@ chain = "f933560976ef5c1a941a9a014e18e27d44ce7fa66c16f4d5a9928f793794ee55"
 records = 44
 ended = "end-reached"
 
+[runs."diode-clip"]
+seed = 1
+chain = "6acf3a301f8cf3622a92a866238399ab21ccef581183dcd8630d598bdef56669"
+records = 164
+ended = "end-reached"
+
 [runs."dv-chain"]
 seed = 1
 chain = "09975093cfcfc833129fbfb079d6a535335b6cc9e90e724ed56952d2b7ce756b"
@@ -113,6 +125,12 @@ chain = "9dbd61be3d9ab2b1563c0d18741319bdbf4f48266ab409f4d71db401540db6bc"
 records = 5285
 ended = "end-reached"
 
+[runs."guest-diode"]
+seed = 1
+chain = "bb7ce51802bd0dfafd5e14ba13d894a5515610a5112e5df970643d88081d5e96"
+records = 348
+ended = "end-reached"
+
 [runs."heap"]
 seed = 1
 chain = "2af63b7b195997cb459cdd0946ea451909e103790fe1c69845f4ae5d739e52c0"
@@ -124,6 +142,12 @@ seed = 1
 chain = "5442b3b482f7ddecc54ca437065bccd316966b31cdf19db4762a7e16b8508087"
 records = 102
 ended = "end-reached"
+
+[runs."hostile-diverge"]
+seed = 1
+chain = "126baecb4c61e065c7619446019cf6aac0e63e09e5bc339e785fbec9483d6f26"
+records = 6
+ended = "non-convergence"
 
 [runs."hostile-flood"]
 seed = 1
@@ -147,6 +171,12 @@ ended = "end-reached"
 seed = 1
 chain = "2644102be558a1d4bbec76cf7a3ebb0e777e0bea93cc23c8c95d53b598d749b2"
 records = 102
+ended = "end-reached"
+
+[runs."hostile-stamp"]
+seed = 1
+chain = "ae4d19e61169ed7bfad730f3703f987a89eaa1e94bc7c13cc7ac3f02e4c59bb4"
+records = 18
 ended = "end-reached"
 
 [runs."motor-loop"]

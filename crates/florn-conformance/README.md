@@ -31,6 +31,8 @@ The browser Host runs the same scenarios through its test page: `ci/browser/run.
 | `bench_compute` | Multiplies two 64×64 matrices | The cost benchmark, B2 |
 | `realloc_loop` (text, in the kit) | A `cabi_realloc` that loops | Budget before lowering |
 | `crossing` (text, in the kit) | Returns at once; echoes a payload | The crossing benchmark |
+| `pid`, `bad_controller` (the `florn-guest-circuit` examples) | The sampled controller of RFC 012 and a controller that traps, sets a NaN and reports on two channels | `circuit_motor_loop.rs`; the shipped `motor-loop` |
+| `guest_diode`, `bad_device` (the `florn-guest-device` examples) | A diode as a device model, and a conductance that returns a NaN, a wrong length, a flag that is no flag, sets a timer or a trap, or never converges | `circuit_device.rs`; the shipped `diode-clip`'s twin `guest-diode`, `hostile-stamp`, `hostile-diverge` |
 | `net_echo`, `distance_vector`, `ospf`, `bgp` (the `florn-guest-network` examples) | The network ladder of RFC 008 and RFC 011 | `network.rs`, `ladder.rs`, `ospf.rs`, `bgp.rs`; the shipped `net-*`, `dv-*`, `ospf-*` and `bgp-*` scenarios |
 
 ## The tables
@@ -67,7 +69,7 @@ Where a row is proven by another crate's own test, the row names it; the kit doe
 | Effects | `rfc_001::an_activation_that_faults_commits_nothing` |
 | Randomness | `rfc_002::a_fault_restores_the_stream_to_the_start_of_the_activation`; `rfc_001::a_third_actor_changes_no_draw_of_the_first_two` |
 | Telemetry | `rfc_002::telemetry_channels_and_quota_are_enforced_and_text_reaches_the_log` |
-| Compound activation | Not yet written: no shipped domain declares one. The circuit domain (Phase 4) is the first, and its RFC names the test (RFC 002 rules 44 and 45) |
+| Compound activation | `circuit_device` (the circuit's device model, RFC 012 rules 19 to 21): a step the solver rejects leaves the guest's committed state and its reports as they were (`a_rejected_step_leaves_what_the_guest_reported_as_it_was`), every attempt is one activation closed once (`florn-domain-circuit`'s `transient::tests::device`), a result that is no stamp, a timer, a send and a trap are faults of the device and the plant continues |
 | Two domains | Not yet written: a guest with two domain worlds first exists with the circuit domain (RFC 002 rule 48) |
 | No ambient access | `rfc_002::no_ambient_access` |
 | SDK | Every test: the guests are built from the SDK with the toolchain alone |
@@ -111,6 +113,21 @@ The circuit's results are compared across engines through files the kit records 
 | The dependency allow-list | `ci/test-gates.sh` (PR-44): a second external dependency, a range, a development dependency; `libm` with a feature or its default features (PR-49) |
 | The flag script | `ci/check-float-flags.sh`; `ci/test-gates.sh`: `target-cpu`, `target-feature`, `-Z`, an LLVM argument, fast-math and a nightly toolchain, each in the file a build reads it from; `[unstable]`, `RUSTC_BOOTSTRAP`, `rustc` wrappers and a code-generation backend |
 | `florn replay` across Hosts | `crates/florn/tests/circuit_replay.rs`: a circuit record without payloads whose chain differs prints `needs-payloads` and exits 1; on one build it is `diverged`, exit 2 |
+
+### RFC 012 rules 17 and 19 to 21 and RFC 013 rules 8, 9, 16 and 17, the device model (PR-49)
+
+| Property | Test |
+|---|---|
+| `guest-diode` against `diode-clip` on the voltmeters' samples | `circuit_device::guest_diode_and_the_built_in_diode_agree_on_the_voltmeters_samples` (within the profile's tolerance, pair by pair; the largest difference is printed: 0 V, the two are bit-identical); `florn-domain-circuit`'s `a_guest_diode_is_the_built_in_diode_to_the_last_bit` (the same stamps in the same order); the shipped scenarios' digests and results files in every engine |
+| Each mode of `bad-device` is a Fault keyed by the advance, with `circuit.stamp-invalid` where the result was no stamp | `circuit_device::each_result_that_is_no_stamp_…` (`nan`, `short`, `long`, `flag`: parameter 12020), `…a_timer_and_a_send_in_a_device…` (12019), `…a_trap_in_a_device…`, `…the_fault_record_is_keyed_by_the_advance…`, `…a_fault_in_the_initial_solve_is_keyed_as_the_devices_init…` |
+| The plant continues without the device; under `stop-run` the run ends with `actor-fault` | the same tests; `circuit_device::under_stop_run_a_device_fault_ends_the_run_with_actor_fault` |
+| `diverge` ends with `non-convergence`, and under `hold` continues frozen | `circuit_device::stamps_that_never_converge_…`, `…under_hold_the_plant_freezes_…`; the attempts of the step never exceed `max-rejections + 1` |
+| The initial solve of a guest device leaves one record, keyed as its `init`; the solves that do not give the result leave none | `circuit_device::the_device_leaves_one_record_per_accepted_step_…`; `florn-domain-circuit`'s `the_dc_solve_opens_the_device_in_dc_form_…`, `a_failed_stage_is_rejected_and_only_the_solve_that_gives_the_result_is_accepted` |
+| The device's records carry the advance's key and the device as target | `circuit_device::the_device_leaves_one_record_per_accepted_step_…` |
+| A result of the wrong length is a Fault with the parameter 12020, and one over the bound is never lifted | `circuit_device::each_result_that_is_no_stamp_…` (`short` and `long`); `florn-domain-circuit`'s `device::tests` (the handle's refusal) |
+| `two-devices` is refused with `circuit.device-limit` from the start hook | `circuit_device::two_devices_are_refused_…` |
+| A guest device that reports limiting while the criteria hold takes one more iteration | `florn-domain-circuit`'s `a_device_that_limits_takes_one_more_iteration_than_one_that_does_not` |
+| A checkpoint restored before and after the loss of the device, and a replay | `circuit_device::a_run_restored_before_and_after_the_loss_of_the_device_…`, `…a_replay_of_a_run_with_a_device_…` |
 
 ### RFC 005 section 11, the rows that apply in 0.1
 

@@ -5,7 +5,7 @@ use super::*;
 
 /// The system of the initial solve at `x`, the sources scaled by `lambda`.
 fn assemble(plant: &Plant, x: &[f64], gmin: f64, lambda: f64, memory: &mut Memory) -> System {
-    assemble_form(plant, x, gmin, Form::Dc { lambda }, memory)
+    assemble_with(plant, x, gmin, Form::Dc { lambda }, memory, None)
 }
 use crate::dc::initial_solve;
 use crate::tests::{Deck, divider};
@@ -127,7 +127,7 @@ fn the_jacobian_of_a_step_is_the_derivative_of_its_residual_for_every_dynamic_el
     let x: Vec<f64> = (0..n).map(|i| 0.3 + 0.1 * i as f64).collect();
     let at = |x: &[f64]| {
         let mut mem = memory(&plant);
-        assemble_form(&plant, x, 1e-12, Form::Step(&companion), &mut mem)
+        assemble_with(&plant, x, 1e-12, Form::Step(&companion), &mut mem, None)
     };
     let base = at(&x);
     assert_eq!((base.f.len(), base.j.size()), (n, n));

@@ -14,7 +14,14 @@ use crate::{host, shipped};
 
 /// The circuit scenarios that have a results file (RFC 012 rule 27, as far as they are shipped): a
 /// scenario of a later unit joins the list with its own file.
-pub const CIRCUIT: &[&str] = &["rc-step", "motor-loop"];
+pub const CIRCUIT: &[&str] = &[
+    "rc-step",
+    "motor-loop",
+    "diode-clip",
+    "guest-diode",
+    "hostile-stamp",
+    "hostile-diverge",
+];
 
 /// The name of the bit-identity table's file.
 pub const BITS_FILE: &str = "bit-identity.table";

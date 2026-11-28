@@ -156,3 +156,236 @@ value = "0.02Nm"
 "#
     .to_string()
 }
+
+/// The head of a shipped circuit scenario: the manifest's own sections up to the actors, with the
+/// modules it uses (`@module@` stands for a module's hash), its `[circuit]` profile lines and its
+/// scheduled changes after them.
+fn head(name: &str, end_ns: u64, modules: &[(&str, &str)], profile: &str) -> String {
+    let mut t = format!(
+        "florn = 1\nname = \"{name}\"\ndomains = [\"core\", \"circuit\"]\n\n[time]\ntick = \"1ns\"\nend = \"{end_ns}ns\"\n\n[order]\ntie = \"by-identity\"\n\n[seed]\nroot = 1\n\n[limits.default]\nmemory = \"2MiB\"\n"
+    );
+    for (module, contract) in modules {
+        t.push_str(&format!(
+            "\n[modules.{module}]\nsha256 = \"@{module}@\"\ncontract = \"{contract}\"\n"
+        ));
+    }
+    if !profile.is_empty() {
+        t.push_str(&format!("\n[circuit]\n{profile}\n"));
+    }
+    t
+}
+
+/// A built-in actor of the text: its identity, name, kind, ports (name and type) and its config.
+fn builtin(id: u32, name: &str, kind: &str, ports: &[(&str, &str)], config: &str) -> String {
+    let ports: Vec<String> = ports
+        .iter()
+        .enumerate()
+        .map(|(i, (n, t))| format!("{{ id = {i}, name = \"{n}\", type = \"{t}\" }}"))
+        .collect();
+    let mut t = format!(
+        "\n[[actors]]\nid = {id}\nname = \"{name}\"\nkind = \"builtin\"\nbuiltin = \"circuit/{kind}\"\nports = [{}]\n",
+        ports.join(", ")
+    );
+    if !config.is_empty() {
+        t.push_str(&format!("[actors.config]\n{config}\n"));
+    }
+    t
+}
+
+/// A guest actor of the text with the pins of a two-terminal device and its config.
+fn device(id: u32, name: &str, module: &str, config: &str) -> String {
+    let mut t = format!(
+        "\n[[actors]]\nid = {id}\nname = \"{name}\"\nkind = \"module\"\nmodule = \"{module}\"\nports = [{{ id = 0, name = \"a\", type = \"circuit/pin\" }}, {{ id = 1, name = \"k\", type = \"circuit/pin\" }}]\n"
+    );
+    if !config.is_empty() {
+        t.push_str(&format!("[actors.config]\n{config}\n"));
+    }
+    t
+}
+
+/// A connection of the text.
+fn connection(id: u32, name: &str, ty: &str, ports: &[&str], ground: bool) -> String {
+    let list: Vec<String> = ports.iter().map(|p| format!("\"{p}\"")).collect();
+    let mut t = format!(
+        "\n[[connections]]\nid = {id}\nname = \"{name}\"\ntype = \"circuit/{ty}\"\nports = [{}]\n",
+        list.join(", ")
+    );
+    if ground {
+        t.push_str("[connections.attrs]\nground = true\n");
+    }
+    t
+}
+
+/// A scheduled change of a source's voltage.
+fn source_change(at_ns: u64, volts: &str) -> String {
+    format!(
+        "\n[[changes]]\nat = \"{at_ns}ns\"\ntarget = \"world:circuit\"\n[changes.payload]\nactor = 1\nv = \"{volts}\"\n"
+    )
+}
+
+/// The plant of `diode-clip` and `guest-diode` (RFC 012 rule 27): a 5 V source through a 1 kohm
+/// resistor into a diode, a voltmeter across the diode every 10 us, and the source stepped to −5 V
+/// at 0.4 ms, back to +5 V at 0.8 ms and to −5 V at 1.2 ms: the nonlinear iteration and the
+/// restarts. The diode is a built-in (`diode-clip`) or the guest `guest_diode` (`guest-diode`),
+/// with the same parameters, so that the two voltmeters' samples are the same plant.
+fn clip(name: &str, guest: bool) -> String {
+    let modules: &[(&str, &str)] = if guest {
+        &[("guest_diode", "florn:circuit/device@0.1.0")]
+    } else {
+        &[]
+    };
+    let mut t = head(name, 1_600_000, modules, "");
+    t.push_str(&builtin(
+        1,
+        "vs",
+        "voltage-source",
+        &[("p", "circuit/pin"), ("n", "circuit/pin")],
+        "v = \"5V\"",
+    ));
+    t.push_str(&builtin(
+        2,
+        "r",
+        "resistor",
+        &[("a", "circuit/pin"), ("b", "circuit/pin")],
+        "r = \"1kohm\"",
+    ));
+    if guest {
+        t.push_str(&device(3, "d", "guest_diode", ""));
+    } else {
+        t.push_str(&builtin(
+            3,
+            "d",
+            "diode",
+            &[("a", "circuit/pin"), ("k", "circuit/pin")],
+            "",
+        ));
+    }
+    t.push_str(&builtin(
+        4,
+        "vm",
+        "voltmeter",
+        &[("p", "circuit/pin"), ("n", "circuit/pin")],
+        "period = \"10us\"",
+    ));
+    t.push_str(&connection(100, "in", "net", &["vs.p", "r.a"], false));
+    t.push_str(&connection(
+        101,
+        "mid",
+        "net",
+        &["r.b", "d.a", "vm.p"],
+        false,
+    ));
+    t.push_str(&connection(
+        102,
+        "gnd",
+        "net",
+        &["vs.n", "d.k", "vm.n"],
+        true,
+    ));
+    for (at, v) in [(400_000, "-5V"), (800_000, "5V"), (1_200_000, "-5V")] {
+        t.push_str(&source_change(at, v));
+    }
+    t
+}
+
+/// `diode-clip` (RFC 012 rule 27): the plant above with the built-in diode.
+pub fn diode_clip() -> Scenario {
+    Scenario::raw("diode-clip", 1_600_000, clip("diode-clip", false), &[])
+}
+
+/// `guest-diode` (RFC 012 rule 27): the same plant with the guest device in the diode's place.
+pub fn guest_diode() -> Scenario {
+    Scenario::raw(
+        "guest-diode",
+        1_600_000,
+        clip("guest-diode", true),
+        &["guest_diode"],
+    )
+}
+
+/// A 5 V source through a 1 kohm resistor into a `bad_device` whose parameters are `config`, a
+/// voltmeter across it every 100 us: the plant of the hostile device scenarios. The device is a
+/// conductance of 1 mS when it behaves.
+fn hostile(name: &str, end_ns: u64, config: &str, profile: &str) -> String {
+    let mut t = head(
+        name,
+        end_ns,
+        &[("bad_device", "florn:circuit/device@0.1.0")],
+        profile,
+    );
+    t.push_str(&builtin(
+        1,
+        "vs",
+        "voltage-source",
+        &[("p", "circuit/pin"), ("n", "circuit/pin")],
+        "v = \"5V\"",
+    ));
+    t.push_str(&builtin(
+        2,
+        "r",
+        "resistor",
+        &[("a", "circuit/pin"), ("b", "circuit/pin")],
+        "r = \"1kohm\"",
+    ));
+    t.push_str(&device(3, "d", "bad_device", config));
+    t.push_str(&builtin(
+        4,
+        "vm",
+        "voltmeter",
+        &[("p", "circuit/pin"), ("n", "circuit/pin")],
+        "period = \"100us\"",
+    ));
+    t.push_str(&connection(100, "in", "net", &["vs.p", "r.a"], false));
+    t.push_str(&connection(
+        101,
+        "mid",
+        "net",
+        &["r.b", "d.a", "vm.p"],
+        false,
+    ));
+    t.push_str(&connection(
+        102,
+        "gnd",
+        "net",
+        &["vs.n", "d.k", "vm.n"],
+        true,
+    ));
+    t
+}
+
+/// `hostile-stamp` (RFC 012 rule 27): a device that answers a NaN stamp at its fifth evaluation.
+/// The solver discards the step, the Host records a Fault of kind contract, parameter 12020, and
+/// `circuit.stamp-invalid` and `circuit.device-faulted` are notified; the plant continues without
+/// the device under `faulted-policy = "drop"`.
+pub fn hostile_stamp() -> Scenario {
+    Scenario::raw(
+        "hostile-stamp",
+        1_000_000,
+        hostile("hostile-stamp", 1_000_000, "mode = \"nan\"\nat = 5", ""),
+        &["bad_device"],
+    )
+}
+
+/// `hostile-diverge` (RFC 013 rule 17): a device whose stamps never converge from its third
+/// evaluation on. The initial solve succeeds, the first step fails at every size, and the run ends
+/// with `circuit.non-convergence` and the end reason `non-convergence` (`on-non-convergence`'s
+/// default, `stop-run`).
+pub fn hostile_diverge() -> Scenario {
+    Scenario::raw(
+        "hostile-diverge",
+        1_000_000,
+        hostile(
+            "hostile-diverge",
+            1_000_000,
+            "mode = \"diverge\"\nat = 3",
+            "",
+        ),
+        &["bad_device"],
+    )
+}
+
+/// The text of a hostile scenario with another device config and profile: the kit's tests change a
+/// line of it (a mode, an `at`, `on-non-convergence`, `faulted-policy`).
+pub fn hostile_text(name: &str, end_ns: u64, config: &str, profile: &str) -> String {
+    hostile(name, end_ns, config, profile)
+}

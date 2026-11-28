@@ -26,7 +26,7 @@ fn started() -> (crate::plant::Plant, Live, Solution) {
 fn the_state_reads_back_to_the_bytes_it_was_written_as() {
     let (plant, mut live, solution) = started();
     for t in [0, 100_000, 200_000] {
-        live.on_advance(&plant, t);
+        live.on_advance(&plant, t, &mut florn_host::compound::NoCalls);
     }
     live.record(&plant, 300_000, Input::Source(1), 0.25, 1);
     live.freeze(0, true);
@@ -37,7 +37,9 @@ fn the_state_reads_back_to_the_bytes_it_was_written_as() {
         index: 205,
     }];
     let bytes = encode(&live, Some(&solution));
-    assert_eq!(bytes[0], VERSION);
+    // The recorded version of this encoding: 3 holds whether the guest device was lost (PR-49).
+    assert_eq!(VERSION, 3);
+    assert_eq!(bytes[0], 3);
     let (back, sol) = decode(&plant, &bytes).expect("it fits the plant");
     assert_eq!(encode(&back, sol.as_ref()), bytes);
     assert_eq!(back.pending.len(), live.pending.len());
@@ -51,6 +53,28 @@ fn the_state_reads_back_to_the_bytes_it_was_written_as() {
         live.transient.as_ref().unwrap().x()
     );
     assert_eq!(sol.unwrap().stage, solution.stage);
+}
+
+#[test]
+fn the_loss_of_the_guest_device_is_in_the_state_and_the_old_version_is_refused() {
+    let (plant, mut live, solution) = started();
+    assert!(!live.guest_lost);
+    live.guest_lost = true;
+    let bytes = encode(&live, Some(&solution));
+    let (back, _) = decode(&plant, &bytes).expect("it fits the plant");
+    assert!(back.guest_lost, "the loss survives a checkpoint");
+    // The same plant without the loss differs in that one byte, after the version, the last advance
+    // and its pending tick, the status and the notified mark.
+    live.guest_lost = false;
+    let other = encode(&live, Some(&solution));
+    let differing: Vec<usize> = (0..bytes.len())
+        .filter(|i| bytes[*i] != other[*i])
+        .collect();
+    assert_eq!(differing.len(), 1, "{differing:?}");
+    // Version 2, as PR-47 wrote it, is not read: it has no such byte.
+    let mut v2 = other.clone();
+    v2[0] = 2;
+    assert!(decode(&plant, &v2).is_none());
 }
 
 #[test]

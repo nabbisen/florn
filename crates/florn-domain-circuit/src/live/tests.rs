@@ -4,6 +4,7 @@
 use super::*;
 use crate::dc::initial_solve;
 use crate::tests::Deck;
+use florn_host::compound::NoCalls;
 
 fn deck(profile: &str) -> Deck {
     Deck::new()
@@ -43,7 +44,7 @@ fn the_first_advance_is_at_the_earliest_sensor_due_and_every_sensor_due_samples_
             payload: Vec::new()
         }]
     );
-    let after = live.on_advance(&plant, 0);
+    let after = live.on_advance(&plant, 0, &mut NoCalls);
     // The ammeter samples (delay 0, next microstep); the next advance is the voltmeter's 30 us.
     let samples: Vec<_> = after
         .iter()
@@ -59,7 +60,7 @@ fn the_first_advance_is_at_the_earliest_sensor_due_and_every_sensor_due_samples_
         .collect();
     assert_eq!(samples, [(5, 0)]);
     assert_eq!(live.advance_at, Some(30_000));
-    live.on_advance(&plant, 30_000);
+    live.on_advance(&plant, 30_000, &mut NoCalls);
     assert_eq!(live.advance_at, Some(70_000));
 }
 
@@ -178,7 +179,7 @@ fn a_detector_wakes_the_advance_at_detect_interval_when_no_sensor_is_due_sooner(
     live.start(&plant, &initial_solve(&plant).unwrap(), Vec::new());
     // The voltmeter is due at 900 us, the detector wakes the plant at 200 us.
     assert_eq!(live.advance_at, Some(200_000));
-    live.on_advance(&plant, 200_000);
+    live.on_advance(&plant, 200_000, &mut NoCalls);
     assert_eq!(
         live.advance_at,
         Some(400_000),
@@ -250,8 +251,8 @@ fn a_step_at_the_minimum_is_notified_once_per_advance_and_counted_in_the_summary
     // RFC 013 rule 12 and rule 28's row: `min-step` equal to `step` and a tight `ltol` put many
     // steps of one advance at the minimum; the log hears of the first and the count is kept.
     let (plant, mut live, _) = started("step = \"1000ns\"\nmin-step = \"1000ns\"\nltol = 1e-9");
-    live.on_advance(&plant, 0);
-    let actions = live.on_advance(&plant, 30_000);
+    live.on_advance(&plant, 0, &mut NoCalls);
+    let actions = live.on_advance(&plant, 30_000, &mut NoCalls);
     let said = actions
         .iter()
         .filter(|a| matches!(a, Action::Notify(n) if n.code == "circuit.step-minimum"))

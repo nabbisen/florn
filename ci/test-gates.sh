@@ -416,10 +416,11 @@ PY
   printf '#[allow(clippy::disallowed_methods)]\npub fn bad(x: f64) -> f64 { x.exp() }\n' >"$c/src/lib.rs"
   expect pass "an allow of disallowed_methods hides a std exp without the forbid (what the forbid is for)" clippy_in
   tested=$((tested + 1))
-  if grep -q '^#!\[forbid(clippy::disallowed_methods)\]' crates/florn-domain-circuit/src/lib.rs; then
-    echo "ok    the crate's root forbids clippy::disallowed_methods"
+  if grep -q '^#!\[forbid(clippy::disallowed_methods)\]' crates/florn-domain-circuit/src/lib.rs &&
+    grep -q '^#!\[forbid(clippy::disallowed_methods)\]' crates/florn-guest-device/src/math.rs; then
+    echo "ok    the domain's root and the device SDK's math module forbid clippy::disallowed_methods"
   else
-    echo "FAIL  the crate's root does not forbid clippy::disallowed_methods"
+    echo "FAIL  the domain's root or the device SDK's math module does not forbid clippy::disallowed_methods"
     failed=$((failed + 1))
   fi
   # And the file with its list emptied lets every method through: the list is what holds.

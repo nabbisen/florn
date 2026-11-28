@@ -13,6 +13,7 @@ pub fn contract_of(module: &str) -> &'static str {
     match module {
         "net_echo" | "distance_vector" | "ospf" | "bgp" => "florn:network/router@0.1.0",
         "pid" | "bad_controller" => "florn:circuit/controller@0.1.0",
+        "guest_diode" | "bad_device" => "florn:circuit/device@0.1.0",
         _ => "florn:core/guest@0.1.0",
     }
 }

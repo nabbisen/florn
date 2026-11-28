@@ -1,0 +1,63 @@
+package florn:circuit@0.1.0;
+
+/// What a controller reads and writes: its signal ports, as sampled values.
+interface signals {
+    use florn:core/types@0.1.0.{port-id};
+
+    /// The value held on the signal connected to this `signal-in` port, as it was when the
+    /// activation began, in the unit of that signal (rule 4). `none` when the port is on no
+    /// signal.
+    read-input: func(port: port-id) -> option<f64>;
+
+    /// Set the value of the signal connected to this `signal-out` port, in the unit of that
+    /// signal. Recorded as a send effect (rule 11), applied at commit, held until the next
+    /// `set-output` on the same port. A non-finite value is a contract violation.
+    set-output: func(port: port-id, value: f64);
+}
+
+/// The controller's events beyond the core's.
+interface controller-events {
+    use florn:core/types@0.1.0.{tick};
+
+    /// A sample instant: `index` counts the samples of this actor from 0.
+    on-sample: func(now: tick, index: u64);
+}
+
+/// A sampled controller: the core world with signals.
+world controller {
+    include florn:core/guest@0.1.0;
+    import signals;
+    export controller-events;
+}
+
+/// A device model: evaluated by the solver inside a step (RFC 002 rules 44 and 45).
+interface device-model {
+    use florn:core/types@0.1.0.{tick};
+
+    /// Opens a step. `start` is the tick at which the step begins; `h` is its length in
+    /// seconds, `n × tick length` computed once (RFC 013 rule 14), or `0.0` for the initial
+    /// solution (a DC analysis: no history). The guest may prepare but changes nothing that
+    /// outlives a `reject-step`.
+    begin-step: func(start: tick, h: f64);
+
+    /// Evaluate at a trial point: for each of the device's `n` pins, the voltage of its net
+    /// in volts, in ascending port identity. Returns `n` currents into the pins in amperes,
+    /// then the `n × n` Jacobian entries, row-major, `∂i_k/∂v_j` in siemens (RFC 013 rule 5),
+    /// then one entry, `1.0` when the device limited a junction in this evaluation and `0.0`
+    /// when it did not (RFC 013 rule 8): `n + n² + 1` values. A deterministic function of the
+    /// sequence of trials since `begin-step`.
+    evaluate: func(trial: list<f64>) -> list<f64>;
+
+    /// The step is accepted: `solution` holds the converged pin voltages, and the guest
+    /// commits whatever state it carries (charges, counters) as of `start + h`.
+    accept-step: func(solution: list<f64>);
+
+    /// The step is rejected: the guest discards everything since `begin-step`.
+    reject-step: func();
+}
+
+/// A device model: the core world with the solver's calls.
+world device {
+    include florn:core/guest@0.1.0;
+    export device-model;
+}

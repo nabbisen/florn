@@ -1,0 +1,31 @@
+[package]
+name = "florn-guest-device"
+description = "The guest SDK for the device world of RFC 012 (florn:circuit@0.1.0): bindings, the Device trait, the Trial helper and pnjlim with the solver's literals"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = true
+readme = "README.md"
+
+[dependencies]
+florn-guest = { workspace = true, default-features = false }
+wit-bindgen = { workspace = true }
+# The one implementation of exp and ln that the Host's solver uses too (RFC 013 rule 19): the same
+# pin and no feature, which `ci/check-deps.py` checks.
+libm = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["florn-guest/std"]
+no-std = ["florn-guest/no-std"]
+
+[[example]]
+name = "guest_diode"
+crate-type = ["cdylib"]
+
+[[example]]
+name = "bad_device"
+crate-type = ["cdylib"]

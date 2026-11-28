@@ -5,6 +5,15 @@ use super::*;
 use crate::assemble::memory;
 use crate::tests::{Deck, divider};
 
+/// The iteration over a system that cannot lose a device.
+fn iterate(
+    plant: &Plant,
+    x0: Vec<f64>,
+    mut system: impl FnMut(&[f64]) -> System,
+) -> Result<Converged, Failure> {
+    iterate_with(plant, x0, |x| Ok(system(x)))
+}
+
 fn diode_deck(extra_profile: &str) -> Deck {
     Deck::new()
         .builtin(1, "v1", "voltage-source", "v = \"5V\"")

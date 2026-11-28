@@ -192,7 +192,9 @@ fn bit_identity_agrees_with_the_recorded_table() {
     assert_eq!(n, bits::table().len());
 }
 
-fn crate_sources() -> Vec<PathBuf> {
+/// The sources of the crates that compute for the solver (RFC 013 rule 19): the domain, whose one
+/// home of `libm` is `src/math.rs`, and the device SDK, whose is its `src/math.rs` too.
+fn crate_sources() -> Vec<(PathBuf, &'static str)> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         for e in std::fs::read_dir(dir).unwrap().flatten() {
             let p = e.path();
@@ -204,8 +206,20 @@ fn crate_sources() -> Vec<PathBuf> {
         }
     }
     let mut out = Vec::new();
-    let root = shipped::directory().join("../crates/florn-domain-circuit/src");
-    walk(&root, &mut out);
+    for (krate, home) in [
+        ("florn-domain-circuit", "src/math.rs"),
+        ("florn-guest-device", "src/math.rs"),
+    ] {
+        let mut files = Vec::new();
+        walk(
+            &shipped::directory()
+                .join("../crates")
+                .join(krate)
+                .join("src"),
+            &mut files,
+        );
+        out.extend(files.into_iter().map(|f| (f, home)));
+    }
     out
 }
 
@@ -332,7 +346,7 @@ fn libm_use(src: &str) -> (BTreeSet<String>, Vec<String>) {
 
 /// What is wrong with one source file of the crate as to `libm`: a use the check cannot read, or a
 /// call outside `crate::math` (RFC 013 rule 19, control 4).
-fn libm_problems(path: &Path, text: &str) -> Vec<String> {
+fn libm_problems(path: &Path, home: &str, text: &str) -> Vec<String> {
     let (calls, other) = libm_use(text);
     let mut problems = Vec::new();
     if !other.is_empty() {
@@ -340,7 +354,7 @@ fn libm_problems(path: &Path, text: &str) -> Vec<String> {
             "`libm` is used in a form the check cannot read: {other:?}"
         ));
     }
-    if !calls.is_empty() && !path.ends_with("src/math.rs") {
+    if !calls.is_empty() && !path.ends_with(home) {
         problems.push(format!("calls libm outside crate::math: {calls:?}"));
     }
     problems
@@ -350,11 +364,11 @@ fn libm_problems(path: &Path, text: &str) -> Vec<String> {
 fn every_libm_call_goes_through_crate_math_and_names_a_function_of_the_table() {
     let listed: BTreeSet<String> = bits::LIBM.iter().map(|(l, _)| l.to_string()).collect();
     let sources = crate_sources();
-    assert!(sources.len() > 20, "the crate's sources were found");
+    assert!(sources.len() > 20, "the crates' sources were found");
     let mut called = BTreeSet::new();
-    for path in sources {
+    for (path, home) in sources {
         let text = std::fs::read_to_string(&path).unwrap();
-        let problems = libm_problems(&path, &text);
+        let problems = libm_problems(&path, home, &text);
         assert!(problems.is_empty(), "{}: {problems:?}", path.display());
         called.extend(libm_use(&text).0);
     }
@@ -372,11 +386,29 @@ fn a_libm_call_outside_crate_math_is_a_problem_and_inside_it_is_not() {
     let call = "pub fn f(x: f64) -> f64 { libm::exp(x) }";
     let elsewhere = Path::new("crates/florn-domain-circuit/src/newton.rs");
     let home = Path::new("crates/florn-domain-circuit/src/math.rs");
-    assert_eq!(libm_problems(elsewhere, call).len(), 1);
-    assert!(libm_problems(home, call).is_empty());
-    assert_eq!(libm_problems(elsewhere, "use libm::exp;").len(), 1);
+    assert_eq!(libm_problems(elsewhere, "src/math.rs", call).len(), 1);
+    assert!(libm_problems(home, "src/math.rs", call).is_empty());
+    assert_eq!(
+        libm_problems(elsewhere, "src/math.rs", "use libm::exp;").len(),
+        1
+    );
     // A name that hides is a problem even at home.
-    assert_eq!(libm_problems(home, "use libm::{exp, log};").len(), 1);
+    assert_eq!(
+        libm_problems(home, "src/math.rs", "use libm::{exp, log};").len(),
+        1
+    );
+    // The device SDK's home is its `src/math.rs` too.
+    let sdk = Path::new("crates/florn-guest-device/src/math.rs");
+    assert!(libm_problems(sdk, "src/math.rs", call).is_empty());
+    assert_eq!(
+        libm_problems(
+            Path::new("crates/florn-guest-device/src/lib.rs"),
+            "src/math.rs",
+            call
+        )
+        .len(),
+        1
+    );
 }
 
 #[test]

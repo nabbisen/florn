@@ -141,6 +141,18 @@ pub struct Device {
     pub element: Element,
 }
 
+/// The guest device as the solver sees it: its actor, the nodes of its pins in ascending port
+/// identity (the order of the trial and of the stamps), and where it stands among the built-ins:
+/// devices are visited in ascending actor identity, built-ins and the guest alike (RFC 013 rule 5),
+/// so it is stamped before the built-in at index `before` of [`Plant::devices`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GuestPins {
+    pub actor: u32,
+    pub name: String,
+    pub nodes: Vec<Node>,
+    pub before: usize,
+}
+
 /// What an unknown is, for the code that names it (`unknown-kind`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnknownKind {
@@ -186,6 +198,13 @@ pub struct Plant {
     /// The signal (an index into [`Plant::signals`]) a port is on, by actor and port identity:
     /// a producer's, a built-in consumer's.
     pub port_signal: std::collections::BTreeMap<(u32, u32), usize>,
+    /// The nodes of the pins of every guest actor, in ascending port identity.
+    pub module_pins: std::collections::BTreeMap<u32, Vec<Node>>,
+    /// The scenario's names of the guest actors.
+    pub module_names: std::collections::BTreeMap<u32, String>,
+    /// The guest device model of the scenario, once the start hook has found it (RFC 012 rule 19):
+    /// at most one.
+    pub guest: Option<GuestPins>,
     /// The scenario's end tick (exclusive, RFC 004 section 3.3) and the circuit domain's world
     /// identity (RFC 004 rule 8): the target and the origin of the plant's own events.
     pub end: u64,
@@ -193,6 +212,25 @@ pub struct Plant {
 }
 
 impl Plant {
+    /// The guest device of the scenario is the actor `actor`: its pins and its place in the order
+    /// of the evaluation. `None` when the actor has no pins in the plant.
+    pub fn set_guest(&mut self, actor: u32) {
+        self.guest = self.module_pins.get(&actor).map(|nodes| GuestPins {
+            actor,
+            name: self.module_names.get(&actor).cloned().unwrap_or_default(),
+            nodes: nodes.clone(),
+            before: self.devices.iter().take_while(|d| d.actor < actor).count(),
+        });
+    }
+
+    /// The voltages of the guest device's pins at the unknowns `x`, in ascending port identity: the
+    /// trial of an evaluation and the solution of `accept-step` (RFC 012 rule 19).
+    pub fn guest_voltages(&self, x: &[f64]) -> Vec<f64> {
+        self.guest.as_ref().map_or_else(Vec::new, |g| {
+            g.nodes.iter().map(|n| n.map_or(0.0, |k| x[k])).collect()
+        })
+    }
+
     /// The size of the matrix of the initial solve.
     pub fn size(&self) -> usize {
         self.unknowns.len()

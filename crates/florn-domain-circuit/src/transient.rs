@@ -12,6 +12,7 @@
 use crate::assemble::{Companion, Form, Memory};
 use crate::control::{grow, quarter, shape, shrink};
 use crate::dc::Solution;
+use crate::device::{Device, Lost, NoDevice};
 use crate::integrate::{self, Dynamic, Formula};
 use crate::math::fmax;
 use crate::newton::{self, Failure};
@@ -89,6 +90,10 @@ pub struct Advance {
     pub first_cause: Option<Cause>,
     pub iterations: u32,
     pub minimum: Vec<Minimum>,
+    /// The guest device was lost in this advance (it faulted, or the Host refused it): the step it
+    /// was lost in was discarded and attempted again without it, and the plant has no device from
+    /// then on (RFC 013 rule 16).
+    pub lost: Option<Lost>,
 }
 
 /// The result of an advance: what it did, and how it ended if it did not reach the limit.
@@ -96,6 +101,15 @@ pub struct Advance {
 pub struct Outcome {
     pub report: Advance,
     pub stuck: Option<Stuck>,
+    /// The run ended in a call of the guest device: the advance was abandoned where it stood and the
+    /// state is that of the last accepted step (RFC 013 rule 17).
+    pub ended: bool,
+}
+
+/// Why a step was not taken: the solver gave up, or the run ended.
+enum Halt {
+    Stuck(Stuck),
+    Ended,
 }
 
 /// The accepted points since the last cut: the dynamic variables' values at the last three, the
@@ -153,6 +167,12 @@ impl Transient {
         };
         t.cut();
         t
+    }
+
+    /// The guest device the solver calls from now on (a restore gives it back: the solver's plant
+    /// is its own copy), or none.
+    pub fn set_guest(&mut self, guest: Option<crate::plant::GuestPins>) {
+        self.plant.guest = guest;
     }
 
     /// Keep a record of every accepted step from now on (the tests', the inspector's).
@@ -307,7 +327,7 @@ impl Transient {
     }
 
     /// One attempt of a step of `n` ticks from the last accepted point.
-    fn attempt(&self, n: u64, formula: Formula, tested: bool) -> Tried {
+    fn attempt(&self, n: u64, formula: Formula, tested: bool, device: &mut dyn Device) -> Tried {
         let p = &self.plant.profile;
         let tick = self.plant.tick;
         let h = n as f64 * tick;
@@ -336,12 +356,26 @@ impl Transient {
         let alpha = integrate::alpha(formula, h, h_prev);
         let companion = Companion { alpha, history };
         let mut memory = self.junctions(&self.x);
-        let solved = newton::solve_form(
+        // The device's compound activation of this attempt: opened here, closed by the step once it
+        // is known whether the attempt is accepted (RFC 012 rule 20).
+        if device.present()
+            && self.plant.guest.is_some()
+            && let Err(lost) = device.begin(self.now, h)
+        {
+            return Tried::Failed(Failure {
+                unknown: 0,
+                iterations: 0,
+                singular: false,
+                lost: Some(lost),
+            });
+        }
+        let solved = newton::solve_form_with(
             &self.plant,
             Form::Step(&companion),
             self.x.clone(),
             p.gmin,
             &mut memory,
+            device,
         );
         let c = match solved {
             Ok(c) => c,
@@ -423,23 +457,80 @@ impl Transient {
     /// Advance the plant from `now` to the limit `until` (a breakpoint or the advance's tick) by as
     /// many steps as the controller takes (rules 10 to 13). A limit not after `now` is a no-op.
     pub fn advance(&mut self, until: u64) -> Outcome {
+        self.advance_with(until, &mut NoDevice)
+    }
+
+    /// As [`Self::advance`], calling the guest device inside every attempted step (RFC 012 rules 19
+    /// to 21): `begin-step`, `evaluate` once per Newton iteration, then `accept-step` or
+    /// `reject-step`. A device that is lost (it faulted, or its result was not a stamp) is absent
+    /// from then on, and the step it was lost in is attempted again without it (RFC 013 rule 16).
+    pub fn advance_with(&mut self, until: u64, device: &mut dyn Device) -> Outcome {
         let mut report = Advance::default();
         while self.now < until {
-            if let Err(stuck) = self.step(until, &mut report) {
-                return Outcome {
-                    report,
-                    stuck: Some(stuck),
-                };
+            match self.step(until, &mut report, device) {
+                Ok(()) => {}
+                Err(Halt::Stuck(stuck)) => {
+                    return Outcome {
+                        report,
+                        stuck: Some(stuck),
+                        ended: false,
+                    };
+                }
+                Err(Halt::Ended) => {
+                    return Outcome {
+                        report,
+                        stuck: None,
+                        ended: true,
+                    };
+                }
             }
         }
         Outcome {
             report,
             stuck: None,
+            ended: false,
+        }
+    }
+
+    /// The guest device is gone from this step on (RFC 013 rule 16): the plant has none.
+    fn lose(&mut self, lost: Lost, report: &mut Advance) {
+        self.plant.guest = None;
+        report.lost.get_or_insert(lost);
+    }
+
+    /// Close the activation of the device the last attempt left open: `accept-step` with the pin
+    /// voltages of the solution when the attempt is accepted, `reject-step` when it is not. A loss
+    /// in the close discards the attempt: `Ok(false)`; `Ok(true)` is closed.
+    fn close(
+        &mut self,
+        device: &mut dyn Device,
+        solution: Option<&[f64]>,
+        report: &mut Advance,
+    ) -> Result<bool, Halt> {
+        if !(device.present() && self.plant.guest.is_some()) {
+            return Ok(true);
+        }
+        let closed = match solution {
+            Some(x) => device.accept(&self.plant.guest_voltages(x)),
+            None => device.reject(),
+        };
+        match closed {
+            Ok(()) => Ok(true),
+            Err(Lost::Ended) => Err(Halt::Ended),
+            Err(lost) => {
+                self.lose(lost, report);
+                Ok(false)
+            }
         }
     }
 
     /// One accepted step: attempts until one is accepted, or the solver gives up.
-    fn step(&mut self, until: u64, report: &mut Advance) -> Result<(), Stuck> {
+    fn step(
+        &mut self,
+        until: u64,
+        report: &mut Advance,
+        device: &mut dyn Device,
+    ) -> Result<(), Halt> {
         let p = self.plant.profile.clone();
         let d = until - self.now;
         let mut tried = self.first_try(self.base_formula().0);
@@ -466,15 +557,31 @@ impl Transient {
             let at_minimum = n <= p.min_step;
             attempts += 1;
             report.attempts += 1;
-            match self.attempt(n, formula, tested) {
+            match self.attempt(n, formula, tested, device) {
                 Tried::Failed(f) => {
                     report.iterations += f.iterations;
-                    let stuck = |why| Stuck {
-                        tick: self.now,
-                        why,
-                        iterations: f.iterations,
-                        unknown: Some(f.unknown),
-                        owner: None,
+                    if let Some(lost) = f.lost.clone() {
+                        // The device was lost inside the attempt (its activation is closed by the
+                        // fault, or was never opened): the step is discarded and attempted again
+                        // without it, and a loss is no rejection (rule 16).
+                        if lost == Lost::Ended {
+                            return Err(Halt::Ended);
+                        }
+                        self.lose(lost, report);
+                        continue;
+                    }
+                    // The attempt's activation of the device is discarded with it.
+                    if !self.close(device, None, report)? {
+                        continue;
+                    }
+                    let stuck = |why| {
+                        Halt::Stuck(Stuck {
+                            tick: self.now,
+                            why,
+                            iterations: f.iterations,
+                            unknown: Some(f.unknown),
+                            owner: None,
+                        })
                     };
                     if f.singular {
                         return Err(stuck(Why::Singular));
@@ -500,29 +607,37 @@ impl Transient {
                     if let Some(r) = a.ratio
                         && (r.is_nan() || r > 1.0)
                     {
-                        if at_minimum {
-                            // Nothing smaller is allowed: accepted anyway, and notified.
-                            report.minimum.push(Minimum {
-                                tick: self.now,
-                                step: n,
-                            });
-                        } else {
+                        // Rejected, or accepted anyway at the minimum: either way the attempt's
+                        // activation is closed first, by the discard when it is rejected.
+                        if !at_minimum {
+                            if !self.close(device, None, report)? {
+                                continue;
+                            }
                             rejections += 1;
                             report.rejected += 1;
                             report.first_cause.get_or_insert(Cause::Error);
                             if rejections > p.max_rejections {
-                                return Err(Stuck {
+                                return Err(Halt::Stuck(Stuck {
                                     tick: self.now,
                                     why: Why::TooManyRejections,
                                     iterations: a.iterations,
                                     unknown: None,
                                     owner: Some(self.dynamics[a.worst].device),
-                                });
+                                }));
                             }
                             tried = shrink(n, r, order, p.min_step);
                             failed = Some(n);
                             continue;
                         }
+                        // Nothing smaller is allowed: accepted anyway, and notified.
+                        report.minimum.push(Minimum {
+                            tick: self.now,
+                            step: n,
+                        });
+                    }
+                    // The step is accepted: the device commits what it carries as of its end.
+                    if !self.close(device, Some(&a.x), report)? {
+                        continue;
                     }
                     let shortened = n < tried;
                     self.accept(a, n, until, formula, attempts, shortened, report);

@@ -32,6 +32,8 @@ pub const SDK: &[&str] = &[
     "bgp",
     "pid",
     "bad_controller",
+    "guest_diode",
+    "bad_device",
 ];
 
 /// The workspace root.
@@ -70,6 +72,8 @@ pub fn build(target_dir: &Path) -> PathBuf {
             "florn-guest-network",
             "-p",
             "florn-guest-circuit",
+            "-p",
+            "florn-guest-device",
             "--examples",
             "--target-dir",
         ])

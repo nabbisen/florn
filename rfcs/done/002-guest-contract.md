@@ -251,7 +251,7 @@ world guest {
 
 ### 5.1 Time
 
-**Rule 22.** Every export receives the current instant's tick as `now`. The microstep is not visible to a guest. There is no Host function to read the time: within an activation the time does not change (RFC 001 rule 7), so the argument is the only value the guest could receive.
+**Rule 22.** Every export receives the current instant's tick as `now`. The microstep is not visible to a guest. There is no Host function to read the time: within an activation the time does not change (RFC 001 rule 7), so the argument is the only value the guest could receive. (Noted 2026-11-28, PR-49, as RFC 012 rule 19 asks: the circuit's device model is called by the solver inside an advance, not by an event, so `begin-step`'s `start` is the step's start tick and not the current instant, and the guest's `now()` inside that activation is the same tick; RFC 012 rules 19 and 20 make the exception, here and only here.)
 
 ### 5.2 Messages
 
