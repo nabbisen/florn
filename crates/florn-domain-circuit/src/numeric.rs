@@ -29,6 +29,23 @@ pub fn numeric_fields(
     if let (Some(info), Site::Report { channel }) = (guests.get(actor), site) {
         return guest_report(info, channel, payload);
     }
+    // A comparator's `condition` report: the output is the numeric field, and the located crossing,
+    // a whole tick, is compared exactly (RFC 013 rule 20, item 2).
+    if let Site::Report { channel } = site
+        && channel == crate::CHANNEL_CONDITION
+        && payload.len() == 16
+    {
+        let value = f64::from_le_bytes(payload[..8].try_into().ok()?);
+        return Some(Numeric {
+            fields: vec![NumericField {
+                name: "output".to_string(),
+                unit: String::new(),
+                factor: 1.0,
+                value,
+            }],
+            exact: payload[8..].to_vec(),
+        });
+    }
     let bytes: [u8; 8] = payload.try_into().ok()?;
     let value = f64::from_le_bytes(bytes);
     let (name, unit, factor) = match site {
@@ -57,6 +74,8 @@ pub fn numeric_fields(
                     Element::Voltmeter { out_port, .. } if *out_port == Some(port) => "V",
                     Element::Ammeter { out_port, .. } if *out_port == Some(port) => "A",
                     Element::Motor { out_port, .. } if *out_port == Some(port) => "rad/s",
+                    // A comparator's output is a number without a unit.
+                    Element::Comparator { out_port, .. } if *out_port == Some(port) => "",
                     _ => return None,
                 };
                 let (unit, factor) = unit_of(plant, None, base);

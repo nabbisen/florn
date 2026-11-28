@@ -116,6 +116,19 @@ The circuit's results are compared across engines through files the kit records 
 | The flag script | `ci/check-float-flags.sh`; `ci/test-gates.sh`: `target-cpu`, `target-feature`, `-Z`, an LLVM argument, fast-math and a nightly toolchain, each in the file a build reads it from; `[unstable]`, `RUSTC_BOOTSTRAP`, `rustc` wrappers and a code-generation backend |
 | `florn replay` across Hosts | `crates/florn/tests/circuit_replay.rs`: a circuit record without payloads whose chain differs prints `needs-payloads` and exits 1; on one build it is `diverged`, exit 2 |
 
+### RFC 012 rule 13 and RFC 013 rule 15, the detector (PR-51)
+
+| Property | Test |
+|---|---|
+| The condition fires at the advance that finds the crossing, at most `detect-interval` after it, on the microstep after the advance | `circuit_detector::the_condition_fires_at_the_advance_that_finds_the_crossing_and_locates_it_inside_the_step` (the three crossings of `comparator-latch` against the analytic ones) |
+| The located crossing is within one internal step of the analytic one | the same, with the adaptive step (within `max-step`), and `…with_a_fixed_step_the_located_crossing_is_within_that_step_…` (within the 10 us step); `florn-domain-circuit`'s `transient::tests::detector` |
+| A comparator above its threshold at start reports it at the first advance that takes a step | `circuit_detector::a_comparator_already_beyond_its_threshold_at_start_…` (the advance at tick 0 takes no step; the event is the voltmeter's next, located at the start of the first step) |
+| A threshold moved by a breakpoint is located at the start of its step | `circuit_detector::a_threshold_moved_by_a_scheduled_change_…`; the unit test of the solver |
+| Chatter that leaves the output as it was publishes nothing; the last change is the one located | `florn-domain-circuit`'s `chatter_inside_one_advance_…`, `the_located_crossing_of_a_change_is_that_of_the_last_one` |
+| The output is sent on the port and drives the plant from its tick | `circuit_detector::the_output_is_sent_on_the_port_…`, `…the_condition_drives_the_plant_from_its_tick_a_relaxation_oscillator` |
+| The detector reads the plant and changes none of it | `circuit_detector::the_voltmeters_samples_are_the_plants_…` |
+| A restore between the crossing, the advance and the event continues to the same digest | `circuit_detector::a_run_restored_between_…`; the detector's state is in the solver's snapshot (`the_detectors_state_is_in_the_solvers_snapshot`) |
+
 ### RFC 012 rules 9 and 22, two domains in one actor (PR-50)
 
 | Property | Test |

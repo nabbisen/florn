@@ -110,6 +110,8 @@ pub enum Element {
         p: Node,
         n: Node,
         out: Option<usize>,
+        /// The identity of the `signal-out` port the output is sent on.
+        out_port: Option<u32>,
         threshold: f64,
         hysteresis: f64,
     },

@@ -18,7 +18,7 @@ use crate::plant::{Element, Plant};
 use crate::profile::OnNonConvergence;
 use crate::read::note;
 use crate::transient::{Advance, Cause, Transient};
-use crate::{CLASS_ADVANCE, CLASS_SAMPLE};
+use crate::{CLASS_ADVANCE, CLASS_CONDITION, CLASS_SAMPLE};
 
 /// A signal's held value in its own unit, and whether it is frozen (RFC 012 rule 15).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -262,6 +262,7 @@ impl Live {
         if self.status == Status::Running
             && let Some(t) = self.transient.as_mut()
         {
+            t.begin_advance();
             self.pending.apply_due(t.now(), t);
             while t.now() < tick {
                 let limit = self
@@ -375,6 +376,23 @@ impl Live {
                     self.status = Status::Held;
                     self.pending.clear();
                 }
+            }
+        }
+        // The conditions the advance found (rule 13): for each detector whose output at the end is
+        // not the one it had at the start, a `condition` event on the next microstep, after the
+        // samples (class 7 precedes class 8), carrying the output and the located crossing.
+        if let Some(t) = self.transient.as_ref() {
+            for f in t.found() {
+                let actor = plant.devices[f.device].actor;
+                let mut payload = vec![u8::from(f.output)];
+                payload.extend_from_slice(&f.located.to_le_bytes());
+                actions.push(Action::Schedule {
+                    origin: actor,
+                    delay: 0,
+                    class: CLASS_CONDITION,
+                    target: actor,
+                    payload,
+                });
             }
         }
         // The sensors due now sample on the next microstep, in ascending identity (rule 10).

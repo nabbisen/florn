@@ -122,6 +122,52 @@ struct History {
     since_cut: u32,
 }
 
+/// A detector's state (RFC 012 rule 13; RFC 013 rule 15): a `comparator` and the output its
+/// hysteresis gives, checked at the end of every accepted step. No step is rejected for a crossing
+/// and there is no bisection: a crossing is a fact about the end points of an accepted step, and
+/// its **located** tick is computed from them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Detector {
+    /// The comparator's index in [`Plant::devices`].
+    pub device: usize,
+    /// The output now: the one the detector last found.
+    pub output: bool,
+    /// `v_p − v_n` at the end of the previous accepted step; `None` at the first step of a run and
+    /// after a breakpoint that moved the threshold, where a condition already held is located at
+    /// the start of its step.
+    pub previous: Option<f64>,
+    /// The output at the start of the advance in hand, and the located crossing of the last change
+    /// since (rule 13: chatter that leaves the output as it was publishes nothing).
+    pub at_start: bool,
+    pub located: u64,
+}
+
+/// The detectors of a plant: every comparator, its output low and nothing seen yet.
+pub(crate) fn fresh_detectors(plant: &Plant) -> Vec<Detector> {
+    plant
+        .devices
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| matches!(d.element, Element::Comparator { .. }))
+        .map(|(device, _)| Detector {
+            device,
+            output: false,
+            previous: None,
+            at_start: false,
+            located: 0,
+        })
+        .collect()
+}
+
+/// A condition found by an advance: the comparator (an index into the plant's devices), the output
+/// it left at the end, and the located crossing, a whole tick inside the step that crossed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Found {
+    pub device: usize,
+    pub output: bool,
+    pub located: u64,
+}
+
 /// The plant as the transient solver keeps it.
 #[derive(Clone, Debug)]
 pub struct Transient {
@@ -135,6 +181,8 @@ pub struct Transient {
     /// The controller's proposal for the next step, in ticks (rule 10).
     proposal: u64,
     trace: Option<Vec<StepRecord>>,
+    /// The detectors, in ascending identity of their comparators.
+    detectors: Vec<Detector>,
 }
 
 /// The attempt of one step.
@@ -164,9 +212,79 @@ impl Transient {
             history: History::default(),
             proposal: plant.profile.step,
             trace: None,
+            detectors: fresh_detectors(plant),
         };
         t.cut();
         t
+    }
+
+    /// The detectors' state.
+    pub fn detectors(&self) -> &[Detector] {
+        &self.detectors
+    }
+
+    /// An advance begins (RFC 012 rule 8): what each detector last found is what it is compared
+    /// with at the end.
+    pub fn begin_advance(&mut self) {
+        for d in &mut self.detectors {
+            d.at_start = d.output;
+        }
+    }
+
+    /// The conditions the advance found (rule 13): every detector whose output at the end differs
+    /// from the one it had at the start, with the located crossing of its last change.
+    pub fn found(&self) -> Vec<Found> {
+        self.detectors
+            .iter()
+            .filter(|d| d.output != d.at_start)
+            .map(|d| Found {
+                device: d.device,
+                output: d.output,
+                located: d.located,
+            })
+            .collect()
+    }
+
+    /// Every detector looks at the state at the end of the accepted step that began at `start` and
+    /// was `n` ticks long (RFC 013 rule 15). The output goes high when `d = v_p − v_n` is above
+    /// `threshold + hysteresis/2` and low when it is below `threshold − hysteresis/2`. The located
+    /// crossing is the tick `start + ceil(φ·n)` with `φ = clamp((θ − d_prev)/(d − d_prev), 0, 1)`,
+    /// `θ` the threshold the change crossed; `φ = 0` when `d = d_prev` and when the condition
+    /// already held at the start of the step (the first step of a run, a breakpoint that moved the
+    /// threshold).
+    fn observe(&mut self, start: u64, n: u64) {
+        for k in 0..self.detectors.len() {
+            let Element::Comparator {
+                p,
+                n: neg,
+                threshold,
+                hysteresis,
+                ..
+            } = self.plant.devices[self.detectors[k].device].element
+            else {
+                continue;
+            };
+            let volt = |node: Option<usize>| node.map_or(0.0, |i| self.x[i]);
+            let d = volt(p) - volt(neg);
+            let (rise, fall) = (threshold + hysteresis / 2.0, threshold - hysteresis / 2.0);
+            let det = &mut self.detectors[k];
+            let now = if det.output { d >= fall } else { d > rise };
+            if now != det.output {
+                let theta = if now { rise } else { fall };
+                let phi = match det.previous {
+                    // Already beyond the threshold at the start of the step, or no step before it.
+                    None => 0.0,
+                    Some(before) if (now && before >= theta) || (!now && before <= theta) => 0.0,
+                    Some(before) if d == before => 0.0,
+                    Some(before) => {
+                        fmax(0.0, crate::math::fmin(1.0, (theta - before) / (d - before)))
+                    }
+                };
+                det.located = start + (phi * n as f64).ceil() as u64;
+                det.output = now;
+            }
+            det.previous = Some(d);
+        }
     }
 
     /// The guest device the solver calls from now on (a restore gives it back: the solver's plant
@@ -233,13 +351,21 @@ impl Transient {
     /// `v`, a `current-source`'s `i`, a `constant`'s value (the held value of its signal, in the
     /// signal's unit) or a `comparator`'s `threshold`. The caller cuts the history.
     pub fn set(&mut self, actor: u32, value: f64) -> bool {
-        let Some(d) = self.plant.devices.iter_mut().find(|d| d.actor == actor) else {
+        let Some(index) = self.plant.devices.iter().position(|d| d.actor == actor) else {
             return false;
         };
+        let d = &mut self.plant.devices[index];
         match &mut d.element {
             Element::VoltageSource { v, .. } => *v = value,
             Element::CurrentSource { i, .. } => *i = value,
-            Element::Comparator { threshold, .. } => *threshold = value,
+            Element::Comparator { threshold, .. } => {
+                *threshold = value;
+                // A threshold moved by a breakpoint: a condition already held is located at the
+                // start of its step (RFC 013 rule 15).
+                for det in self.detectors.iter_mut().filter(|d| d.device == index) {
+                    det.previous = None;
+                }
+            }
             Element::Constant { out, value: held } => {
                 *held = value;
                 if let Some(s) = out {
@@ -697,6 +823,7 @@ impl Transient {
         self.x = a.x;
         self.now += n;
         report.steps += 1;
+        self.observe(start, n);
     }
 }
 

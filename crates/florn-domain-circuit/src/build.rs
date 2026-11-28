@@ -239,6 +239,7 @@ pub(crate) fn plant(
                 p: pin("p"),
                 n: pin("n"),
                 out: w.signal(a, "y"),
+                out_port: w.port_id(a, "y"),
                 threshold: p.real("threshold"),
                 hysteresis: p.real("hysteresis"),
             },

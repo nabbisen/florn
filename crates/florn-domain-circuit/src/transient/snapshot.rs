@@ -7,7 +7,7 @@ use florn_model::canonical::{Decoder, Encoder};
 
 use crate::plant::{Element, Plant};
 
-use super::{History, Transient};
+use super::{History, Transient, fresh_detectors};
 
 fn put_f64(e: &mut Encoder, x: f64) {
     e.u64(crate::math::canonical(x).to_bits());
@@ -45,6 +45,11 @@ impl Transient {
         put_list(e, &sources);
         let held: Vec<f64> = self.plant.signals.iter().map(|s| s.held).collect();
         put_list(e, &held);
+        // The detectors: the output each last found and `d` at the end of the last step.
+        e.list(&self.detectors, |e, d| {
+            e.u8(u8::from(d.output));
+            e.option(d.previous.as_ref(), |e, x| put_f64(e, *x));
+        });
     }
 
     /// Read the state back over `plant`, which says what the unknowns, the dynamic variables, the
@@ -59,6 +64,7 @@ impl Transient {
         let derivative = get_list(d)?;
         let sources = get_list(d)?;
         let held = get_list(d)?;
+        let found = d.list(|d| Some((d.u8()? != 0, d.option(get_f64)?)))?;
         let mut plant = plant.clone();
         let mut sources = sources.into_iter();
         for dev in &mut plant.devices {
@@ -82,6 +88,13 @@ impl Transient {
             && points.len() <= 3
             && gaps.len() <= 2
             && points.iter().all(|p| p.len() == dynamics.len());
+        let mut detectors = fresh_detectors(&plant);
+        let fits = fits && found.len() == detectors.len();
+        for (d, (output, previous)) in detectors.iter_mut().zip(found) {
+            d.output = output;
+            d.at_start = output;
+            d.previous = previous;
+        }
         fits.then_some(Self {
             plant,
             dynamics,
@@ -95,6 +108,7 @@ impl Transient {
             },
             proposal,
             trace: None,
+            detectors,
         })
     }
 }

@@ -16,6 +16,7 @@ use crate::{host, shipped};
 /// scenario of a later unit joins the list with its own file.
 pub const CIRCUIT: &[&str] = &[
     "rc-step",
+    "comparator-latch",
     "motor-loop",
     "cps-loop",
     "cps-link",

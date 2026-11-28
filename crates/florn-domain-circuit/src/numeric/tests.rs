@@ -195,3 +195,73 @@ fn what_is_not_a_probe_value_or_eight_bytes_is_not_numeric() {
         .is_none()
     );
 }
+
+#[test]
+fn a_comparators_condition_has_its_output_as_the_number_and_its_located_tick_exact() {
+    // RFC 013 rule 20, item 2: `condition`'s output is a numeric field (a dimensionless one), and
+    // the located crossing, a whole tick, is compared exactly; the output sent on the `y` port is
+    // numeric as well, with no unit.
+    let p = Deck::new()
+        .builtin(1, "v1", "voltage-source", "v = \"1V\"")
+        .builtin(2, "r1", "resistor", "r = \"1kohm\"")
+        .builtin(
+            3,
+            "cmp",
+            "comparator",
+            "threshold = \"0.5V\"\nhysteresis = \"0V\"",
+        )
+        .net("a", &["v1.p", "r1.a", "cmp.p"])
+        .ground("g", &["v1.n", "r1.b", "cmp.n"])
+        .plant();
+    let mut payload = 1.0f64.to_le_bytes().to_vec();
+    payload.extend_from_slice(&916_326u64.to_le_bytes());
+    let n = numeric_fields(
+        &p,
+        &Guests::default(),
+        3,
+        Site::Report {
+            channel: crate::CHANNEL_CONDITION,
+        },
+        &payload,
+    )
+    .unwrap();
+    assert_eq!(n.fields.len(), 1);
+    let f = &n.fields[0];
+    assert_eq!(
+        (f.name.as_str(), f.unit.as_str(), f.factor, f.value),
+        ("output", "", 1.0, 1.0)
+    );
+    assert_eq!(n.exact, 916_326u64.to_le_bytes());
+    // A report of another length is no condition.
+    assert!(
+        numeric_fields(
+            &p,
+            &Guests::default(),
+            3,
+            Site::Report {
+                channel: crate::CHANNEL_CONDITION
+            },
+            &payload[..8]
+        )
+        .is_none()
+    );
+    // The output sent on its port.
+    let port = p
+        .devices
+        .iter()
+        .find_map(|d| match &d.element {
+            crate::plant::Element::Comparator { out_port, .. } => *out_port,
+            _ => None,
+        })
+        .expect("the `y` port");
+    let s = numeric_fields(
+        &p,
+        &Guests::default(),
+        3,
+        Site::Send { port },
+        &1.0f64.to_le_bytes(),
+    )
+    .unwrap();
+    assert_eq!(s.fields[0].name, "output");
+    assert_eq!(s.fields[0].unit, "");
+}

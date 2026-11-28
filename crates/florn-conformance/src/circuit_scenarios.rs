@@ -474,3 +474,77 @@ pub fn cps_link_text() -> String {
         "\n[[actors]]\nid = 6\nname = \"peer\"\nkind = \"module\"\nmodule = \"set_point_source\"\nports = [{ id = 0, name = \"eth\", type = \"network/interface\" }]\n[actors.config]\nat = \"600500000ns\"\nvalue = 40.0\n\n[[connections]]\nid = 110\nname = \"wire\"\ntype = \"network/link\"\nports = [\"peer.eth\", \"pid.eth\"]\n\n[[connections]]\nid = 100\n",
     )
 }
+
+/// `comparator-latch` (RFC 012 rules 13 and 27, RFC 013 rule 15): a 1 kohm resistor and a 1 uF
+/// capacitor (RC = 1 ms, `ic = 0V`) on a source of 1 V stepped to 0 V at 2 ms and back to 1 V at
+/// 4 ms, a `comparator` across the capacitor (threshold 0.5 V, hysteresis 0.2 V) and a voltmeter
+/// beside it. The output goes high when the capacitor passes 0.6 V (analytically at
+/// `RC·ln(1/0.4)` = 0.9163 ms), low when it falls through 0.4 V (at 2 ms + `RC·ln(0.8647/0.4)` =
+/// 2.7710 ms) and high again at 4 ms + `RC·ln(0.8830/0.4)` = 4.7920 ms: the condition's event
+/// and its located crossing.
+pub fn comparator_latch() -> Scenario {
+    Scenario::raw("comparator-latch", 6_000_000, comparator_latch_text(), &[])
+}
+
+/// The manifest text of `comparator-latch`.
+pub fn comparator_latch_text() -> String {
+    let mut t = head("comparator-latch", 6_000_000, &[], "");
+    t.push_str(&builtin(
+        1,
+        "vs",
+        "voltage-source",
+        &[("p", "circuit/pin"), ("n", "circuit/pin")],
+        "v = \"1V\"",
+    ));
+    t.push_str(&builtin(
+        2,
+        "r",
+        "resistor",
+        &[("a", "circuit/pin"), ("b", "circuit/pin")],
+        "r = \"1kohm\"",
+    ));
+    t.push_str(&builtin(
+        3,
+        "c",
+        "capacitor",
+        &[("a", "circuit/pin"), ("b", "circuit/pin")],
+        "c = \"1uF\"\nic = \"0V\"",
+    ));
+    t.push_str(&builtin(
+        4,
+        "vm",
+        "voltmeter",
+        &[("p", "circuit/pin"), ("n", "circuit/pin")],
+        "period = \"100us\"",
+    ));
+    t.push_str(&builtin(
+        5,
+        "cmp",
+        "comparator",
+        &[
+            ("p", "circuit/pin"),
+            ("n", "circuit/pin"),
+            ("y", "circuit/signal-out"),
+        ],
+        "threshold = \"0.5V\"\nhysteresis = \"0.2V\"",
+    ));
+    t.push_str(&connection(100, "in", "net", &["vs.p", "r.a"], false));
+    t.push_str(&connection(
+        101,
+        "cap",
+        "net",
+        &["r.b", "c.a", "vm.p", "cmp.p"],
+        false,
+    ));
+    t.push_str(&connection(
+        102,
+        "gnd",
+        "net",
+        &["vs.n", "c.b", "vm.n", "cmp.n"],
+        true,
+    ));
+    for (at, v) in [(2_000_000, "0V"), (4_000_000, "1V")] {
+        t.push_str(&source_change(at, v));
+    }
+    t
+}

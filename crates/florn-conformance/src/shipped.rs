@@ -235,6 +235,8 @@ fn definitions() -> Vec<Shipped> {
         normal(crate::circuit_scenarios::cps_link()),
         // The analytic golden of the solver (RFC 013 rule 21): an RC network stepped at 2 ms.
         normal(crate::circuit_scenarios::rc_step()),
+        // The detector (RFC 012 rule 13): a comparator on an RC waveform and the located crossing.
+        normal(crate::circuit_scenarios::comparator_latch()),
         // The nonlinear plant, with the built-in diode and with the guest device (RFC 012 rule 27),
         // and the hostile devices (RFC 012 rule 17, RFC 013 rule 17).
         normal(crate::circuit_scenarios::diode_clip()),

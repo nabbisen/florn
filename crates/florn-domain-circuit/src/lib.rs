@@ -579,6 +579,37 @@ impl Domain for CircuitDomain {
         let BuiltinEvent::Domain(ev) = event else {
             return;
         };
+        // A condition (rule 13): the comparator sends the new output on its `signal-out` port and
+        // reports it with the located crossing, which is data and never the tick of the event.
+        if ev.key.class == CLASS_CONDITION {
+            let Some(plant) = self.plant.as_ref() else {
+                return;
+            };
+            let (Some(&high), Some(located)) = (
+                ev.payload.first(),
+                ev.payload
+                    .get(1..9)
+                    .and_then(|b| <[u8; 8]>::try_from(b).ok()),
+            ) else {
+                return;
+            };
+            let output = if high != 0 { 1.0f64 } else { 0.0 };
+            let mut report = output.to_le_bytes().to_vec();
+            report.extend_from_slice(&located);
+            let _ = sink.report(CHANNEL_CONDITION, report);
+            let port = plant
+                .devices
+                .iter()
+                .find(|d| d.actor == actor)
+                .and_then(|d| match &d.element {
+                    plant::Element::Comparator { out_port, .. } => *out_port,
+                    _ => None,
+                });
+            if let Some(port) = port {
+                let _ = sink.send(port, output.to_le_bytes().to_vec());
+            }
+            return;
+        }
         if ev.key.class != CLASS_SAMPLE {
             return;
         }

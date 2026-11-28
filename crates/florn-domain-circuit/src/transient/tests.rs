@@ -635,4 +635,5 @@ fn no_gear2_step_has_omega_above_2_after_a_short_whole_distance_step() {
     }
 }
 
+mod detector;
 mod device;

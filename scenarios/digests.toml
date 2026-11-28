@@ -107,6 +107,12 @@ chain = "f933560976ef5c1a941a9a014e18e27d44ce7fa66c16f4d5a9928f793794ee55"
 records = 44
 ended = "end-reached"
 
+[runs."comparator-latch"]
+seed = 1
+chain = "82931d0de0879a13a40ecec35fc6dc4d0d93769b717077e31b1f768b1273b3b7"
+records = 68
+ended = "end-reached"
+
 [runs."cps-link"]
 seed = 1
 chain = "a005fb9b8dcc73080549c9b6c3de5c81a22c1e9d8420ce38325a376b5aede3f8"

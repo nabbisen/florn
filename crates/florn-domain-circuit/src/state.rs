@@ -15,7 +15,7 @@ use crate::plant::Plant;
 use crate::transient::Transient;
 
 /// The version of this encoding.
-pub const VERSION: u8 = 3;
+pub const VERSION: u8 = 4;
 
 fn stage_code(s: Stage) -> u8 {
     match s {

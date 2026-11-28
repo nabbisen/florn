@@ -37,9 +37,10 @@ fn the_state_reads_back_to_the_bytes_it_was_written_as() {
         index: 205,
     }];
     let bytes = encode(&live, Some(&solution));
-    // The recorded version of this encoding: 3 holds whether the guest device was lost (PR-49).
-    assert_eq!(VERSION, 3);
-    assert_eq!(bytes[0], 3);
+    // The recorded version of this encoding: 4 holds the detectors' state (PR-51); 3 held whether
+    // the guest device was lost (PR-49).
+    assert_eq!(VERSION, 4);
+    assert_eq!(bytes[0], 4);
     let (back, sol) = decode(&plant, &bytes).expect("it fits the plant");
     assert_eq!(encode(&back, sol.as_ref()), bytes);
     assert_eq!(back.pending.len(), live.pending.len());
@@ -71,10 +72,12 @@ fn the_loss_of_the_guest_device_is_in_the_state_and_the_old_version_is_refused()
         .filter(|i| bytes[*i] != other[*i])
         .collect();
     assert_eq!(differing.len(), 1, "{differing:?}");
-    // Version 2, as PR-47 wrote it, is not read: it has no such byte.
-    let mut v2 = other.clone();
-    v2[0] = 2;
-    assert!(decode(&plant, &v2).is_none());
+    // The versions before, 2 as PR-47 wrote it and 3 as PR-49 did, are not read.
+    for old in [2, 3] {
+        let mut v = other.clone();
+        v[0] = old;
+        assert!(decode(&plant, &v).is_none(), "version {old}");
+    }
 }
 
 #[test]
