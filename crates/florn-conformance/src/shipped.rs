@@ -230,6 +230,9 @@ fn definitions() -> Vec<Shipped> {
         normal(crate::circuit_scenarios::motor_loop()),
         // The same loop with the controller on a network (RFC 012 rule 22): two domains in one actor.
         normal(crate::circuit_scenarios::cps_loop()),
+        // The same plant with a peer that sends the set point over a link, so that the composed
+        // actor's `on-message` runs on every engine (a scenario file carries no intervention).
+        normal(crate::circuit_scenarios::cps_link()),
         // The analytic golden of the solver (RFC 013 rule 21): an RC network stepped at 2 ms.
         normal(crate::circuit_scenarios::rc_step()),
         // The nonlinear plant, with the built-in diode and with the guest device (RFC 012 rule 27),

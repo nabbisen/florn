@@ -34,3 +34,7 @@ crate-type = ["cdylib"]
 [[example]]
 name = "bgp"
 crate-type = ["cdylib"]
+
+[[example]]
+name = "set_point_source"
+crate-type = ["cdylib"]

@@ -4,7 +4,7 @@
 //! delivers the samples to `on-sample`, and a `set-output` committed from `on-message` is an input
 //! change at a tick that is not a sample.
 use florn_admission::Admission;
-use florn_conformance::circuit_scenarios::{cps_loop, cps_loop_text, motor_loop};
+use florn_conformance::circuit_scenarios::{cps_link, cps_loop, cps_loop_text, motor_loop};
 use florn_conformance::host;
 use florn_conformance::scenario::Scenario;
 use florn_domain_circuit::CHANNEL_PROBE;
@@ -364,44 +364,24 @@ fn the_answer_is_the_proportional_and_integral_terms_the_controller_has_on_the_m
 
 #[test]
 fn a_frame_from_a_peer_over_a_link_reaches_the_controller_through_the_network_domain() {
-    // The network domain's own path: a `net_echo` router on a link with the controller sends it
-    // frames of eight bytes, which `on-message` reads as set points. Its frame is an ordinal
-    // (a `u64`), which as a double is a number near zero: the loop is driven to it.
-    let text = cps_loop_text()
-        .replace(
-            "\n[[actors]]\nid = 1\n",
-            "\n[modules.net_echo]\nsha256 = \"@net_echo@\"\ncontract = \"florn:network/router@0.1.0\"\n\n[[actors]]\nid = 1\n",
-        )
-        .replace(
-            "\n[[connections]]\nid = 100\n",
-            "\n[[actors]]\nid = 6\nname = \"peer\"\nkind = \"module\"\nmodule = \"net_echo\"\nports = [{ id = 0, name = \"eth\", type = \"network/interface\" }]\n[actors.config]\nperiod = 400000000\npayload = 8\necho = false\n\n[[connections]]\nid = 110\nname = \"wire\"\ntype = \"network/link\"\nports = [\"peer.eth\", \"pid.eth\"]\n\n[[connections]]\nid = 100\n",
-        );
-    let s = Scenario::raw(
-        "cps-peer",
-        1_500_000_000,
-        text,
-        &["networked_pid", "net_echo"],
-    );
-    let run = host::run(&s);
+    // The network domain's own path, as `cps-link` ships it: a peer on a link sends the set point
+    // once, 40 rad/s at 600.5 ms, and `on-message` of the composed actor reads it.
+    let run = host::run(&cps_link());
     assert_eq!(host::ended(&run), EndReason::EndReached);
     assert!(host::faults(&run).is_empty(), "{:?}", host::faults(&run));
     let frames = host::reports(&run, PID, 3);
+    assert_eq!(frames.len(), 1, "one frame, one report");
     assert!(
-        frames.len() >= 2,
-        "the peer's frames reached `on-message`: {}",
-        frames.len()
+        frames[0].0.tick >= 600 * MS + 500_000 && frames[0].0.tick < 601 * MS,
+        "the frame arrives after it is sent and before the next sample: {}",
+        frames[0].0.tick
     );
-    for f in &frames {
-        assert_eq!(f.1[8], 1, "an ordinal of eight bytes is a finite number");
-        assert!(f64s(&f.1[..8])[0].abs() < 1e-300);
-    }
-    // The first frame, 400 ms and the link's delay in, takes the set point from 100 to nearly 0.
-    let sp = speeds(&run);
-    let at = |ms: u64| sp.iter().find(|x| x.0 == ms * MS).unwrap().1;
-    assert!(at(300) > 90.0, "{}", at(300));
-    assert!(
-        at(900) < at(300) / 2.0,
-        "the loop follows the peer's set point: {}",
-        at(900)
-    );
+    assert_eq!(f64s(&frames[0].1[..8])[0], 40.0);
+    assert_eq!(frames[0].1[8], 1, "accepted");
+    // The loop follows it, as the intervention's does: the samples up to the frame are the loop's.
+    let (sp, plain) = (speeds(&run), speeds(&host::run(&cps_loop())));
+    let at = |s: &[(u64, f64)], ms: u64| s.iter().find(|x| x.0 == ms * MS).unwrap().1;
+    assert_eq!(at(&sp, 600).to_bits(), at(&plain, 600).to_bits());
+    assert_ne!(at(&sp, 601).to_bits(), at(&plain, 601).to_bits());
+    assert!((at(&sp, 1499) - 40.0).abs() < 1.0, "{}", at(&sp, 1499));
 }

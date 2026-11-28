@@ -35,6 +35,7 @@ pub const SDK: &[&str] = &[
     "guest_diode",
     "bad_device",
     "networked_pid",
+    "set_point_source",
 ];
 
 /// The workspace root.

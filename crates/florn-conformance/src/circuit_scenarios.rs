@@ -443,3 +443,34 @@ pub fn cps_loop_text() -> String {
     );
     swap(&t, "out-max = 1.0\n", "out-max = 1.0\nsetpoint = 100.0\n")
 }
+
+/// `cps-link` (RFC 012 rule 27, amended 2026-11-28): `cps-loop` with a peer on a `network/link`
+/// that sends the new set point once, 40 rad/s at 600.5 ms, so that the composed actor's
+/// `on-message` runs in every engine (a scenario file cannot carry an intervention).
+pub fn cps_link() -> Scenario {
+    Scenario::raw(
+        "cps-link",
+        1_500_000_000,
+        cps_link_text(),
+        &["networked_pid", "set_point_source"],
+    )
+}
+
+/// The manifest text of `cps-link`.
+pub fn cps_link_text() -> String {
+    let t = swap(
+        &cps_loop_text(),
+        "name = \"cps-loop\"",
+        "name = \"cps-link\"",
+    );
+    let t = swap(
+        &t,
+        "\n[[actors]]\nid = 1\n",
+        "\n[modules.set_point_source]\nsha256 = \"@set_point_source@\"\ncontract = \"florn:network/router@0.1.0\"\n\n[[actors]]\nid = 1\n",
+    );
+    swap(
+        &t,
+        "\n[[connections]]\nid = 100\n",
+        "\n[[actors]]\nid = 6\nname = \"peer\"\nkind = \"module\"\nmodule = \"set_point_source\"\nports = [{ id = 0, name = \"eth\", type = \"network/interface\" }]\n[actors.config]\nat = \"600500000ns\"\nvalue = 40.0\n\n[[connections]]\nid = 110\nname = \"wire\"\ntype = \"network/link\"\nports = [\"peer.eth\", \"pid.eth\"]\n\n[[connections]]\nid = 100\n",
+    )
+}

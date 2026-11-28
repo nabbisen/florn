@@ -11,7 +11,9 @@ use crate::guests;
 /// world for the rest.
 pub fn contract_of(module: &str) -> &'static str {
     match module {
-        "net_echo" | "distance_vector" | "ospf" | "bgp" => "florn:network/router@0.1.0",
+        "net_echo" | "distance_vector" | "ospf" | "bgp" | "set_point_source" => {
+            "florn:network/router@0.1.0"
+        }
         "pid" | "bad_controller" => "florn:circuit/controller@0.1.0",
         "guest_diode" | "bad_device" => "florn:circuit/device@0.1.0",
         "networked_pid" => "florn:cps/networked-controller@0.1.0",

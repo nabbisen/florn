@@ -18,6 +18,7 @@ pub const CIRCUIT: &[&str] = &[
     "rc-step",
     "motor-loop",
     "cps-loop",
+    "cps-link",
     "diode-clip",
     "guest-diode",
     "hostile-stamp",
