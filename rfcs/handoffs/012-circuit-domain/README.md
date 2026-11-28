@@ -30,12 +30,24 @@ Milestone M2 is complete (PR-35 to PR-43). **M3 has begun:** PR-44 is done (`c1f
 
 PR-47 is done (`0aab066`, `6bd3c35`, `bd6b4fd`, 2026-11-26): the first guest of the circuit. It brings the contract's controller block, `florn-guest-circuit`, `pid`, and `motor-loop`, shipped and recorded; its chain is the same natively and in Chromium and Firefox. **The closed loop runs.**
 
-**PR-48 is in review** (`83541e1`, `3f631e0`, 2026-11-27): the results files, the `bit_identity` table, the controls of RFC 013 rule 19. On all five engines (x86-64 and AArch64 natively, Chromium, Firefox, WebKit) `rc-step`, `motor-loop` and the table are `matched`, bit for bit (CI run 45952894700). **Next: its verifier**, a new session; the team waits for the review of its report. Then PR-49.
+**Milestone M3 is complete** with PR-48 (`83541e1`, `3f631e0`, verified 2026-11-27, accepted 2026-11-28). This is Phase 4's exit criterion: `motor-loop` runs natively and in three browsers, and on all five engines (x86-64 and AArch64 natively, Chromium, Firefox, WebKit) `rc-step`, `motor-loop` and the `bit_identity` table are `matched`, bit for bit.
 
-**PR-49, the device model, starts with its first commit, from PR-47's review: the device contract's names.** Read PR-49's row in `task-breakdown-pr-plan.md`, section 3.7 of `implementation-handoff.md` and B-49 first. RFC 012 rule 19's block declares `interface device` and `world device` in one package, and WIT has one name space for both. The team found this; it is a fault of the RFC. In one commit, so that no run of the tests goes red between them:
+**Next: milestone M4, PR-49, the device model.** Read PR-49's row in `task-breakdown-pr-plan.md`, section 3.7 of `implementation-handoff.md` and B-49 first; it starts from RFC 012 rules 12, 19 to 21, 25 and 27. Two first commits come before the unit.
+
+**First commit A, from PR-47's review: the device contract's names.** RFC 012 rule 19's block declares `interface device` and `world device` in one package, and WIT has one name space for both. In one commit, so that no run of the tests goes red between them:
 - In RFC 012 rule 19's block, the interface becomes `device-model` (`interface device-model {`), and the world's line becomes `export device-model;`. The world stays `device`, and the manifest's `kind = "device"` is unchanged. Add after rule 19's first sentence: "(Amended 2026-11-27, review of PR-47: the interface is `device-model`, because WIT gives an interface and a world one name space; the world stays `device`.)"
 - `contracts/florn-circuit/wit/circuit.wit` takes both blocks, and its RFC-equality test reads `[0, 1]`.
 - The tripwire test `the_device_block_of_rfc_012_does_not_parse_beside_the_controllers` becomes a test that both blocks parse together, with the world `device`.
+
+**First commit B, from PR-48's verifier: the controls of RFC 013 rule 19** (amended 2026-11-28). Each item gets a control in `ci/test-gates.sh` that fails without it.
+1. **`clippy.toml` lists every `f64` and `f32` method of the pinned toolchain** that is not an allowed operation (`sin_cos`, `asinh`, `acosh`, `atanh` were missing). A control compares the list with the toolchain's methods, so that a toolchain update cannot add one silently.
+2. **`clippy.toml` also disallows every `libm` function the table does not name**, and the crate's root has `#![forbid(clippy::disallowed_methods)]`, so that an `allow` cannot hide a call.
+3. **Every `libm` call goes through `crate::math`.** The source check reads that file with a lexer that knows strings and comments; today a `libm::` after a `//` inside a string is missed.
+4. **`ci/check-deps.py` refuses `libm` with any feature** (`arch` would let it call the platform).
+5. **`ci/check-float-flags.sh` also fails on** an `[unstable]` table, `RUSTC_BOOTSTRAP`, and `build.rustc-wrapper` or `build.rustc-workspace-wrapper`.
+6. **The table holds no duplicate line** (1,071 today), and the readers of the table and the results files refuse CRLF line ends and upper-case hexadecimal. Regenerate the files, and check that no chain moves.
+
+`florn-guest-device` will use `libm` too, with the same pin and features: give it the same `clippy.toml`, `forbid` and check when it is created in the unit.
 
 ## What Phase 4 delivers
 
