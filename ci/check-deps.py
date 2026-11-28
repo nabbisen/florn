@@ -57,6 +57,7 @@ ALLOWED = {
     "florn-guest-network": {"florn-guest"},
     "florn-guest-circuit": {"florn-guest"},
     "florn-guest-device": {"florn-guest"},
+    "florn-guest-cps": {"florn-guest"},
     "florn-conformance": {"florn-host", "florn-domain-circuit", "florn-model", "florn-control", "florn-engine", "florn-engine-wasmtime", "florn-platform", "florn-platform-native", "florn-guest", "florn-kernel", "florn-admission", "florn-abi", "florn-test-guests", "florn-domain-network", "florn-guest-device"},
     "florn-test-guests": {"florn-model", "florn-admission"},
     "florn-guest": set(),

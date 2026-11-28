@@ -64,6 +64,11 @@ pub mod units;
 pub use profile::{Limits, Profile};
 
 pub const NAME: &str = "circuit";
+
+/// The composed world of a controller that is on a network and acts on a plant (RFC 012 rule 22):
+/// the network domain's router world and this domain's controller world in one actor. Neither domain
+/// owns it; a Host that holds both registers it with `Domains::with_composed`.
+pub const CPS_WORLD: &str = "florn:cps/networked-controller@0.1.0";
 pub const NET: &str = "circuit/net";
 pub const SIGNAL: &str = "circuit/signal";
 pub const PIN: &str = "circuit/pin";

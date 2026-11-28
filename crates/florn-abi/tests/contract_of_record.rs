@@ -287,3 +287,56 @@ fn the_device_block_names_its_interface_device_model_and_the_old_form_does_not_p
         "{error:?}"
     );
 }
+
+/// RFC 012 rule 22: the composed world's file is the third ```wit block of the RFC, the package
+/// `florn:cps@0.1.0` (RFC 002 rule 19).
+#[test]
+fn cps_wit_equals_rfc_012_block_three() {
+    let rfc = std::fs::read_to_string(root().join("rfcs/accepted/012-circuit-domain.md")).unwrap();
+    let file = std::fs::read_to_string(root().join("contracts/florn-cps/wit/cps.wit")).unwrap();
+    assert_eq!(
+        same_as_record(&rfc, &[2], &file),
+        Ok(()),
+        "contracts/florn-cps/wit/cps.wit differs from RFC 012 rule 22"
+    );
+}
+
+/// The composed package resolves over the three it includes and imports from (core, network,
+/// circuit), with the world `networked-controller`: the core's guest, the network's link and
+/// router events, the circuit's signals and controller events.
+#[test]
+fn cps_wit_parses_as_package_florn_cps_over_the_three_packages() {
+    let mut resolve = wit_parser::Resolve::default();
+    for dir in ["florn-core", "florn-network", "florn-circuit"] {
+        resolve
+            .push_dir(root().join("contracts").join(dir).join("wit"))
+            .unwrap_or_else(|e| panic!("{dir}: {e:?}"));
+    }
+    let (pkg, _) = resolve
+        .push_dir(root().join("contracts/florn-cps/wit"))
+        .expect("the composed WIT parses");
+    let name = &resolve.packages[pkg].name;
+    assert_eq!(
+        (name.namespace.as_str(), name.name.as_str()),
+        ("florn", "cps")
+    );
+    let world = resolve
+        .select_world(&[pkg], Some("networked-controller"))
+        .expect("the world networked-controller");
+    let world = &resolve.worlds[world];
+    let named = |keys: &mut dyn Iterator<Item = &wit_parser::WorldKey>| -> Vec<String> {
+        keys.filter_map(|k| match k {
+            wit_parser::WorldKey::Name(n) => Some(n.clone()),
+            wit_parser::WorldKey::Interface(i) => resolve.interfaces[*i].name.clone(),
+        })
+        .collect()
+    };
+    let imports = named(&mut world.imports.keys());
+    let exports = named(&mut world.exports.keys());
+    for want in ["link", "signals"] {
+        assert!(imports.iter().any(|i| i == want), "imports {imports:?}");
+    }
+    for want in ["router-events", "controller-events"] {
+        assert!(exports.iter().any(|i| i == want), "exports {exports:?}");
+    }
+}

@@ -17,6 +17,7 @@ use crate::{host, shipped};
 pub const CIRCUIT: &[&str] = &[
     "rc-step",
     "motor-loop",
+    "cps-loop",
     "diode-clip",
     "guest-diode",
     "hostile-stamp",

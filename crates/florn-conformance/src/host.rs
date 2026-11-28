@@ -31,6 +31,16 @@ pub fn domains() -> Domains {
     Domains::core()
         .with(florn_domain_network::NetworkDomain::new)
         .with(|| florn_domain_circuit::CircuitDomain::new(florn_domain_circuit::Limits::native()))
+        .with_composed(
+            florn_domain_circuit::CPS_WORLD,
+            &[
+                (florn_domain_network::NAME, florn_domain_network::WORLD),
+                (
+                    florn_domain_circuit::NAME,
+                    florn_domain_circuit::controllers::WORLD,
+                ),
+            ],
+        )
 }
 
 /// An admission step that admits the domains' worlds beside the core's (RFC 008 rule 6).

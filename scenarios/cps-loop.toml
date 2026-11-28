@@ -1,0 +1,112 @@
+# cps-loop: a scenario of the conformance kit, written by `florn-conformance scenarios`.
+# Its digest is recorded in digests.toml; the readme says how to run it.
+
+florn = 1
+name = "cps-loop"
+domains = ["core", "network", "circuit"]
+
+[time]
+tick = "1ns"
+end = "1500000000ns"
+
+[order]
+tie = "by-identity"
+
+[seed]
+root = 1
+
+[limits.default]
+memory = "2MiB"
+
+[modules.networked_pid]
+sha256 = "bd83fc4c5316bffde459d26967eaee07f134249f136ea46df4ba8b1dc9546caf"
+contract = "florn:cps/networked-controller@0.1.0"
+
+[[actors]]
+id = 1
+name = "vs"
+kind = "builtin"
+builtin = "circuit/voltage-source"
+ports = [{ id = 0, name = "p", type = "circuit/pin" }, { id = 1, name = "n", type = "circuit/pin" }, { id = 2, name = "cmd", type = "circuit/signal-in" }]
+[actors.config]
+v = "0V"
+gain = "12V"
+
+[[actors]]
+id = 2
+name = "m1"
+kind = "builtin"
+builtin = "circuit/dc-motor"
+ports = [{ id = 0, name = "a+", type = "circuit/pin" }, { id = 1, name = "a-", type = "circuit/pin" }, { id = 2, name = "speed", type = "circuit/signal-out" }, { id = 3, name = "load", type = "circuit/signal-in" }]
+[actors.config]
+r = "1ohm"
+l = "500uH"
+kt = "0.05Nm/A"
+ke = "0.05Vs/rad"
+j = "0.0005kgm2"
+b = "0.0001Nms"
+period = "1ms"
+
+[[actors]]
+id = 4
+name = "tl"
+kind = "builtin"
+builtin = "circuit/constant"
+ports = [{ id = 0, name = "y", type = "circuit/signal-out" }]
+[actors.config]
+value = "0Nm"
+
+[[actors]]
+id = 5
+name = "pid"
+kind = "module"
+module = "networked_pid"
+ports = [{ id = 0, name = "measurement", type = "circuit/signal-in" }, { id = 1, name = "eth", type = "network/interface" }, { id = 2, name = "output", type = "circuit/signal-out" }]
+[actors.config]
+period = "1ms"
+phase = "1ns"
+kp = 0.004
+ki = 0.0004
+kd = 0.0
+out-min = 0.0
+out-max = 1.0
+setpoint = 100.0
+
+[[connections]]
+id = 100
+name = "bus"
+type = "circuit/net"
+ports = ["vs.p", "m1.a+"]
+
+[[connections]]
+id = 101
+name = "gnd"
+type = "circuit/net"
+ports = ["vs.n", "m1.a-"]
+[connections.attrs]
+ground = true
+
+[[connections]]
+id = 102
+name = "speed"
+type = "circuit/signal"
+ports = ["m1.speed", "pid.measurement"]
+
+[[connections]]
+id = 104
+name = "command"
+type = "circuit/signal"
+ports = ["pid.output", "vs.cmd"]
+
+[[connections]]
+id = 105
+name = "load"
+type = "circuit/signal"
+ports = ["tl.y", "m1.load"]
+
+[[changes]]
+at = "1000000000ns"
+target = "world:circuit"
+[changes.payload]
+actor = 4
+value = "0.02Nm"

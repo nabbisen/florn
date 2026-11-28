@@ -365,7 +365,7 @@ for (const name of browsers) {
   if (existsSync(runner)) {
     const run = promisify(execFile);
     await mkdir(checkpoints, { recursive: true });
-    for (const s of ["ospf-lab", "net-lan", "rc-step", "motor-loop", "guest-diode", "hostile-stamp"].filter((x) => digests.runs[x])) {
+    for (const s of ["ospf-lab", "net-lan", "rc-step", "motor-loop", "cps-loop", "guest-diode", "hostile-stamp"].filter((x) => digests.runs[x])) {
       const rec = digests.runs[s];
       // The scenario's end, from its manifest: the checkpoint is taken at its half.
       const end = parseInt((/^end = "(\d+)/m.exec(await readFile(join(root, `scenarios/${s}.toml`), "utf8")) || [])[1] || "0", 10);

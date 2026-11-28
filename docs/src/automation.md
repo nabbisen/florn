@@ -70,7 +70,7 @@ A branch (RFC 009 section 4) is a new run from the current instant of the curren
 
 ## Scenarios with recorded digests
 
-`scenarios/` holds thirty-three scenarios over the SDK's guests and the circuit's built-ins, the built guest modules under `scenarios/modules`, `digests.toml` with the chain, the record count and the end of each run, plus every module's source and admitted hash, and under `scenarios/results/` what the circuit scenarios did on x86-64, which every other engine is compared to (the digests are the Tier 1 check, the results the Tier 2). To check a machine:
+`scenarios/` holds thirty-four scenarios over the SDK's guests and the circuit's built-ins, the built guest modules under `scenarios/modules`, `digests.toml` with the chain, the record count and the end of each run, plus every module's source and admitted hash, and under `scenarios/results/` what the circuit scenarios did on x86-64, which every other engine is compared to (the digests are the Tier 1 check, the results the Tier 2). To check a machine:
 
 ```sh
 florn run scenarios/echo-pair.toml --modules scenarios/modules --seed 42

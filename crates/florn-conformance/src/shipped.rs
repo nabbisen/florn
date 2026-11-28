@@ -228,6 +228,8 @@ fn definitions() -> Vec<Shipped> {
         normal(echo_pair()),
         // The closed loop of Phase 4's exit criterion (RFC 012 rule 27): a PID controller, a DC motor.
         normal(crate::circuit_scenarios::motor_loop()),
+        // The same loop with the controller on a network (RFC 012 rule 22): two domains in one actor.
+        normal(crate::circuit_scenarios::cps_loop()),
         // The analytic golden of the solver (RFC 013 rule 21): an RC network stepped at 2 ms.
         normal(crate::circuit_scenarios::rc_step()),
         // The nonlinear plant, with the built-in diode and with the guest device (RFC 012 rule 27),

@@ -917,6 +917,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "florn-guest-cps"
+version = "0.3.1"
+dependencies = [
+ "florn-guest",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "florn-guest-device"
 version = "0.3.1"
 dependencies = [

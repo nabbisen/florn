@@ -1,0 +1,11 @@
+package florn:cps@0.1.0;
+
+/// A controller on a network acting on a plant: the core world, the network's interfaces
+/// and the circuit's signals (ARCH-010).
+world networked-controller {
+    include florn:core/guest@0.1.0;
+    import florn:network/link@0.1.0;
+    export florn:network/router-events@0.1.0;
+    import florn:circuit/signals@0.1.0;
+    export florn:circuit/controller-events@0.1.0;
+}

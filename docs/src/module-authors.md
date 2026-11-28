@@ -258,6 +258,35 @@ A step the solver rejects is discarded whole: nothing the device reported in it 
 
 The ladder's example is `guest_diode` in `crates/florn-guest-device/examples`: the shipped scenario `guest-diode` is `diode-clip` with the guest in the built-in's place, and the two voltmeters' samples agree. `bad_device` is the kit's, for what a good one cannot show: a NaN, a wrong length, a flag that is not 0 or 1, a timer, a trap, and stamps that never converge, each at the evaluation its `at` parameter names (`hostile-stamp` and `hostile-diverge` are two of them).
 
+## Controllers on a network
+
+A guest may be of **two domains at once** (RFC 002 rule 48; RFC 012 rule 22): a controller that is on a network and acts on a plant is one actor with one world, `florn:cps/networked-controller@0.1.0`, which includes the network's `link-info` import and `on-link` export and the circuit's `read-input` and `set-output` imports and `on-sample` export. It depends on `florn-guest` and on `florn-guest-cps`, declares ports of both domains' types (a `network/interface` and the `circuit/signal-in` and `circuit/signal-out` it senses and drives), implements `florn_guest::Actor` (its `on_message` takes the frames of the interface) and `florn_guest_cps::NetworkedController` (`on_link` and `on_sample`), and exports with `florn_guest_cps::networked_controller!`:
+
+```toml
+[dependencies]
+florn-guest = "0.3.1"
+florn-guest-cps = "0.3.1"
+```
+
+```rust
+florn_guest::declare! {
+    world: "florn:cps/networked-controller@0.1.0",
+    kind: "networked-pid",
+    description: "A PID controller whose set point arrives as a frame",
+    ports: [("eth", "network/interface", 1, 1), ("in", "circuit/signal-in", 1, 1), ("out", "circuit/signal-out", 1, 1)],
+    params: [(period, "period", ticks, true), (setpoint, "setpoint", f64, false, default = 0.0)],
+    telemetry: [(1, "control", Control, [(input, "input", f64), (output, "output", f64), (error, "error", f64)])],
+    resources: [("memory", "1MiB")],
+    tables: [("circuit", [("kind", "controller"), ("period", "period")])],
+}
+
+florn_guest_cps::networked_controller!(NetworkedPid);
+```
+
+The scenario declares **both** domains (`domains = ["core", "network", "circuit"]`) and names the module's contract `florn:cps/networked-controller@0.1.0`; a scenario that declares one of them is refused (`domain.undeclared`), and a Host that holds only one of them does not offer the world (`module.contract-unsupported`). Each domain validates the ports of its own types, and neither owns the world: the Host registers it when it holds both. The network domain delivers the frames of the interface to `on_message`, the circuit domain delivers the samples to `on_sample`.
+
+A `set_output` committed from `on_message` or `on_timer` is an input change **at a tick that is not a sample**: the plant sees the new value from the tick the frame was handled, never before, and the history is cut there (RFC 012 rule 9). The ladder's example is `networked_pid` in `crates/florn-guest-cps/examples`: `pid` whose set point is a frame of eight bytes (the little-endian `f64` of the new set point in the unit of the measurement) on its interface. It replaces the set point at once and answers in the same activation with the terms it has, so that the plant is told from that tick without waiting for the next sample; a frame of another length or a value that is not finite is ignored and reported on the channel `frame`. The shipped scenario `cps-loop` is `motor-loop` with that controller, its set point the parameter of 100 rad/s; the frame is an intervention (`message`, to the controller's interface port), which a run record keeps and a replay applies again.
+
 ## Where to look next
 
 The fifteen example guests under `crates/florn-guest/examples/` show every feature in use: `echo` is the reference, `chatter` exercises parameters, telemetry and faults, `timers` the timer rules, `heap` state that grows, and the `hostile_*` guests each one fault kind. The conformance kit's readme maps every rule of RFC 002 and RFC 003 to the test that proves it.

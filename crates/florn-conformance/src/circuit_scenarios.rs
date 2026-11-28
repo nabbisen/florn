@@ -389,3 +389,57 @@ pub fn hostile_diverge() -> Scenario {
 pub fn hostile_text(name: &str, end_ns: u64, config: &str, profile: &str) -> String {
     hostile(name, end_ns, config, profile)
 }
+
+/// Replace the one occurrence of `old` in `text` by `new`: a scenario text derived from another's
+/// stops at once when the other changes.
+fn swap(text: &str, old: &str, new: &str) -> String {
+    assert_eq!(text.matches(old).count(), 1, "one occurrence of {old:?}");
+    text.replacen(old, new, 1)
+}
+
+/// `cps-loop` (RFC 012 rule 27, rule 22): `motor-loop` with the controller a `networked_pid`, one
+/// actor of two domains. Its `eth` port is a network interface (no peer: a frame reaches it as a
+/// `message` intervention), its set point is the parameter of 100 rad/s until a frame says another,
+/// and there is no `constant` for the set point. The scenario declares the network and the circuit
+/// domain.
+pub fn cps_loop() -> Scenario {
+    Scenario::raw(
+        "cps-loop",
+        1_500_000_000,
+        cps_loop_text(),
+        &["networked_pid"],
+    )
+}
+
+/// The manifest text of `cps-loop`, with `@networked_pid@` for the controller module's hash.
+pub fn cps_loop_text() -> String {
+    let t = motor_loop_text();
+    let t = swap(&t, "name = \"motor-loop\"", "name = \"cps-loop\"");
+    let t = swap(
+        &t,
+        "domains = [\"core\", \"circuit\"]",
+        "domains = [\"core\", \"network\", \"circuit\"]",
+    );
+    let t = swap(
+        &t,
+        "[modules.pid]\nsha256 = \"@pid@\"\ncontract = \"florn:circuit/controller@0.1.0\"",
+        "[modules.networked_pid]\nsha256 = \"@networked_pid@\"\ncontract = \"florn:cps/networked-controller@0.1.0\"",
+    );
+    // The set point is a parameter and a frame: no `constant`, no signal for it.
+    let t = swap(
+        &t,
+        "[[actors]]\nid = 3\nname = \"sp\"\nkind = \"builtin\"\nbuiltin = \"circuit/constant\"\nports = [{ id = 0, name = \"y\", type = \"circuit/signal-out\" }]\n[actors.config]\nvalue = \"100rad/s\"\n\n",
+        "",
+    );
+    let t = swap(
+        &t,
+        "[[connections]]\nid = 103\nname = \"setpoint\"\ntype = \"circuit/signal\"\nports = [\"sp.y\", \"pid.setpoint\"]\n\n",
+        "",
+    );
+    let t = swap(
+        &t,
+        "kind = \"module\"\nmodule = \"pid\"\nports = [{ id = 0, name = \"measurement\", type = \"circuit/signal-in\" }, { id = 1, name = \"setpoint\", type = \"circuit/signal-in\" }, { id = 2, name = \"output\", type = \"circuit/signal-out\" }]",
+        "kind = \"module\"\nmodule = \"networked_pid\"\nports = [{ id = 0, name = \"measurement\", type = \"circuit/signal-in\" }, { id = 1, name = \"eth\", type = \"network/interface\" }, { id = 2, name = \"output\", type = \"circuit/signal-out\" }]",
+    );
+    swap(&t, "out-max = 1.0\n", "out-max = 1.0\nsetpoint = 100.0\n")
+}

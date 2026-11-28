@@ -81,7 +81,17 @@ pub extern "C" fn florn_start(instances: u32, memory_bytes: f64, transport: u32,
         Box::new(platform),
         Domains::core()
             .with(NetworkDomain::new)
-            .with(|| CircuitDomain::new(CircuitLimits::browser())),
+            .with(|| CircuitDomain::new(CircuitLimits::browser()))
+            .with_composed(
+                florn_domain_circuit::CPS_WORLD,
+                &[
+                    (florn_domain_network::NAME, florn_domain_network::WORLD),
+                    (
+                        florn_domain_circuit::NAME,
+                        florn_domain_circuit::controllers::WORLD,
+                    ),
+                ],
+            ),
         Options {
             keep_records: keep != 0,
             keep_payloads: keep != 0,

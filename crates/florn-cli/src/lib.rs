@@ -187,7 +187,17 @@ fn controller(args: &Args) -> Result<Controller<WasmtimeEngine>, String> {
         Box::new(platform),
         Domains::core()
             .with(NetworkDomain::new)
-            .with(|| CircuitDomain::new(CircuitLimits::native())),
+            .with(|| CircuitDomain::new(CircuitLimits::native()))
+            .with_composed(
+                florn_domain_circuit::CPS_WORLD,
+                &[
+                    (florn_domain_network::NAME, florn_domain_network::WORLD),
+                    (
+                        florn_domain_circuit::NAME,
+                        florn_domain_circuit::controllers::WORLD,
+                    ),
+                ],
+            ),
         Options {
             keep_records: args.trace || args.keep_records,
             keep_payloads: args.payloads,
