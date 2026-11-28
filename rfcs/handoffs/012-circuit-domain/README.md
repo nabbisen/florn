@@ -32,14 +32,12 @@ PR-47 is done (`0aab066`, `6bd3c35`, `bd6b4fd`, 2026-11-26): the first guest of 
 
 Milestone M3 is complete (PR-44 to PR-48): Phase 4's exit criterion is met. **M4 has begun:** PR-49 is done (`8c400b9`, `bafb39e`, `db48434`, 2026-11-28). It brings the device model: the solver calls a guest device inside every step, `guest-diode` agrees with the built-in diode to 0 V, and all seven circuit scenarios are `matched` on all five engines. RFC 013 rule 19's controls are hardened.
 
-PR-50 is done (`9cfcb41`, 2026-11-28): one actor in two domains, `networked-pid` on the circuit, and `cps-loop`, which is `matched` on all five engines.
+**Milestone M4 is complete** with PR-51 (`8839c86`, `dc99597`, 2026-11-28). `guest-diode` agrees with the built-in diode, `cps-loop` and `cps-link` work (the composed actor's `on-message` on every engine), `comparator-latch` passes, and the hostile scenarios fault the same way on every engine. Ten circuit scenarios and the `bit_identity` table are `matched`, bit for bit, on all five engines.
 
-**Next: PR-51, the detector** (the last unit of M4). Read its row in `task-breakdown-pr-plan.md`, section 3.6 of `implementation-handoff.md` and B-51 first; it starts from RFC 012 rule 13 and RFC 013 rule 15. It brings `comparator-latch`, with its results file on the five engines.
-
-**Its first commit, from PR-50's review: `cps-link`** (RFC 012 rule 27, amended). A scenario file cannot carry the `message` intervention of `cps-loop`, so the shipped file never runs the composed actor's `on-message` on the five engines. `cps-link` is the same plant with a peer actor on a `network/link` that sends the new set point once: eight bytes, the little-endian `f64` (40 rad/s at 600.5 ms, as the kit's test uses).
-- Write the peer as a small example guest of the network SDK. `net_echo` sends its ordinal, which is no set point.
-- Ship `cps-link` with a digest and a results file, and put it in the cross-Host checkpoint check.
-- The loop follows the new set point on every engine.
+**Next: milestone M5, the application. PR-52: series, workspace, plot primitives.** Read its row in `task-breakdown-pr-plan.md`, section 3.8 of `implementation-handoff.md` and B-52 first; it starts from RFC 014 rules 4 and 15 and the external design (revision 3). It is the first RFC 014 unit:
+- `crates/florn-ui-web/src/panels.rs` (1,678 lines) is split by the first unit that touches it heavily, in its first commit, with the item-for-item proof of PR-36 and PR-43 (`prove_split.py` is in PR-43's review-request folder).
+- The authoring draft keeps built-in actors, which replaces 0.3.1's interim refusal.
+- The evidence of a unit with pictures goes in its review-request folder (section 3.8).
 
 ## What Phase 4 delivers
 
